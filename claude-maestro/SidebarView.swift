@@ -13,26 +13,27 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header with multi-select toggle
+            // Header
             HStack {
-                Text("Configuration")
+                Text(manager.isRunning ? "Sessions" : "Configuration")
                     .font(.headline)
 
                 Spacer()
 
-                // Multi-select toggle
-                Button {
-                    manager.selectionManager.isMultiSelectMode.toggle()
-                    if !manager.selectionManager.isMultiSelectMode {
-                        manager.selectionManager.clearSelection()
+                // Multi-select toggle (only when not running)
+                if !manager.isRunning {
+                    Button {
+                        manager.selectionManager.isMultiSelectMode.toggle()
+                        if !manager.selectionManager.isMultiSelectMode {
+                            manager.selectionManager.clearSelection()
+                        }
+                    } label: {
+                        Image(systemName: manager.selectionManager.isMultiSelectMode ? "checklist.checked" : "checklist")
+                            .foregroundColor(manager.selectionManager.isMultiSelectMode ? .accentColor : .secondary)
                     }
-                } label: {
-                    Image(systemName: manager.selectionManager.isMultiSelectMode ? "checklist.checked" : "checklist")
-                        .foregroundColor(manager.selectionManager.isMultiSelectMode ? .accentColor : .secondary)
+                    .buttonStyle(.plain)
+                    .help(manager.selectionManager.isMultiSelectMode ? "Exit multi-select" : "Multi-select mode")
                 }
-                .buttonStyle(.plain)
-                .help(manager.selectionManager.isMultiSelectMode ? "Exit multi-select" : "Multi-select mode")
-                .disabled(manager.isRunning)
             }
             .padding(.horizontal)
 
@@ -40,71 +41,70 @@ struct SidebarView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    // Presets Section
-                    PresetSelector(manager: manager)
-                        .disabled(manager.isRunning)
-
-                    Divider()
-                        .padding(.horizontal)
-
-                    // Terminal Count Section
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Terminals")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-
-                        Stepper(value: $manager.terminalCount, in: 1...12) {
-                            HStack {
-                                Text("\(manager.terminalCount)")
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                Text("terminals")
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .disabled(manager.isRunning)
-
-                        // Grid preview
-                        Text("Grid: \(manager.gridConfig.rows) x \(manager.gridConfig.columns)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-
-                        // Quick actions
-                        HStack(spacing: 4) {
-                            Button("Select All") {
-                                manager.selectionManager.selectAll(sessions: manager.sessions)
-                                manager.selectionManager.isMultiSelectMode = true
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .disabled(manager.isRunning)
-
-                            Button("Apply Default") {
-                                manager.applyDefaultModeToAll()
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .disabled(manager.isRunning)
-                        }
-                        .font(.caption)
-                    }
-                    .padding(.horizontal)
-
-                    Divider()
-                        .padding(.horizontal)
-
-                    // Git Repository Info Section
-                    GitInfoSection(gitManager: manager.gitManager)
-
-                    Divider()
-                        .padding(.horizontal)
-
-                    // Batch Action Bar (when selection active)
-                    if manager.selectionManager.hasSelection {
-                        BatchActionBar(manager: manager)
+                    // Configuration sections (hidden while running)
+                    if !manager.isRunning {
+                        // Presets Section
+                        PresetSelector(manager: manager)
 
                         Divider()
                             .padding(.horizontal)
+
+                        // Terminal Count Section
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Terminals")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+
+                            Stepper(value: $manager.terminalCount, in: 1...12) {
+                                HStack {
+                                    Text("\(manager.terminalCount)")
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                    Text("terminals")
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+
+                            // Grid preview
+                            Text("Grid: \(manager.gridConfig.rows) x \(manager.gridConfig.columns)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                            // Quick actions
+                            HStack(spacing: 4) {
+                                Button("Select All") {
+                                    manager.selectionManager.selectAll(sessions: manager.sessions)
+                                    manager.selectionManager.isMultiSelectMode = true
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+
+                                Button("Apply Default") {
+                                    manager.applyDefaultModeToAll()
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                            .font(.caption)
+                        }
+                        .padding(.horizontal)
+
+                        Divider()
+                            .padding(.horizontal)
+
+                        // Git Repository Info Section
+                        GitInfoSection(gitManager: manager.gitManager)
+
+                        Divider()
+                            .padding(.horizontal)
+
+                        // Batch Action Bar (when selection active)
+                        if manager.selectionManager.hasSelection {
+                            BatchActionBar(manager: manager)
+
+                            Divider()
+                                .padding(.horizontal)
+                        }
                     }
 
                     // Session List Section

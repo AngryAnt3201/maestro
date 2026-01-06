@@ -311,6 +311,14 @@ class SessionManager: ObservableObject {
         terminalCount = sessions.count
     }
 
+    func addNewSession() {
+        let nextId = (sessions.map { $0.id }.max() ?? 0) + 1
+        let newSession = SessionInfo(id: nextId, mode: defaultMode)
+        sessions.append(newSession)
+        terminalCount = sessions.count
+        persistSessions()
+    }
+
     func launchClaudeInSession(_ sessionId: Int) {
         if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
             sessions[index].isClaudeRunning = true
@@ -612,53 +620,73 @@ struct MainContentView: View {
 
 struct DynamicTerminalGridView: View {
     @ObservedObject var manager: SessionManager
+    @State private var isHoveringAdd = false
 
     var body: some View {
         let visibleSessions = manager.visibleSessions
         let config = GridConfiguration.optimal(for: visibleSessions.count)
 
-        VStack(spacing: 8) {
-            ForEach(0..<config.rows, id: \.self) { row in
-                HStack(spacing: 8) {
-                    ForEach(0..<config.columns, id: \.self) { col in
-                        let index = row * config.columns + col
+        ZStack(alignment: .bottomTrailing) {
+            VStack(spacing: 8) {
+                ForEach(0..<config.rows, id: \.self) { row in
+                    HStack(spacing: 8) {
+                        ForEach(0..<config.columns, id: \.self) { col in
+                            let index = row * config.columns + col
 
-                        if index < visibleSessions.count {
-                            let session = visibleSessions[index]
-                            let sessionId = session.id  // Capture stable ID, not array index
+                            if index < visibleSessions.count {
+                                let session = visibleSessions[index]
+                                let sessionId = session.id  // Capture stable ID, not array index
 
-                            TerminalSessionView(
-                                session: session,
-                                workingDirectory: manager.projectPath,
-                                shouldLaunch: manager.session(byId: sessionId)?.shouldLaunchTerminal ?? false,
-                                status: Binding(
-                                    get: { manager.session(byId: sessionId)?.status ?? .idle },
-                                    set: { newValue in manager.updateSession(id: sessionId) { $0.status = newValue } }
-                                ),
-                                mode: Binding(
-                                    get: { manager.session(byId: sessionId)?.mode ?? .claudeCode },
-                                    set: { newValue in manager.updateSession(id: sessionId) { $0.mode = newValue } }
-                                ),
-                                assignedBranch: Binding(
-                                    get: { manager.session(byId: sessionId)?.assignedBranch },
-                                    set: { manager.assignBranch($0, to: sessionId) }
-                                ),
-                                gitManager: manager.gitManager,
-                                isTerminalLaunched: manager.session(byId: sessionId)?.isTerminalLaunched ?? false,
-                                isClaudeRunning: manager.session(byId: sessionId)?.isClaudeRunning ?? false,
-                                onLaunchClaude: { manager.launchClaudeInSession(sessionId) },
-                                onClose: { manager.closeSession(sessionId) },
-                                onTerminalLaunched: { manager.markTerminalLaunched(sessionId) },
-                                onLaunchTerminal: { manager.triggerTerminalLaunch(sessionId) }
-                            )
-                        } else {
-                            Color.clear
+                                TerminalSessionView(
+                                    session: session,
+                                    workingDirectory: manager.projectPath,
+                                    shouldLaunch: manager.session(byId: sessionId)?.shouldLaunchTerminal ?? false,
+                                    status: Binding(
+                                        get: { manager.session(byId: sessionId)?.status ?? .idle },
+                                        set: { newValue in manager.updateSession(id: sessionId) { $0.status = newValue } }
+                                    ),
+                                    mode: Binding(
+                                        get: { manager.session(byId: sessionId)?.mode ?? .claudeCode },
+                                        set: { newValue in manager.updateSession(id: sessionId) { $0.mode = newValue } }
+                                    ),
+                                    assignedBranch: Binding(
+                                        get: { manager.session(byId: sessionId)?.assignedBranch },
+                                        set: { manager.assignBranch($0, to: sessionId) }
+                                    ),
+                                    gitManager: manager.gitManager,
+                                    isTerminalLaunched: manager.session(byId: sessionId)?.isTerminalLaunched ?? false,
+                                    isClaudeRunning: manager.session(byId: sessionId)?.isClaudeRunning ?? false,
+                                    onLaunchClaude: { manager.launchClaudeInSession(sessionId) },
+                                    onClose: { manager.closeSession(sessionId) },
+                                    onTerminalLaunched: { manager.markTerminalLaunched(sessionId) },
+                                    onLaunchTerminal: { manager.triggerTerminalLaunch(sessionId) }
+                                )
+                            } else {
+                                Color.clear
+                            }
                         }
                     }
                 }
             }
+            .padding(.horizontal, 8)
+
+            // Floating add button
+            Button(action: { manager.addNewSession() }) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.white, .blue)
+                    .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                    .scaleEffect(isHoveringAdd ? 1.1 : 1.0)
+            }
+            .buttonStyle(.plain)
+            .padding(20)
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isHoveringAdd = hovering
+                }
+            }
+            .help("Add new terminal")
         }
-        .padding(.horizontal, 8)
     }
 }
 
