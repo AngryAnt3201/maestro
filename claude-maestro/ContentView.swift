@@ -501,6 +501,7 @@ struct MainContentView: View {
     @ObservedObject var manager: SessionManager
     @Binding var statusMessage: String
     @Binding var showBranchSidebar: Bool
+    @State private var showGitSettings: Bool = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -521,17 +522,29 @@ struct MainContentView: View {
 
                     Spacer()
 
-                    // Branch sidebar toggle
+                    // Git controls
                     if manager.gitManager.isGitRepo {
-                        Button {
-                            withAnimation {
-                                showBranchSidebar.toggle()
+                        HStack(spacing: 8) {
+                            // Git settings button
+                            Button {
+                                showGitSettings = true
+                            } label: {
+                                Image(systemName: "gearshape")
                             }
-                        } label: {
-                            Image(systemName: showBranchSidebar ? "sidebar.right" : "sidebar.left")
+                            .buttonStyle(.bordered)
+                            .help("Git Settings")
+
+                            // Branch sidebar toggle
+                            Button {
+                                withAnimation {
+                                    showBranchSidebar.toggle()
+                                }
+                            } label: {
+                                Image(systemName: showBranchSidebar ? "sidebar.right" : "sidebar.left")
+                            }
+                            .buttonStyle(.bordered)
+                            .help(showBranchSidebar ? "Hide branches" : "Show branches")
                         }
-                        .buttonStyle(.bordered)
-                        .help(showBranchSidebar ? "Hide branches" : "Show branches")
                     }
 
                     // Legend
@@ -576,6 +589,9 @@ struct MainContentView: View {
                 )
                 .frame(minWidth: 350, idealWidth: 450)
             }
+        }
+        .sheet(isPresented: $showGitSettings) {
+            GitSettingsView(gitManager: manager.gitManager)
         }
     }
 

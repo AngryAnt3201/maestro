@@ -7,6 +7,43 @@
 
 import Foundation
 import Combine
+import SwiftUI
+
+// MARK: - Remote Connection Status
+
+enum RemoteConnectionStatus: Equatable {
+    case unknown
+    case checking
+    case connected
+    case disconnected
+
+    var color: Color {
+        switch self {
+        case .unknown: return .gray
+        case .checking: return .orange
+        case .connected: return .green
+        case .disconnected: return .red
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .unknown: return "questionmark.circle"
+        case .checking: return "arrow.clockwise"
+        case .connected: return "checkmark.circle.fill"
+        case .disconnected: return "xmark.circle.fill"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .unknown: return "Unknown"
+        case .checking: return "Checking..."
+        case .connected: return "Connected"
+        case .disconnected: return "Offline"
+        }
+    }
+}
 
 @MainActor
 class GitManager: ObservableObject {
@@ -21,6 +58,8 @@ class GitManager: ObservableObject {
     @Published var remoteURLs: [String: String] = [:]  // remote name -> URL
     @Published var userName: String?
     @Published var userEmail: String?
+    @Published var remoteStatuses: [String: RemoteConnectionStatus] = [:]
+    @Published var defaultBranch: String?
 
     private var repoPath: String = ""
 
@@ -56,6 +95,7 @@ class GitManager: ObservableObject {
             async let currentTask = fetchCurrentBranch()
             async let remotesTask = fetchRemoteURLs()
             async let userConfigTask = fetchUserConfig()
+            async let defaultBranchTask = fetchDefaultBranch()
 
             branches = try await branchesTask
             gitStatus = try await statusTask
@@ -64,10 +104,16 @@ class GitManager: ObservableObject {
             let userConfig = try await userConfigTask
             userName = userConfig.name
             userEmail = userConfig.email
+            defaultBranch = try await defaultBranchTask
 
             // Separate local and remote branches
             localBranches = branches.filter { !$0.isRemote }
             remoteBranches = branches.filter { $0.isRemote }
+
+            // Check remote connectivity in background
+            Task {
+                await checkAllRemotesConnectivity()
+            }
         } catch {
             lastError = error as? GitError ?? .commandFailed(error.localizedDescription)
         }
@@ -187,6 +233,73 @@ class GitManager: ObservableObject {
         await refresh()
     }
 
+    // MARK: - Remote Connectivity
+
+    func checkRemoteConnectivity(remoteName: String) async -> RemoteConnectionStatus {
+        do {
+            // Use ls-remote with timeout to check connectivity
+            _ = try await runGitCommand(["ls-remote", "--exit-code", remoteName, "HEAD"])
+            return .connected
+        } catch {
+            return .disconnected
+        }
+    }
+
+    func checkAllRemotesConnectivity() async {
+        for remoteName in remoteURLs.keys {
+            remoteStatuses[remoteName] = .checking
+        }
+
+        for remoteName in remoteURLs.keys {
+            let status = await checkRemoteConnectivity(remoteName: remoteName)
+            remoteStatuses[remoteName] = status
+        }
+    }
+
+    // MARK: - Git Config SET Methods
+
+    func setUserName(_ name: String, global: Bool = false) async throws {
+        var args = ["config"]
+        if global { args.append("--global") }
+        args += ["user.name", name]
+        _ = try await runGitCommand(args)
+        userName = name
+    }
+
+    func setUserEmail(_ email: String, global: Bool = false) async throws {
+        var args = ["config"]
+        if global { args.append("--global") }
+        args += ["user.email", email]
+        _ = try await runGitCommand(args)
+        userEmail = email
+    }
+
+    func setDefaultBranch(_ branch: String, global: Bool = false) async throws {
+        var args = ["config"]
+        if global { args.append("--global") }
+        args += ["init.defaultBranch", branch]
+        _ = try await runGitCommand(args)
+        defaultBranch = branch
+    }
+
+    // MARK: - Remote Management
+
+    func addRemote(name: String, url: String) async throws {
+        _ = try await runGitCommand(["remote", "add", name, url])
+        await refresh()
+    }
+
+    func setRemoteURL(name: String, url: String) async throws {
+        _ = try await runGitCommand(["remote", "set-url", name, url])
+        await refresh()
+    }
+
+    func removeRemote(name: String) async throws {
+        _ = try await runGitCommand(["remote", "remove", name])
+        remoteURLs.removeValue(forKey: name)
+        remoteStatuses.removeValue(forKey: name)
+    }
+
     // MARK: - Private Methods
 
     private func checkIsGitRepo() async -> Bool {
@@ -221,6 +334,11 @@ class GitManager: ObservableObject {
         let name = try? await runGitCommand(["config", "user.name"])
         let email = try? await runGitCommand(["config", "user.email"])
         return (name, email)
+    }
+
+    private func fetchDefaultBranch() async throws -> String? {
+        let output = try? await runGitCommand(["config", "--get", "init.defaultBranch"])
+        return output?.isEmpty == false ? output : nil
     }
 
     private func fetchBranches() async throws -> [Branch] {

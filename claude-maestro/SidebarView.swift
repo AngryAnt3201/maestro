@@ -91,20 +91,20 @@ struct SidebarView: View {
 
                         Divider()
                             .padding(.horizontal)
+                    }
 
-                        // Git Repository Info Section
-                        GitInfoSection(gitManager: manager.gitManager)
+                    // Git Repository Info Section (always visible)
+                    GitInfoSection(gitManager: manager.gitManager)
+
+                    Divider()
+                        .padding(.horizontal)
+
+                    // Batch Action Bar (when selection active, only when not running)
+                    if !manager.isRunning && manager.selectionManager.hasSelection {
+                        BatchActionBar(manager: manager)
 
                         Divider()
                             .padding(.horizontal)
-
-                        // Batch Action Bar (when selection active)
-                        if manager.selectionManager.hasSelection {
-                            BatchActionBar(manager: manager)
-
-                            Divider()
-                                .padding(.horizontal)
-                        }
                     }
 
                     // Session List Section
@@ -305,16 +305,58 @@ struct BatchActionBar: View {
     }
 }
 
+// MARK: - Remote Status Indicator
+
+struct RemoteStatusIndicator: View {
+    let status: RemoteConnectionStatus
+
+    var body: some View {
+        HStack(spacing: 3) {
+            if case .checking = status {
+                ProgressView()
+                    .scaleEffect(0.5)
+                    .frame(width: 12, height: 12)
+            } else {
+                Image(systemName: status.icon)
+                    .foregroundColor(status.color)
+                    .font(.caption2)
+            }
+        }
+        .help(status.label)
+    }
+}
+
 // MARK: - Git Info Section
 
 struct GitInfoSection: View {
     @ObservedObject var gitManager: GitManager
+    @State private var isEditingConfig: Bool = false
+    @State private var editedUserName: String = ""
+    @State private var editedUserEmail: String = ""
+    @State private var isSaving: Bool = false
+    @State private var showFullSettings: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Git Repository")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+            HStack {
+                Text("Git Repository")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Spacer()
+                if gitManager.isGitRepo {
+                    Button {
+                        showFullSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Git Settings")
+                }
+            }
+            .sheet(isPresented: $showFullSettings) {
+                GitSettingsView(gitManager: gitManager)
+            }
 
             if gitManager.isGitRepo {
                 VStack(alignment: .leading, spacing: 6) {
@@ -343,12 +385,13 @@ struct GitInfoSection: View {
                         }
                     }
 
-                    // Remote URLs
+                    // Remote URLs with connectivity status
                     if !gitManager.remoteURLs.isEmpty {
                         Divider()
 
                         ForEach(Array(gitManager.remoteURLs.keys.sorted()), id: \.self) { remoteName in
                             if let url = gitManager.remoteURLs[remoteName] {
+                                let status = gitManager.remoteStatuses[remoteName] ?? .unknown
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack(spacing: 4) {
                                         Image(systemName: "network")
@@ -357,6 +400,8 @@ struct GitInfoSection: View {
                                         Text(remoteName)
                                             .font(.caption)
                                             .fontWeight(.medium)
+                                        Spacer()
+                                        RemoteStatusIndicator(status: status)
                                     }
                                     Text(formatRemoteURL(url))
                                         .font(.caption2)
@@ -377,6 +422,12 @@ struct GitInfoSection: View {
                                             .replacingOccurrences(of: ".git", with: "")
                                         if let urlObj = URL(string: browserURL) {
                                             NSWorkspace.shared.open(urlObj)
+                                        }
+                                    }
+                                    Divider()
+                                    Button("Check Connection") {
+                                        Task {
+                                            await gitManager.checkAllRemotesConnectivity()
                                         }
                                     }
                                 }
