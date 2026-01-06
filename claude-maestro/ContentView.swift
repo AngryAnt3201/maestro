@@ -307,11 +307,6 @@ class SessionManager: ObservableObject {
         // Remove the session entirely
         sessions.removeAll { $0.id == sessionId }
 
-        // Re-index remaining sessions for clean IDs
-        for (index, _) in sessions.enumerated() {
-            sessions[index].id = index + 1
-        }
-
         // Update terminal count to match (this also triggers persistSessions via didSet)
         terminalCount = sessions.count
     }
@@ -336,6 +331,18 @@ class SessionManager: ObservableObject {
 
     var visibleSessions: [SessionInfo] {
         sessions.filter { $0.isVisible }
+    }
+
+    // MARK: - Safe Session Access (ID-based)
+
+    func session(byId id: Int) -> SessionInfo? {
+        sessions.first { $0.id == id }
+    }
+
+    func updateSession(id: Int, _ update: (inout SessionInfo) -> Void) {
+        if let index = sessions.firstIndex(where: { $0.id == id }) {
+            update(&sessions[index])
+        }
     }
 
     // MARK: - Direct Mode Setting (replaces cycling)
@@ -618,31 +625,31 @@ struct DynamicTerminalGridView: View {
 
                         if index < visibleSessions.count {
                             let session = visibleSessions[index]
-                            let sessionIndex = manager.sessions.firstIndex(where: { $0.id == session.id })!
+                            let sessionId = session.id  // Capture stable ID, not array index
 
                             TerminalSessionView(
                                 session: session,
                                 workingDirectory: manager.projectPath,
-                                shouldLaunch: manager.sessions[sessionIndex].shouldLaunchTerminal,
+                                shouldLaunch: manager.session(byId: sessionId)?.shouldLaunchTerminal ?? false,
                                 status: Binding(
-                                    get: { manager.sessions[sessionIndex].status },
-                                    set: { manager.sessions[sessionIndex].status = $0 }
+                                    get: { manager.session(byId: sessionId)?.status ?? .idle },
+                                    set: { newValue in manager.updateSession(id: sessionId) { $0.status = newValue } }
                                 ),
                                 mode: Binding(
-                                    get: { manager.sessions[sessionIndex].mode },
-                                    set: { manager.sessions[sessionIndex].mode = $0 }
+                                    get: { manager.session(byId: sessionId)?.mode ?? .claudeCode },
+                                    set: { newValue in manager.updateSession(id: sessionId) { $0.mode = newValue } }
                                 ),
                                 assignedBranch: Binding(
-                                    get: { manager.sessions[sessionIndex].assignedBranch },
-                                    set: { manager.assignBranch($0, to: session.id) }
+                                    get: { manager.session(byId: sessionId)?.assignedBranch },
+                                    set: { manager.assignBranch($0, to: sessionId) }
                                 ),
                                 gitManager: manager.gitManager,
-                                isTerminalLaunched: manager.sessions[sessionIndex].isTerminalLaunched,
-                                isClaudeRunning: manager.sessions[sessionIndex].isClaudeRunning,
-                                onLaunchClaude: { manager.launchClaudeInSession(session.id) },
-                                onClose: { manager.closeSession(session.id) },
-                                onTerminalLaunched: { manager.markTerminalLaunched(session.id) },
-                                onLaunchTerminal: { manager.triggerTerminalLaunch(session.id) }
+                                isTerminalLaunched: manager.session(byId: sessionId)?.isTerminalLaunched ?? false,
+                                isClaudeRunning: manager.session(byId: sessionId)?.isClaudeRunning ?? false,
+                                onLaunchClaude: { manager.launchClaudeInSession(sessionId) },
+                                onClose: { manager.closeSession(sessionId) },
+                                onTerminalLaunched: { manager.markTerminalLaunched(sessionId) },
+                                onLaunchTerminal: { manager.triggerTerminalLaunch(sessionId) }
                             )
                         } else {
                             Color.clear
