@@ -31,6 +31,10 @@ class GraphLayoutEngine {
 
         var nodes: [GraphNode] = []
 
+        // Pre-compute set of all commit hashes for quick lookup
+        let commitHashSet = Set(commits.map { $0.id })
+        let totalRows = commits.count
+
         // Track which column each commit hash should use
         var commitToColumn: [String: Int] = [:]
 
@@ -49,8 +53,8 @@ class GraphLayoutEngine {
             let column = findColumn(for: commit, activeColumns: &activeColumns, commitToColumn: commitToColumn)
             commitToColumn[commit.id] = column
 
-            // Update active columns based on this commit's parents
-            updateActiveColumns(for: commit, atColumn: column, activeColumns: &activeColumns)
+            // Update active columns based on this commit's parents (only for parents in our set)
+            updateActiveColumns(for: commit, atColumn: column, activeColumns: &activeColumns, commitHashSet: commitHashSet)
         }
 
         // Second pass: create graph nodes with connections
@@ -58,23 +62,32 @@ class GraphLayoutEngine {
             let column = commitToColumn[commit.id] ?? 0
 
             let parentConnections: [ParentConnection] = commit.parentHashes.compactMap { parentHash in
-                guard let parentColumn = commitToColumn[parentHash],
-                      let parentRow = commitToRow[parentHash] else {
-                    // Parent not in our commit list (outside the limit)
-                    return nil
+                if let parentColumn = commitToColumn[parentHash],
+                   let parentRow = commitToRow[parentHash] {
+                    // Parent is in our loaded commits - normal connection
+                    let connectionType = determineConnectionType(
+                        fromColumn: column,
+                        toColumn: parentColumn
+                    )
+
+                    return ParentConnection(
+                        parentHash: parentHash,
+                        parentColumn: parentColumn,
+                        parentRow: parentRow,
+                        connectionType: connectionType,
+                        isOffScreen: false
+                    )
+                } else {
+                    // Parent exists but is outside loaded range - create off-screen connection
+                    // Draw line extending to bottom of visible area in the same column
+                    return ParentConnection(
+                        parentHash: parentHash,
+                        parentColumn: column,  // Stay in same column
+                        parentRow: totalRows,  // Extend to bottom
+                        connectionType: .straight,
+                        isOffScreen: true
+                    )
                 }
-
-                let connectionType = determineConnectionType(
-                    fromColumn: column,
-                    toColumn: parentColumn
-                )
-
-                return ParentConnection(
-                    parentHash: parentHash,
-                    parentColumn: parentColumn,
-                    parentRow: parentRow,
-                    connectionType: connectionType
-                )
             }
 
             nodes.append(GraphNode(
@@ -126,7 +139,8 @@ class GraphLayoutEngine {
     private func updateActiveColumns(
         for commit: Commit,
         atColumn column: Int,
-        activeColumns: inout [Int: String]
+        activeColumns: inout [Int: String],
+        commitHashSet: Set<String>
     ) {
         // Remove this commit from active columns (it's been consumed)
         activeColumns = activeColumns.filter { $0.value != commit.id }
@@ -136,13 +150,18 @@ class GraphLayoutEngine {
             return
         }
 
-        // First parent continues in the same column
-        if let firstParent = commit.parentHashes.first {
+        // First parent continues in the same column (only if it's in our commit set)
+        if let firstParent = commit.parentHashes.first,
+           commitHashSet.contains(firstParent) {
             activeColumns[column] = firstParent
         }
 
         // Additional parents (merge commits) need their own columns
         for parentHash in commit.parentHashes.dropFirst() {
+            // Only reserve column for parents that exist in our loaded commits
+            guard commitHashSet.contains(parentHash) else {
+                continue
+            }
             // Find a free column for this merge parent
             // Try to place it adjacent to the current column
             var mergeColumn = column + 1

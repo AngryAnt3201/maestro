@@ -76,11 +76,20 @@ struct GraphCanvas: View {
             )
         }
 
-        context.stroke(
-            path,
-            with: .color(color),
-            lineWidth: lineWidth
-        )
+        // Use dashed stroke for off-screen connections
+        if connection.isOffScreen {
+            context.stroke(
+                path,
+                with: .color(color.opacity(0.6)),
+                style: StrokeStyle(lineWidth: lineWidth, dash: [4, 4])
+            )
+        } else {
+            context.stroke(
+                path,
+                with: .color(color),
+                lineWidth: lineWidth
+            )
+        }
     }
 
     private func drawStraightLine(
@@ -126,7 +135,7 @@ struct GraphCanvas: View {
             ),
             column: 0, row: 0,
             parentConnections: [
-                ParentConnection(parentHash: "2", parentColumn: 0, parentRow: 1, connectionType: .straight)
+                ParentConnection(parentHash: "2", parentColumn: 0, parentRow: 1, connectionType: .straight, isOffScreen: false)
             ]
         ),
         GraphNode(
@@ -138,8 +147,8 @@ struct GraphCanvas: View {
             ),
             column: 0, row: 1,
             parentConnections: [
-                ParentConnection(parentHash: "3", parentColumn: 0, parentRow: 2, connectionType: .straight),
-                ParentConnection(parentHash: "4", parentColumn: 1, parentRow: 3, connectionType: .mergeRight)
+                ParentConnection(parentHash: "3", parentColumn: 0, parentRow: 2, connectionType: .straight, isOffScreen: false),
+                ParentConnection(parentHash: "4", parentColumn: 1, parentRow: 3, connectionType: .mergeRight, isOffScreen: false)
             ]
         ),
         GraphNode(
@@ -151,7 +160,7 @@ struct GraphCanvas: View {
             ),
             column: 0, row: 2,
             parentConnections: [
-                ParentConnection(parentHash: "5", parentColumn: 0, parentRow: 4, connectionType: .straight)
+                ParentConnection(parentHash: "5", parentColumn: 0, parentRow: 4, connectionType: .straight, isOffScreen: false)
             ]
         ),
         GraphNode(
@@ -163,7 +172,7 @@ struct GraphCanvas: View {
             ),
             column: 1, row: 3,
             parentConnections: [
-                ParentConnection(parentHash: "5", parentColumn: 0, parentRow: 4, connectionType: .mergeLeft)
+                ParentConnection(parentHash: "5", parentColumn: 0, parentRow: 4, connectionType: .mergeLeft, isOffScreen: false)
             ]
         ),
         GraphNode(

@@ -79,6 +79,7 @@ struct ParentConnection: Hashable {
     let parentColumn: Int
     let parentRow: Int
     let connectionType: ConnectionType
+    let isOffScreen: Bool   // Parent exists but is outside loaded commit range
 
     enum ConnectionType: Hashable {
         case straight       // Same column, direct line down
