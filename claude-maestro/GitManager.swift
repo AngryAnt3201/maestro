@@ -60,8 +60,7 @@ class GitManager: ObservableObject {
     @Published var userEmail: String?
     @Published var remoteStatuses: [String: RemoteConnectionStatus] = [:]
     @Published var defaultBranch: String?
-
-    private var repoPath: String = ""
+    @Published var repoPath: String = ""
 
     // MARK: - Public Methods
 
@@ -119,6 +118,11 @@ class GitManager: ObservableObject {
         }
     }
 
+    func initRepository() async throws {
+        _ = try await runGitCommand(["init"])
+        await refresh()
+    }
+
     func createBranch(name: String, from source: String? = nil) async throws {
         let sanitizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sanitizedName.isEmpty else {
@@ -140,14 +144,14 @@ class GitManager: ObservableObject {
 
     // MARK: - Commit History Methods
 
-    func fetchCommitHistory(limit: Int = 50) async throws -> [Commit] {
+    func fetchCommitHistory(limit: Int = 50, skip: Int = 0) async throws -> [Commit] {
         // Format: fullHash|shortHash|subject|authorName|authorEmail|isoDate|parentHashes|refs
         let format = "%H|%h|%s|%an|%ae|%aI|%P|%D"
-        let output = try await runGitCommand([
-            "log", "--all", "--topo-order",
-            "--format=\(format)",
-            "-n", "\(limit)"
-        ])
+        var args = ["log", "--all", "--topo-order", "--format=\(format)", "-n", "\(limit)"]
+        if skip > 0 {
+            args.append("--skip=\(skip)")
+        }
+        let output = try await runGitCommand(args)
 
         // Get current HEAD hash
         let headHash = try? await runGitCommand(["rev-parse", "HEAD"])

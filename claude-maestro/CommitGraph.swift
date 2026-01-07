@@ -103,6 +103,8 @@ class CommitGraphData: ObservableObject {
     @Published var rails: [Rail] = []
     @Published var commits: [Commit] = []
     @Published var isLoading: Bool = false
+    @Published var isLoadingMore: Bool = false
+    @Published var hasMoreCommits: Bool = true
     @Published var error: GitError?
 
     // Quick lookup dictionaries
@@ -117,6 +119,17 @@ class CommitGraphData: ObservableObject {
         self.commitsByHash = Dictionary(uniqueKeysWithValues: commits.map { ($0.id, $0) })
     }
 
+    func appendCommits(_ newCommits: [Commit], nodes: [GraphNode], rails: [Rail]) {
+        // Only append commits that don't already exist
+        let existingHashes = Set(commits.map { $0.id })
+        let uniqueNewCommits = newCommits.filter { !existingHashes.contains($0.id) }
+        self.commits.append(contentsOf: uniqueNewCommits)
+        self.nodes = nodes
+        self.rails = rails
+        self.nodesByHash = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, $0) })
+        self.commitsByHash = Dictionary(uniqueKeysWithValues: commits.map { ($0.id, $0) })
+    }
+
     func clear() {
         commits = []
         nodes = []
@@ -124,6 +137,7 @@ class CommitGraphData: ObservableObject {
         nodesByHash = [:]
         commitsByHash = [:]
         error = nil
+        hasMoreCommits = true
     }
 }
 
