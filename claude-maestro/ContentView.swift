@@ -480,15 +480,18 @@ struct ContentView: View {
     @StateObject private var manager = SessionManager()
     @State private var statusMessage: String = "Select a directory to launch Claude Code instances"
     @State private var showBranchSidebar: Bool = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(manager: manager)
+                .navigationSplitViewColumnWidth(min: 240, ideal: 240, max: 300)
         } detail: {
             MainContentView(
                 manager: manager,
                 statusMessage: $statusMessage,
-                showBranchSidebar: $showBranchSidebar
+                showBranchSidebar: $showBranchSidebar,
+                columnVisibility: $columnVisibility
             )
         }
         .navigationSplitViewStyle(.balanced)
@@ -501,6 +504,7 @@ struct MainContentView: View {
     @ObservedObject var manager: SessionManager
     @Binding var statusMessage: String
     @Binding var showBranchSidebar: Bool
+    @Binding var columnVisibility: NavigationSplitViewVisibility
     @State private var showGitSettings: Bool = false
 
     var body: some View {
@@ -509,11 +513,16 @@ struct MainContentView: View {
             VStack(spacing: 12) {
                 // Header
                 HStack {
-                    Image(systemName: "terminal.fill")
-                        .font(.title2)
-                    Text("Claude Maestro")
-                        .font(.title2)
-                        .fontWeight(.bold)
+                    // Left sidebar toggle
+                    Button {
+                        withAnimation {
+                            columnVisibility = columnVisibility == .all ? .detailOnly : .all
+                        }
+                    } label: {
+                        Image(systemName: "sidebar.left")
+                    }
+                    .buttonStyle(.bordered)
+                    .help(columnVisibility == .all ? "Hide sidebar" : "Show sidebar")
 
                     // Git status indicator
                     if manager.gitManager.isGitRepo {
@@ -521,6 +530,17 @@ struct MainContentView: View {
                     }
 
                     Spacer()
+
+                    // Legend
+                    HStack(spacing: 12) {
+                        LegendItem(status: .initializing)
+                        LegendItem(status: .idle)
+                        LegendItem(status: .working)
+                        LegendItem(status: .waiting)
+                        LegendItem(status: .done)
+                        LegendItem(status: .error)
+                    }
+                    .font(.caption2)
 
                     // Git controls
                     if manager.gitManager.isGitRepo {
@@ -534,29 +554,19 @@ struct MainContentView: View {
                             .buttonStyle(.bordered)
                             .help("Git Settings")
 
-                            // Branch sidebar toggle
+                            // Git tree sidebar toggle
                             Button {
                                 withAnimation {
                                     showBranchSidebar.toggle()
                                 }
                             } label: {
-                                Image(systemName: showBranchSidebar ? "sidebar.right" : "sidebar.left")
+                                Image(systemName: "arrow.triangle.branch")
                             }
                             .buttonStyle(.bordered)
-                            .help(showBranchSidebar ? "Hide branches" : "Show branches")
+                            .tint(showBranchSidebar ? .accentColor : nil)
+                            .help(showBranchSidebar ? "Hide git tree" : "Show git tree")
                         }
                     }
-
-                    // Legend
-                    HStack(spacing: 12) {
-                        LegendItem(status: .initializing)
-                        LegendItem(status: .idle)
-                        LegendItem(status: .working)
-                        LegendItem(status: .waiting)
-                        LegendItem(status: .done)
-                        LegendItem(status: .error)
-                    }
-                    .font(.caption2)
                 }
                 .padding(.horizontal)
 
@@ -593,6 +603,7 @@ struct MainContentView: View {
         .sheet(isPresented: $showGitSettings) {
             GitSettingsView(gitManager: manager.gitManager)
         }
+        .toolbar(.hidden)
     }
 
     func selectDirectory() {
