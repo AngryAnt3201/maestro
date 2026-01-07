@@ -204,7 +204,16 @@ class SessionManager: ObservableObject {
     @Published var savedPresets: [TemplatePreset] = []
     @Published var currentPresetId: UUID? = nil
 
+    private var cancellables = Set<AnyCancellable>()
+
     init() {
+        // Forward selectionManager changes to trigger view updates
+        selectionManager.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
         loadPresets()
         loadSessions()
     }
