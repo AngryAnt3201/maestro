@@ -799,6 +799,7 @@ struct ControlsView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(manager.projectPath.isEmpty)
+                .opacity(manager.projectPath.isEmpty ? 0.5 : 1.0)
             }
         }
         .padding(.bottom, 8)
