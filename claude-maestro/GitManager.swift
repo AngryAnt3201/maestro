@@ -237,8 +237,8 @@ class GitManager: ObservableObject {
 
     func checkRemoteConnectivity(remoteName: String) async -> RemoteConnectionStatus {
         do {
-            // Use ls-remote with timeout to check connectivity
-            _ = try await runGitCommand(["ls-remote", "--exit-code", remoteName, "HEAD"])
+            // Use ls-remote --heads to test connectivity (no --exit-code which can fail even on valid remotes)
+            _ = try await runGitCommand(["ls-remote", "--heads", remoteName])
             return .connected
         } catch {
             return .disconnected

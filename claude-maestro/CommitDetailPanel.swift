@@ -33,8 +33,8 @@ struct CommitDetailPanel: View {
 
                     Divider()
 
-                    // References section
-                    if !commit.refs.isEmpty {
+                    // References section (show if has refs or remotes configured)
+                    if !commit.refs.isEmpty || !gitManager.remoteURLs.isEmpty {
                         refsSection
                         Divider()
                     }
@@ -191,17 +191,108 @@ struct CommitDetailPanel: View {
     // MARK: - Refs Section
 
     private var refsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("References")
-                .font(.caption)
-                .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            // Remote Status Header
+            if !gitManager.remoteURLs.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Remote")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
 
-            FlowLayout(spacing: 6) {
-                ForEach(commit.refs) { ref in
-                    RefLabel(ref: ref)
+                    ForEach(Array(gitManager.remoteURLs.keys.sorted()), id: \.self) { name in
+                        if let url = gitManager.remoteURLs[name] {
+                            HStack(spacing: 6) {
+                                RemoteStatusIndicator(status: gitManager.remoteStatuses[name] ?? .unknown)
+                                Text(name)
+                                    .fontWeight(.medium)
+                                Text("• \(formatRemoteURL(url))")
+                                    .foregroundColor(.secondary)
+                            }
+                            .font(.caption)
+                        }
+                    }
+                }
+            }
+
+            // Local Branches (grouped)
+            let localRefs = commit.refs.filter { $0.type == .localBranch }
+            if !localRefs.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Local Branches")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    ForEach(localRefs) { ref in
+                        HStack {
+                            RefLabel(ref: ref)
+                            // Show tracking info if available
+                            if let branch = findBranch(for: ref) {
+                                if branch.aheadCount > 0 || branch.behindCount > 0 {
+                                    Text("↑\(branch.aheadCount) ↓\(branch.behindCount)")
+                                        .font(.caption2)
+                                        .foregroundColor(.orange)
+                                } else {
+                                    Text("✓ pushed")
+                                        .font(.caption2)
+                                        .foregroundColor(.green)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Remote Branches (grouped)
+            let remoteRefs = commit.refs.filter { $0.type == .remoteBranch }
+            if !remoteRefs.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Remote Branches")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    FlowLayout(spacing: 6) {
+                        ForEach(remoteRefs) { ref in
+                            RefLabel(ref: ref)
+                        }
+                    }
+                }
+            }
+
+            // Tags (grouped)
+            let tagRefs = commit.refs.filter { $0.type == .tag }
+            if !tagRefs.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Tags")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    FlowLayout(spacing: 6) {
+                        ForEach(tagRefs) { ref in
+                            RefLabel(ref: ref)
+                        }
+                    }
                 }
             }
         }
+    }
+
+    // Helper to find branch details from GitManager
+    private func findBranch(for ref: GitRef) -> Branch? {
+        gitManager.branches.first { $0.name == ref.name && !$0.isRemote }
+    }
+
+    // Format remote URL for display
+    private func formatRemoteURL(_ url: String) -> String {
+        var formatted = url
+            .replacingOccurrences(of: "git@github.com:", with: "github:")
+            .replacingOccurrences(of: "git@gitlab.com:", with: "gitlab:")
+            .replacingOccurrences(of: "https://github.com/", with: "github:")
+            .replacingOccurrences(of: "https://gitlab.com/", with: "gitlab:")
+
+        if formatted.hasSuffix(".git") {
+            formatted = String(formatted.dropLast(4))
+        }
+        return formatted
     }
 
     // MARK: - Actions Section
