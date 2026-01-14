@@ -300,7 +300,10 @@ class SessionManager: ObservableObject {
     var activeSessionBranches: [String: Int] {
         var result: [String: Int] = [:]
         for session in sessions {
-            if let branch = session.assignedBranch ?? session.currentBranch {
+            // Use assigned branch, or fall back to repo's current branch for launched sessions
+            let effectiveBranch = session.assignedBranch
+                ?? (session.isTerminalLaunched ? gitManager.currentBranch : nil)
+            if let branch = effectiveBranch {
                 result[branch] = session.id
             }
         }
