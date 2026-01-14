@@ -127,6 +127,12 @@ struct SessionInfo: Identifiable {
     var isClaudeRunning: Bool = false       // claude command has been launched
     var isVisible: Bool = true              // terminal is open (not closed)
 
+    // App running state
+    var assignedPort: Int? = nil            // Auto-assigned port (hint for web projects)
+    var customRunCommand: String? = nil     // Optional manual override command
+    var isAppRunning: Bool = false          // App has been launched via "Run App"
+    var serverURL: String? = nil            // Detected web server URL (nil for native apps)
+
     init(id: Int, mode: TerminalMode = .claudeCode) {
         self.id = id
         self.mode = mode
@@ -139,11 +145,13 @@ struct PersistableSession: Codable {
     let id: Int
     var mode: TerminalMode
     var assignedBranch: String?
+    var customRunCommand: String?
 
     init(from session: SessionInfo) {
         self.id = session.id
         self.mode = session.mode
         self.assignedBranch = session.assignedBranch
+        self.customRunCommand = session.customRunCommand
     }
 }
 
@@ -182,6 +190,37 @@ class SelectionManager: ObservableObject {
     }
 }
 
+// MARK: - Port Manager
+
+class PortManager: ObservableObject {
+    @Published private(set) var assignedPorts: [Int: Int] = [:]  // sessionId -> port
+    private let basePort = 3000
+    private let maxPort = 3099
+
+    func assignPort(for sessionId: Int) -> Int {
+        if let existing = assignedPorts[sessionId] {
+            return existing
+        }
+
+        let usedPorts = Set(assignedPorts.values)
+        for port in basePort...maxPort {
+            if !usedPorts.contains(port) {
+                assignedPorts[sessionId] = port
+                return port
+            }
+        }
+        return basePort // fallback
+    }
+
+    func releasePort(for sessionId: Int) {
+        assignedPorts.removeValue(forKey: sessionId)
+    }
+
+    func port(for sessionId: Int) -> Int? {
+        assignedPorts[sessionId]
+    }
+}
+
 // MARK: - Session Manager
 
 class SessionManager: ObservableObject {
@@ -203,6 +242,10 @@ class SessionManager: ObservableObject {
     // Template presets
     @Published var savedPresets: [TemplatePreset] = []
     @Published var currentPresetId: UUID? = nil
+
+    // Port and terminal controller management for "Run App" feature
+    @Published var portManager = PortManager()
+    var terminalControllers: [Int: TerminalController] = [:]
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -313,6 +356,12 @@ class SessionManager: ObservableObject {
     }
 
     func closeSession(_ sessionId: Int) {
+        // Release assigned port
+        portManager.releasePort(for: sessionId)
+
+        // Remove terminal controller
+        terminalControllers.removeValue(forKey: sessionId)
+
         // Remove the session entirely
         sessions.removeAll { $0.id == sessionId }
 
@@ -331,6 +380,44 @@ class SessionManager: ObservableObject {
     func launchClaudeInSession(_ sessionId: Int) {
         if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
             sessions[index].isClaudeRunning = true
+        }
+    }
+
+    // MARK: - Run App Feature
+
+    func runApp(for sessionId: Int) {
+        // 1. Assign port (used as hint for web projects)
+        let port = portManager.assignPort(for: sessionId)
+
+        // 2. Update session with port and running state
+        if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
+            sessions[index].assignedPort = port
+            sessions[index].isAppRunning = true
+        }
+
+        // 3. Build prompt for AI - it figures out project type
+        let prompt: String
+        if let index = sessions.firstIndex(where: { $0.id == sessionId }),
+           let customCmd = sessions[index].customRunCommand {
+            prompt = "Please run: \(customCmd)"
+        } else {
+            prompt = "Please run this application. If it's a web project that needs a port, use port \(port). For native apps (Swift, Rust, etc.), just run them normally - they'll open their own window."
+        }
+
+        // 4. Send to terminal via controller
+        terminalControllers[sessionId]?.sendCommand(prompt)
+    }
+
+    func setAppRunning(_ running: Bool, url: String?, for sessionId: Int) {
+        if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
+            sessions[index].isAppRunning = running
+            sessions[index].serverURL = url
+        }
+    }
+
+    func setServerURL(_ url: String?, for sessionId: Int) {
+        if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
+            sessions[index].serverURL = url
         }
     }
 
@@ -695,7 +782,14 @@ struct DynamicTerminalGridView: View {
                                     onLaunchClaude: { manager.launchClaudeInSession(sessionId) },
                                     onClose: { manager.closeSession(sessionId) },
                                     onTerminalLaunched: { manager.markTerminalLaunched(sessionId) },
-                                    onLaunchTerminal: { manager.triggerTerminalLaunch(sessionId) }
+                                    onLaunchTerminal: { manager.triggerTerminalLaunch(sessionId) },
+                                    // Run App feature props
+                                    assignedPort: manager.session(byId: sessionId)?.assignedPort,
+                                    isAppRunning: manager.session(byId: sessionId)?.isAppRunning ?? false,
+                                    serverURL: manager.session(byId: sessionId)?.serverURL,
+                                    onRunApp: { manager.runApp(for: sessionId) },
+                                    onServerReady: { url in manager.setServerURL(url, for: sessionId) },
+                                    onControllerReady: { controller in manager.terminalControllers[sessionId] = controller }
                                 )
                             } else {
                                 Color.clear
