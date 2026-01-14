@@ -87,19 +87,27 @@ class GitManager: ObservableObject {
             return
         }
 
-        // Fetch all data in parallel
+        // First, get remote URLs to know if we have remotes configured
+        do {
+            remoteURLs = try await fetchRemoteURLs()
+        } catch {
+            remoteURLs = [:]
+        }
+
+        // Fetch from remotes if configured (updates remote branch cache)
+        await fetchFromRemotes()
+
+        // Fetch remaining data in parallel
         do {
             async let branchesTask = fetchBranches()
             async let statusTask = fetchStatus()
             async let currentTask = fetchCurrentBranch()
-            async let remotesTask = fetchRemoteURLs()
             async let userConfigTask = fetchUserConfig()
             async let defaultBranchTask = fetchDefaultBranch()
 
             branches = try await branchesTask
             gitStatus = try await statusTask
             currentBranch = try await currentTask
-            remoteURLs = try await remotesTask
             let userConfig = try await userConfigTask
             userName = userConfig.name
             userEmail = userConfig.email
@@ -304,6 +312,76 @@ class GitManager: ObservableObject {
         remoteStatuses.removeValue(forKey: name)
     }
 
+    // MARK: - Worktree Operations
+
+    /// Create a worktree for the given branch at the specified path
+    func createWorktree(branch: String, path: String, createBranch: Bool = false) async throws {
+        var args = ["worktree", "add"]
+        if createBranch {
+            args.append(contentsOf: ["-b", branch, path])
+        } else {
+            args.append(contentsOf: [path, branch])
+        }
+        _ = try await runGitCommand(args)
+    }
+
+    /// Remove a worktree at the specified path
+    func removeWorktree(path: String, force: Bool = true) async throws {
+        var args = ["worktree", "remove", path]
+        if force {
+            args.append("--force")
+        }
+        do {
+            _ = try await runGitCommand(args)
+        } catch {
+            // If removal fails, try pruning
+            try await pruneWorktrees()
+        }
+    }
+
+    /// List all worktrees for this repository
+    func listWorktrees() async throws -> [(path: String, branch: String)] {
+        let output = try await runGitCommand(["worktree", "list", "--porcelain"])
+
+        var worktrees: [(path: String, branch: String)] = []
+        var currentPath: String?
+        var currentBranch: String?
+
+        for line in output.split(separator: "\n", omittingEmptySubsequences: false) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if trimmed.hasPrefix("worktree ") {
+                // Save previous worktree if complete
+                if let path = currentPath, let branch = currentBranch {
+                    worktrees.append((path: path, branch: branch))
+                }
+                currentPath = String(trimmed.dropFirst(9))  // Remove "worktree "
+                currentBranch = nil
+            } else if trimmed.hasPrefix("branch refs/heads/") {
+                currentBranch = String(trimmed.dropFirst(18))  // Remove "branch refs/heads/"
+            } else if trimmed.isEmpty {
+                // End of current worktree entry
+                if let path = currentPath, let branch = currentBranch {
+                    worktrees.append((path: path, branch: branch))
+                }
+                currentPath = nil
+                currentBranch = nil
+            }
+        }
+
+        // Handle last entry if not followed by empty line
+        if let path = currentPath, let branch = currentBranch {
+            worktrees.append((path: path, branch: branch))
+        }
+
+        return worktrees
+    }
+
+    /// Prune stale worktree references
+    func pruneWorktrees() async throws {
+        _ = try await runGitCommand(["worktree", "prune"])
+    }
+
     // MARK: - Private Methods
 
     private func checkIsGitRepo() async -> Bool {
@@ -343,6 +421,18 @@ class GitManager: ObservableObject {
     private func fetchDefaultBranch() async throws -> String? {
         let output = try? await runGitCommand(["config", "--get", "init.defaultBranch"])
         return output?.isEmpty == false ? output : nil
+    }
+
+    private func fetchFromRemotes() async {
+        // Only fetch if we have remotes configured
+        guard !remoteURLs.isEmpty else { return }
+
+        do {
+            // Fetch from all remotes, pruning deleted remote branches
+            _ = try await runGitCommand(["fetch", "--all", "--prune"])
+        } catch {
+            // Silently fail - network issues shouldn't block local refresh
+        }
     }
 
     private func fetchBranches() async throws -> [Branch] {
