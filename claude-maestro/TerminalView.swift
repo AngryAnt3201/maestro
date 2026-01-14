@@ -85,26 +85,15 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     private func launchTerminal(in terminal: LocalProcessTerminalView) {
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
 
-        // Build environment with user's PATH
-        var env = ProcessInfo.processInfo.environment
-
-        // Ensure common paths are included
-        let additionalPaths = [
-            "\(NSHomeDirectory())/.local/bin",
-            "\(NSHomeDirectory())/.cargo/bin",
-            "/usr/local/bin",
-            "/opt/homebrew/bin",
-            "/opt/homebrew/sbin"
-        ]
-
-        if let existingPath = env["PATH"] {
-            env["PATH"] = additionalPaths.joined(separator: ":") + ":" + existingPath
-        } else {
-            env["PATH"] = additionalPaths.joined(separator: ":") + ":/usr/bin:/bin"
-        }
-
-        // Build command - cd and optional branch checkout
-        var command = "cd '\(workingDirectory)'"
+        // Source user's shell profile to get full environment (PATH, NVM, etc.)
+        // This is necessary because macOS apps launched from Finder have a limited environment
+        var command = """
+            if [ -f ~/.zprofile ]; then source ~/.zprofile 2>/dev/null; fi; \
+            if [ -f ~/.zshrc ]; then source ~/.zshrc 2>/dev/null; fi; \
+            if [ -f ~/.bash_profile ]; then source ~/.bash_profile 2>/dev/null; fi; \
+            if [ -f ~/.bashrc ]; then source ~/.bashrc 2>/dev/null; fi; \
+            cd '\(workingDirectory)'
+            """
 
         // Checkout branch if assigned
         if let branch = assignedBranch {
@@ -127,7 +116,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         terminal.startProcess(
             executable: shell,
             args: ["-l", "-i", "-c", command],
-            environment: Array(env.map { "\($0.key)=\($0.value)" }),
+            environment: nil,  // Let shell inherit and source profiles for full environment
             execName: nil
         )
     }
@@ -167,8 +156,10 @@ struct EmbeddedTerminalView: NSViewRepresentable {
 
         func sendCommand(_ command: String) {
             guard let terminal = terminal else { return }
-            let commandWithNewline = command + "\n"
-            terminal.send(txt: commandWithNewline)
+            // Use carriage return (\r) instead of newline (\n) for proper "Enter" key behavior
+            // Terminal applications in raw mode expect CR (byte 13) to submit input
+            let commandWithCR = command + "\r"
+            terminal.send(txt: commandWithCR)
         }
 
         func terminateProcess() {
