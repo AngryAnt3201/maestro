@@ -30,6 +30,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     let mode: TerminalMode
     var onLaunched: () -> Void
     var onCLILaunched: () -> Void
+    var onServerReady: ((String) -> Void)?  // Called with detected server URL
     var controller: TerminalController?
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
@@ -78,7 +79,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(sessionId: sessionId, status: $status)
+        Coordinator(sessionId: sessionId, status: $status, onServerReady: onServerReady)
     }
 
     private func launchTerminal(in terminal: LocalProcessTerminalView) {
@@ -143,13 +144,18 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         private var idleCheckTimer: Timer?
         private var initializingTimer: Timer?
 
+        // Server detection callback
+        var onServerReady: ((String) -> Void)?
+        private var hasDetectedServer = false  // Prevent duplicate callbacks
+
         // Configurable timeouts
         private let initializingTimeout: TimeInterval = 3.0  // Time after launch before assuming idle
         private let idleTimeout: TimeInterval = 2.0          // Time without output = idle
 
-        init(sessionId: Int, status: Binding<SessionStatus>) {
+        init(sessionId: Int, status: Binding<SessionStatus>, onServerReady: ((String) -> Void)?) {
             self.sessionId = sessionId
             self._status = status
+            self.onServerReady = onServerReady
             super.init()
 
             // Set initial state to initializing
@@ -201,6 +207,9 @@ struct EmbeddedTerminalView: NSViewRepresentable {
                 // Check for special patterns (confirmation prompts, errors)
                 checkSpecialPatterns(str)
 
+                // Check for server URLs (for "Run App" feature)
+                checkForServerReady(str)
+
                 // Reset idle timer
                 scheduleIdleCheck()
 
@@ -228,6 +237,43 @@ struct EmbeddedTerminalView: NSViewRepresentable {
                                      "command not found", "permission denied", "not recognized"]
                 if errorPatterns.contains(where: { lowercased.contains($0) }) {
                     self.status = .error
+                }
+            }
+        }
+
+        private func checkForServerReady(_ text: String) {
+            // Don't detect multiple times
+            guard !hasDetectedServer else { return }
+            guard let onServerReady = onServerReady else { return }
+
+            // Patterns to detect server URLs (common dev server outputs)
+            let serverPatterns = [
+                "(https?://localhost:\\d+[^\\s]*)",           // http://localhost:3000/...
+                "(https?://127\\.0\\.0\\.1:\\d+[^\\s]*)",     // http://127.0.0.1:3000/...
+                "(https?://0\\.0\\.0\\.0:\\d+[^\\s]*)",       // http://0.0.0.0:3000/...
+                "Local:\\s*(https?://[^\\s]+)",               // Vite: Local: http://...
+                "ready on (https?://[^\\s]+)",                // Next.js: ready on http://...
+                "Listening on (https?://[^\\s]+)",            // Express variants
+                "Server running at (https?://[^\\s]+)",       // Generic
+                "Available on:\\s*\n?\\s*(https?://[^\\s]+)"  // Some frameworks
+            ]
+
+            for pattern in serverPatterns {
+                if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                   let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
+                    // Get the captured URL group
+                    let captureRange = match.numberOfRanges > 1 ? match.range(at: 1) : match.range(at: 0)
+                    if let urlRange = Range(captureRange, in: text) {
+                        var url = String(text[urlRange])
+                        // Clean up any trailing punctuation or control chars
+                        url = url.trimmingCharacters(in: CharacterSet.alphanumerics.inverted.subtracting(CharacterSet(charactersIn: ":/")))
+
+                        hasDetectedServer = true
+                        DispatchQueue.main.async {
+                            onServerReady(url)
+                        }
+                        return
+                    }
                 }
             }
         }
@@ -300,7 +346,16 @@ struct TerminalSessionView: View {
     var onTerminalLaunched: () -> Void
     var onLaunchTerminal: () -> Void
 
+    // Run App feature props
+    var assignedPort: Int?
+    var isAppRunning: Bool
+    var serverURL: String?
+    var onRunApp: () -> Void
+    var onServerReady: ((String) -> Void)?
+    var onControllerReady: ((TerminalController) -> Void)?  // Register controller with SessionManager
+
     @State private var terminalController = TerminalController()
+    @State private var hasRegisteredController = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -356,6 +411,55 @@ struct TerminalSessionView: View {
                     .tint(mode.color)
                 }
 
+                // Run App button (when AI CLI is running, app not started)
+                if shouldLaunch && isClaudeRunning && !isAppRunning {
+                    Button(action: onRunApp) {
+                        HStack(spacing: 2) {
+                            Image(systemName: "play.rectangle")
+                            Text("Run App")
+                        }
+                        .font(.caption2)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(.green)
+                }
+
+                // Port badge (when app is running)
+                if isAppRunning, let port = assignedPort {
+                    Text(":\(port)")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 4)
+                        .background(Color.green.opacity(0.15))
+                        .cornerRadius(4)
+                }
+
+                // Open in Browser button (when server URL detected)
+                if let url = serverURL {
+                    Button(action: { openInBrowser(url) }) {
+                        HStack(spacing: 2) {
+                            Image(systemName: "safari")
+                            Text("Open")
+                        }
+                        .font(.caption2)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(.blue)
+                }
+
+                // Running indicator (for native apps without URL)
+                if isAppRunning && serverURL == nil {
+                    HStack(spacing: 2) {
+                        Image(systemName: "app.badge.checkmark")
+                        Text("Running")
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.green)
+                }
+
                 // Status label
                 Text(status.label)
                     .font(.caption2)
@@ -386,10 +490,16 @@ struct TerminalSessionView: View {
                     mode: mode,
                     onLaunched: {
                         onTerminalLaunched()
+                        // Register controller with SessionManager for Run App feature
+                        if !hasRegisteredController {
+                            hasRegisteredController = true
+                            onControllerReady?(terminalController)
+                        }
                     },
                     onCLILaunched: {
                         onLaunchClaude()
                     },
+                    onServerReady: onServerReady,
                     controller: terminalController
                 )
             } else {
@@ -429,5 +539,11 @@ struct TerminalSessionView: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(shouldLaunch ? status.color : Color.gray.opacity(0.5), lineWidth: 2)
         )
+    }
+
+    private func openInBrowser(_ urlString: String) {
+        if let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
+        }
     }
 }
