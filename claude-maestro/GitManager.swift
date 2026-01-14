@@ -65,8 +65,24 @@ class GitManager: ObservableObject {
     // MARK: - Public Methods
 
     func setRepository(path: String) async {
+        reset()  // Clear old state immediately before loading new repo
         repoPath = path
         await refresh()
+    }
+
+    func reset() {
+        isGitRepo = false
+        currentBranch = nil
+        branches = []
+        localBranches = []
+        remoteBranches = []
+        gitStatus = .notARepo
+        remoteURLs = [:]
+        userName = nil
+        userEmail = nil
+        remoteStatuses = [:]
+        defaultBranch = nil
+        repoPath = ""
     }
 
     func refresh() async {

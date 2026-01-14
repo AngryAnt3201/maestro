@@ -323,6 +323,7 @@ class SessionManager: ObservableObject {
     func resetSessions() {
         for i in 0..<sessions.count {
             sessions[i].status = .idle
+            sessions[i].assignedBranch = nil  // Clear stale branch assignments
         }
         isRunning = false
     }
