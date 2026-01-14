@@ -17,6 +17,10 @@ class TerminalController {
     func sendCommand(_ command: String) {
         coordinator?.sendCommand(command)
     }
+
+    func terminate() {
+        coordinator?.terminateProcess()
+    }
 }
 
 // MARK: - Embedded Terminal View
@@ -31,6 +35,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     var onLaunched: () -> Void
     var onCLILaunched: () -> Void
     var onServerReady: ((String) -> Void)?  // Called with detected server URL
+    var onOutputReceived: ((String) -> Void)?  // Called with terminal output for output pane
     var controller: TerminalController?
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
@@ -79,7 +84,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(sessionId: sessionId, status: $status, onServerReady: onServerReady)
+        Coordinator(sessionId: sessionId, status: $status, onServerReady: onServerReady, onOutputReceived: onOutputReceived)
     }
 
     private func launchTerminal(in terminal: LocalProcessTerminalView) {
@@ -113,6 +118,16 @@ struct EmbeddedTerminalView: NSViewRepresentable {
             command += " && exec $SHELL"
         }
 
+        // Generate claude.md in the working directory
+        ClaudeDocManager.writeClaudeMD(
+            to: workingDirectory,
+            projectPath: workingDirectory,
+            runCommand: nil,  // Will be auto-detected from project files
+            branch: assignedBranch,
+            sessionId: sessionId,
+            port: nil
+        )
+
         terminal.startProcess(
             executable: shell,
             args: ["-l", "-i", "-c", command],
@@ -137,14 +152,18 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         var onServerReady: ((String) -> Void)?
         private var hasDetectedServer = false  // Prevent duplicate callbacks
 
+        // Output callback for output pane
+        var onOutputReceived: ((String) -> Void)?
+
         // Configurable timeouts
         private let initializingTimeout: TimeInterval = 3.0  // Time after launch before assuming idle
         private let idleTimeout: TimeInterval = 2.0          // Time without output = idle
 
-        init(sessionId: Int, status: Binding<SessionStatus>, onServerReady: ((String) -> Void)?) {
+        init(sessionId: Int, status: Binding<SessionStatus>, onServerReady: ((String) -> Void)?, onOutputReceived: ((String) -> Void)?) {
             self.sessionId = sessionId
             self._status = status
             self.onServerReady = onServerReady
+            self.onOutputReceived = onOutputReceived
             super.init()
 
             // Set initial state to initializing
@@ -166,6 +185,9 @@ struct EmbeddedTerminalView: NSViewRepresentable {
             // Clean up timers
             idleCheckTimer?.invalidate()
             initializingTimer?.invalidate()
+
+            // Send exit command to terminate shell gracefully
+            terminal?.send(txt: "exit\r")
             terminal = nil
         }
 
@@ -187,6 +209,11 @@ struct EmbeddedTerminalView: NSViewRepresentable {
             if let str = String(bytes: slice, encoding: .utf8) {
                 outputBuffer += str
                 lastOutputTime = Date()
+
+                // Forward output to output pane callback
+                DispatchQueue.main.async {
+                    self.onOutputReceived?(str)
+                }
 
                 // Output received = we're working (unless in special state)
                 DispatchQueue.main.async {
@@ -347,6 +374,7 @@ struct TerminalSessionView: View {
 
     @State private var terminalController = TerminalController()
     @State private var hasRegisteredController = false
+    @State private var terminalOutput: String = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -471,28 +499,43 @@ struct TerminalSessionView: View {
 
             // Terminal content area
             if shouldLaunch {
-                // Actual terminal
-                EmbeddedTerminalView(
-                    sessionId: session.id,
-                    workingDirectory: workingDirectory,
-                    status: $status,
-                    shouldLaunch: shouldLaunch,
-                    assignedBranch: assignedBranch,
-                    mode: mode,
-                    onLaunched: {
-                        onTerminalLaunched()
-                        // Register controller with SessionManager for Run App feature
-                        if !hasRegisteredController {
-                            hasRegisteredController = true
-                            onControllerReady?(terminalController)
-                        }
-                    },
-                    onCLILaunched: {
-                        onLaunchClaude()
-                    },
-                    onServerReady: onServerReady,
-                    controller: terminalController
-                )
+                // VSplitView with terminal above and output pane below
+                VSplitView {
+                    // Top: Interactive terminal
+                    EmbeddedTerminalView(
+                        sessionId: session.id,
+                        workingDirectory: workingDirectory,
+                        status: $status,
+                        shouldLaunch: shouldLaunch,
+                        assignedBranch: assignedBranch,
+                        mode: mode,
+                        onLaunched: {
+                            onTerminalLaunched()
+                            // Register controller with SessionManager for Run App feature
+                            if !hasRegisteredController {
+                                hasRegisteredController = true
+                                onControllerReady?(terminalController)
+                            }
+                        },
+                        onCLILaunched: {
+                            onLaunchClaude()
+                        },
+                        onServerReady: onServerReady,
+                        onOutputReceived: { text in
+                            terminalOutput += text
+                            // Trim if too long to prevent memory issues
+                            if terminalOutput.count > 50000 {
+                                terminalOutput = String(terminalOutput.suffix(25000))
+                            }
+                        },
+                        controller: terminalController
+                    )
+                    .frame(minHeight: 100)
+
+                    // Bottom: Output pane
+                    TerminalOutputPane(outputText: terminalOutput, onClear: { terminalOutput = "" })
+                        .frame(minHeight: 80)
+                }
             } else {
                 // Pending state placeholder
                 VStack(spacing: 12) {
@@ -536,5 +579,69 @@ struct TerminalSessionView: View {
         if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
         }
+    }
+}
+
+// MARK: - Terminal Output Pane
+
+struct TerminalOutputPane: View {
+    let outputText: String
+    let maxLines: Int
+    var onClear: () -> Void
+
+    init(outputText: String, maxLines: Int = 500, onClear: @escaping () -> Void) {
+        self.outputText = outputText
+        self.maxLines = maxLines
+        self.onClear = onClear
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Output pane header
+            HStack {
+                Image(systemName: "text.justify.left")
+                    .font(.caption2)
+                Text("Terminal Output")
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                Spacer()
+                Button(action: onClear) {
+                    Image(systemName: "trash")
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .help("Clear output")
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.gray.opacity(0.2))
+
+            // Output content with auto-scroll
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Text(trimmedOutput)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.9))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .id("bottom")
+                }
+                .background(Color(red: 0.08, green: 0.08, blue: 0.1))
+                .onChange(of: outputText) {
+                    withAnimation {
+                        proxy.scrollTo("bottom", anchor: .bottom)
+                    }
+                }
+            }
+        }
+    }
+
+    private var trimmedOutput: String {
+        let lines = outputText.components(separatedBy: "\n")
+        if lines.count > maxLines {
+            return lines.suffix(maxLines).joined(separator: "\n")
+        }
+        return outputText
     }
 }

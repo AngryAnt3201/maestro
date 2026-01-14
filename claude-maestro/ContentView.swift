@@ -359,6 +359,9 @@ class SessionManager: ObservableObject {
         // Release assigned port
         portManager.releasePort(for: sessionId)
 
+        // Terminate the terminal process before removing
+        terminalControllers[sessionId]?.terminate()
+
         // Remove terminal controller
         terminalControllers.removeValue(forKey: sessionId)
 
@@ -418,6 +421,10 @@ class SessionManager: ObservableObject {
     func setServerURL(_ url: String?, for sessionId: Int) {
         if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
             sessions[index].serverURL = url
+            // Auto-open browser when server URL is detected
+            if let urlString = url, let browserURL = URL(string: urlString) {
+                NSWorkspace.shared.open(browserURL)
+            }
         }
     }
 
