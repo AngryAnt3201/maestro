@@ -162,8 +162,14 @@ struct SidebarView: View {
                     Divider()
                         .padding(.horizontal)
 
-                    // MCP Server Configuration Section
-                    MCPConfigSection()
+                    // Maestro MCP Section
+                    MaestroMCPSection()
+
+                    Divider()
+                        .padding(.horizontal)
+
+                    // Custom MCP Servers Section
+                    CustomMCPServersSection()
                 }
                 .padding(.bottom, 8)
             }
@@ -543,9 +549,9 @@ struct SelectableSessionRow: View {
     }
 }
 
-// MARK: - MCP Config Section
+// MARK: - Maestro MCP Section
 
-struct MCPConfigSection: View {
+struct MaestroMCPSection: View {
     @StateObject private var mcpManager = MCPServerManager.shared
     @State private var isBuilding: Bool = false
     @State private var buildError: String?
@@ -554,7 +560,7 @@ struct MCPConfigSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("MCP Server")
+                Text("Maestro MCP")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
 
@@ -747,6 +753,170 @@ struct ToolRow: View {
             Spacer()
         }
         .help(description)
+    }
+}
+
+// MARK: - Custom MCP Servers Section
+
+struct CustomMCPServersSection: View {
+    @StateObject private var mcpManager = MCPServerManager.shared
+    @State private var showAddSheet: Bool = false
+    @State private var editingServer: MCPServerConfig? = nil
+    @State private var showDeleteConfirmation: Bool = false
+    @State private var serverToDelete: MCPServerConfig? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("MCP Servers")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Button {
+                    showAddSheet = true
+                } label: {
+                    Image(systemName: "plus.circle")
+                        .foregroundColor(.accentColor)
+                }
+                .buttonStyle(.plain)
+                .help("Add MCP server")
+            }
+
+            VStack(spacing: 0) {
+                if mcpManager.customServers.isEmpty {
+                    HStack {
+                        Image(systemName: "server.rack")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                        Text("No custom servers")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                } else {
+                    VStack(spacing: 4) {
+                        ForEach(mcpManager.customServers) { server in
+                            MCPServerRow(
+                                server: server,
+                                onEdit: { editingServer = server },
+                                onDelete: {
+                                    serverToDelete = server
+                                    showDeleteConfirmation = true
+                                },
+                                onToggle: { enabled in
+                                    var updated = server
+                                    updated.isEnabled = enabled
+                                    mcpManager.updateServer(updated)
+                                }
+                            )
+                        }
+                    }
+                    .padding(8)
+                }
+            }
+            .background(Color(NSColor.windowBackgroundColor))
+            .cornerRadius(8)
+        }
+        .padding(.horizontal)
+        .sheet(isPresented: $showAddSheet) {
+            MCPServerEditorSheet(
+                server: nil,
+                onSave: { server in
+                    mcpManager.addServer(server)
+                    showAddSheet = false
+                },
+                onCancel: { showAddSheet = false }
+            )
+        }
+        .sheet(item: $editingServer) { server in
+            MCPServerEditorSheet(
+                server: server,
+                onSave: { updated in
+                    mcpManager.updateServer(updated)
+                    editingServer = nil
+                },
+                onCancel: { editingServer = nil }
+            )
+        }
+        .alert("Delete Server?", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {
+                serverToDelete = nil
+            }
+            Button("Delete", role: .destructive) {
+                if let server = serverToDelete {
+                    mcpManager.deleteServer(id: server.id)
+                }
+                serverToDelete = nil
+            }
+        } message: {
+            if let server = serverToDelete {
+                Text("Are you sure you want to delete \"\(server.name)\"? This cannot be undone.")
+            }
+        }
+    }
+}
+
+// MARK: - MCP Server Row
+
+struct MCPServerRow: View {
+    let server: MCPServerConfig
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    let onToggle: (Bool) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Enable toggle
+            Toggle("", isOn: Binding(
+                get: { server.isEnabled },
+                set: { onToggle($0) }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+
+            // Server info
+            VStack(alignment: .leading, spacing: 1) {
+                Text(server.name)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                Text(server.command + (server.args.isEmpty ? "" : " " + server.args.first!))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+
+            Spacer()
+
+            // Actions
+            HStack(spacing: 4) {
+                Button { onEdit() } label: {
+                    Image(systemName: "pencil")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Edit server")
+
+                Button { onDelete() } label: {
+                    Image(systemName: "trash")
+                        .font(.caption2)
+                        .foregroundColor(.red.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .help("Delete server")
+            }
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(server.isEnabled ? Color.accentColor.opacity(0.1) : Color.clear)
+        )
     }
 }
 

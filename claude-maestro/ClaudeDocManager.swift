@@ -9,26 +9,93 @@ import Foundation
 
 class ClaudeDocManager {
 
-    /// Get the path to the bundled MCP server
-    static func getMCPServerPath() -> String? {
-        // Primary: Check app bundle Resources (dist folder is copied directly to Resources)
-        if let bundlePath = Bundle.main.resourcePath {
-            let bundledPath = URL(fileURLWithPath: bundlePath)
-                .appendingPathComponent("dist/index.js")
-            if FileManager.default.fileExists(atPath: bundledPath.path) {
-                return bundledPath.path
-            }
+    /// Get the Application Support directory for Claude Maestro
+    private static func getAppSupportDirectory() -> URL? {
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return nil
         }
+        return appSupport.appendingPathComponent("Claude Maestro")
+    }
 
-        // Fallback for development: relative to Xcode build output
-        if let bundlePath = Bundle.main.resourcePath {
+    /// Get the stable path to the MCP server in Application Support
+    private static func getStableMCPServerPath() -> URL? {
+        guard let appSupport = getAppSupportDirectory() else { return nil }
+        return appSupport.appendingPathComponent("mcp-server").appendingPathComponent("index.js")
+    }
+
+    /// Copy MCP server from bundle to Application Support for stable access
+    private static func copyMCPServerToAppSupport() -> String? {
+        let fm = FileManager.default
+
+        // Find source in bundle
+        guard let bundlePath = Bundle.main.resourcePath else { return nil }
+        let bundledDistPath = URL(fileURLWithPath: bundlePath).appendingPathComponent("dist")
+
+        // Check bundle first
+        var sourceDistPath: URL? = nil
+        if fm.fileExists(atPath: bundledDistPath.appendingPathComponent("index.js").path) {
+            sourceDistPath = bundledDistPath
+        } else {
+            // Fallback for development: relative to Xcode build output
             let devPath = URL(fileURLWithPath: bundlePath)
                 .deletingLastPathComponent()
                 .deletingLastPathComponent()
                 .deletingLastPathComponent()
-                .appendingPathComponent("maestro-mcp-server/dist/index.js")
-            if FileManager.default.fileExists(atPath: devPath.path) {
-                return devPath.path
+                .appendingPathComponent("maestro-mcp-server/dist")
+            if fm.fileExists(atPath: devPath.appendingPathComponent("index.js").path) {
+                sourceDistPath = devPath
+            }
+        }
+
+        guard let source = sourceDistPath else { return nil }
+        guard let appSupport = getAppSupportDirectory() else { return nil }
+
+        let destMCPDir = appSupport.appendingPathComponent("mcp-server")
+
+        do {
+            // Create app support directory if needed
+            try fm.createDirectory(at: appSupport, withIntermediateDirectories: true)
+
+            // Remove old mcp-server directory if it exists
+            if fm.fileExists(atPath: destMCPDir.path) {
+                try fm.removeItem(at: destMCPDir)
+            }
+
+            // Copy entire dist folder to mcp-server
+            try fm.copyItem(at: source, to: destMCPDir)
+
+            return destMCPDir.appendingPathComponent("index.js").path
+        } catch {
+            print("Failed to copy MCP server to Application Support: \(error)")
+            return nil
+        }
+    }
+
+    /// Get the path to the MCP server, using stable Application Support location
+    static func getMCPServerPath() -> String? {
+        let fm = FileManager.default
+
+        // Check stable Application Support path first
+        if let stablePath = getStableMCPServerPath(),
+           fm.fileExists(atPath: stablePath.path) {
+            return stablePath.path
+        }
+
+        // Copy from bundle to Application Support
+        if let copiedPath = copyMCPServerToAppSupport() {
+            return copiedPath
+        }
+
+        // Final fallback: try bundle directly (for first-run scenarios)
+        if let bundlePath = Bundle.main.resourcePath {
+            let bundledPath = URL(fileURLWithPath: bundlePath)
+                .appendingPathComponent("dist/index.js")
+            if fm.fileExists(atPath: bundledPath.path) {
+                // Try to copy again, but return bundle path if copy fails
+                if let copied = copyMCPServerToAppSupport() {
+                    return copied
+                }
+                return bundledPath.path
             }
         }
 
@@ -192,27 +259,57 @@ class ClaudeDocManager {
         return content
     }
 
-    /// Generate .mcp.json content for Claude Code MCP configuration
+    /// Generate .mcp.json content for Claude Code MCP configuration (legacy single-server)
     static func generateMCPConfig(mcpServerPath: String, sessionId: Int, portRangeStart: Int = 3000, portRangeEnd: Int = 3099) -> String {
-        return """
-        {
-          "mcpServers": {
-            "maestro": {
-              "type": "stdio",
-              "command": "node",
-              "args": ["\(mcpServerPath)"],
-              "env": {
-                "MAESTRO_SESSION_ID": "\(sessionId)",
-                "MAESTRO_PORT_RANGE_START": "\(portRangeStart)",
-                "MAESTRO_PORT_RANGE_END": "\(portRangeEnd)"
-              }
-            }
-          }
-        }
-        """
+        return generateMCPConfig(
+            sessionId: sessionId,
+            maestroServerPath: mcpServerPath,
+            customServers: [],
+            portRangeStart: portRangeStart,
+            portRangeEnd: portRangeEnd
+        )
     }
 
-    /// Write .mcp.json to the specified directory
+    /// Generate .mcp.json content with all enabled MCP servers
+    static func generateMCPConfig(
+        sessionId: Int,
+        maestroServerPath: String?,
+        customServers: [MCPServerConfig],
+        portRangeStart: Int = 3000,
+        portRangeEnd: Int = 3099
+    ) -> String {
+        var mcpServers: [String: Any] = [:]
+
+        // Add Maestro MCP if available
+        if let maestroPath = maestroServerPath {
+            mcpServers["maestro"] = [
+                "type": "stdio",
+                "command": "node",
+                "args": [maestroPath],
+                "env": [
+                    "MAESTRO_SESSION_ID": "\(sessionId)",
+                    "MAESTRO_PORT_RANGE_START": "\(portRangeStart)",
+                    "MAESTRO_PORT_RANGE_END": "\(portRangeEnd)"
+                ]
+            ] as [String: Any]
+        }
+
+        // Add custom MCP servers
+        for server in customServers {
+            mcpServers[server.mcpKey] = server.toMCPJSON()
+        }
+
+        let config: [String: Any] = ["mcpServers": mcpServers]
+
+        if let jsonData = try? JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys]),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            return jsonString
+        }
+
+        return "{}"
+    }
+
+    /// Write .mcp.json to the specified directory (legacy single-server)
     static func writeMCPConfig(
         to directory: String,
         mcpServerPath: String,
@@ -229,7 +326,39 @@ class ClaudeDocManager {
         }
     }
 
+    /// Write .mcp.json with session-specific enabled servers
+    @MainActor
+    static func writeMCPConfigForSession(
+        to directory: String,
+        sessionId: Int
+    ) {
+        let mcpManager = MCPServerManager.shared
+        let sessionConfig = mcpManager.getMCPConfig(for: sessionId)
+
+        // Get Maestro path if enabled for this session
+        let maestroPath = sessionConfig.maestroEnabled ? mcpManager.getServerPath() : nil
+
+        // Get enabled custom servers for this session
+        let enabledServers = mcpManager.enabledServers(for: sessionId)
+
+        let content = generateMCPConfig(
+            sessionId: sessionId,
+            maestroServerPath: maestroPath,
+            customServers: enabledServers
+        )
+
+        let filePath = URL(fileURLWithPath: directory)
+            .appendingPathComponent(".mcp.json")
+
+        do {
+            try content.write(to: filePath, atomically: true, encoding: .utf8)
+        } catch {
+            print("Failed to generate .mcp.json: \(error)")
+        }
+    }
+
     /// Write claude.md to the specified directory
+    @MainActor
     static func writeClaudeMD(
         to directory: String,
         projectPath: String,
@@ -259,9 +388,10 @@ class ClaudeDocManager {
             print("Failed to generate claude.md: \(error)")
         }
 
-        // Also write .mcp.json if MCP server is available
-        if let mcpPath = mcpServerPath {
-            writeMCPConfig(to: directory, mcpServerPath: mcpPath, sessionId: sessionId)
-        }
+        // Initialize session MCP config if needed
+        MCPServerManager.shared.initializeSessionConfig(for: sessionId)
+
+        // Write .mcp.json with session-specific MCP server configuration
+        writeMCPConfigForSession(to: directory, sessionId: sessionId)
     }
 }
