@@ -20,51 +20,52 @@ class ClaudeDocManager {
     /// Get the stable path to the MCP server in Application Support
     private static func getStableMCPServerPath() -> URL? {
         guard let appSupport = getAppSupportDirectory() else { return nil }
-        return appSupport.appendingPathComponent("mcp-server").appendingPathComponent("index.js")
+        return appSupport.appendingPathComponent("mcp-server").appendingPathComponent("bundle.js")
     }
 
     /// Copy MCP server from bundle to Application Support for stable access
     private static func copyMCPServerToAppSupport() -> String? {
         let fm = FileManager.default
 
-        // Find source in bundle
+        // Find source bundle.js in bundle
         guard let bundlePath = Bundle.main.resourcePath else { return nil }
-        let bundledDistPath = URL(fileURLWithPath: bundlePath).appendingPathComponent("dist")
+        let bundledBundlePath = URL(fileURLWithPath: bundlePath).appendingPathComponent("dist/bundle.js")
 
         // Check bundle first
-        var sourceDistPath: URL? = nil
-        if fm.fileExists(atPath: bundledDistPath.appendingPathComponent("index.js").path) {
-            sourceDistPath = bundledDistPath
+        var sourceBundlePath: URL? = nil
+        if fm.fileExists(atPath: bundledBundlePath.path) {
+            sourceBundlePath = bundledBundlePath
         } else {
             // Fallback for development: relative to Xcode build output
             let devPath = URL(fileURLWithPath: bundlePath)
                 .deletingLastPathComponent()
                 .deletingLastPathComponent()
                 .deletingLastPathComponent()
-                .appendingPathComponent("maestro-mcp-server/dist")
-            if fm.fileExists(atPath: devPath.appendingPathComponent("index.js").path) {
-                sourceDistPath = devPath
+                .appendingPathComponent("maestro-mcp-server/dist/bundle.js")
+            if fm.fileExists(atPath: devPath.path) {
+                sourceBundlePath = devPath
             }
         }
 
-        guard let source = sourceDistPath else { return nil }
+        guard let source = sourceBundlePath else { return nil }
         guard let appSupport = getAppSupportDirectory() else { return nil }
 
         let destMCPDir = appSupport.appendingPathComponent("mcp-server")
+        let destBundlePath = destMCPDir.appendingPathComponent("bundle.js")
 
         do {
-            // Create app support directory if needed
-            try fm.createDirectory(at: appSupport, withIntermediateDirectories: true)
+            // Create mcp-server directory if needed
+            try fm.createDirectory(at: destMCPDir, withIntermediateDirectories: true)
 
-            // Remove old mcp-server directory if it exists
-            if fm.fileExists(atPath: destMCPDir.path) {
-                try fm.removeItem(at: destMCPDir)
+            // Remove old bundle.js if it exists
+            if fm.fileExists(atPath: destBundlePath.path) {
+                try fm.removeItem(at: destBundlePath)
             }
 
-            // Copy entire dist folder to mcp-server
-            try fm.copyItem(at: source, to: destMCPDir)
+            // Copy only bundle.js (self-contained, no node_modules needed)
+            try fm.copyItem(at: source, to: destBundlePath)
 
-            return destMCPDir.appendingPathComponent("index.js").path
+            return destBundlePath.path
         } catch {
             print("Failed to copy MCP server to Application Support: \(error)")
             return nil
@@ -89,7 +90,7 @@ class ClaudeDocManager {
         // Final fallback: try bundle directly (for first-run scenarios)
         if let bundlePath = Bundle.main.resourcePath {
             let bundledPath = URL(fileURLWithPath: bundlePath)
-                .appendingPathComponent("dist/index.js")
+                .appendingPathComponent("dist/bundle.js")
             if fm.fileExists(atPath: bundledPath.path) {
                 // Try to copy again, but return bundle path if copy fails
                 if let copied = copyMCPServerToAppSupport() {
