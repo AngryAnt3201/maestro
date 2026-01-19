@@ -47,11 +47,9 @@ class QuickActionManager: ObservableObject {
 
     // MARK: - Computed Properties
 
-    /// Returns enabled actions sorted by sortOrder
-    var enabledActions: [QuickAction] {
-        quickActions
-            .filter { $0.isEnabled }
-            .sorted { $0.sortOrder < $1.sortOrder }
+    /// Returns all actions sorted by sortOrder
+    var sortedActions: [QuickAction] {
+        quickActions.sorted { $0.sortOrder < $1.sortOrder }
     }
 
     // MARK: - CRUD Operations
@@ -77,14 +75,6 @@ class QuickActionManager: ObservableObject {
     func deleteAction(id: UUID) {
         quickActions.removeAll { $0.id == id }
         persistActions()
-    }
-
-    /// Toggle the enabled state of an action
-    func toggleAction(id: UUID) {
-        if let index = quickActions.firstIndex(where: { $0.id == id }) {
-            quickActions[index].isEnabled.toggle()
-            persistActions()
-        }
     }
 
     /// Reorder actions (used for drag-and-drop)

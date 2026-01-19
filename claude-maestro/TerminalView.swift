@@ -562,40 +562,12 @@ struct TerminalSessionView: View {
                 .background(Color(NSColor.textBackgroundColor).opacity(0.5))
             }
 
-            // Footer bar with Run App controls (only when terminal is launched)
+            // Footer bar with quick actions (only when terminal is launched)
             if shouldLaunch {
                 HStack(spacing: 6) {
-                    // Run App button (when AI CLI is running, app not started)
-                    if isClaudeRunning && !isAppRunning {
-                        Button(action: onRunApp) {
-                            HStack(spacing: 2) {
-                                Image(systemName: "play.rectangle")
-                                Text("Run App")
-                            }
-                            .font(.caption2)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .tint(.green)
-                    }
-
-                    // Commit & Push button (when AI CLI is running)
+                    // Quick Actions (when AI CLI is running)
                     if isClaudeRunning {
-                        Button(action: onCommitAndPush) {
-                            HStack(spacing: 2) {
-                                Image(systemName: "arrow.up.circle")
-                                Text("Commit & Push")
-                            }
-                            .font(.caption2)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .tint(.orange)
-                    }
-
-                    // Custom Quick Actions (when AI CLI is running)
-                    if isClaudeRunning {
-                        ForEach(quickActionManager.enabledActions) { action in
+                        ForEach(quickActionManager.sortedActions) { action in
                             Button {
                                 onCustomAction?(action.prompt)
                             } label: {
