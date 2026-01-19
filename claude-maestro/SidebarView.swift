@@ -934,6 +934,7 @@ struct QuickActionsSection: View {
     @State private var editingAction: QuickAction? = nil
     @State private var showDeleteConfirmation: Bool = false
     @State private var actionToDelete: QuickAction? = nil
+    @State private var showResetConfirmation: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -952,6 +953,21 @@ struct QuickActionsSection: View {
                 }
                 .buttonStyle(.plain)
                 .help("Add quick action")
+
+                Menu {
+                    Button {
+                        showResetConfirmation = true
+                    } label: {
+                        Label("Reset to Defaults", systemImage: "arrow.counterclockwise")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundColor(.secondary)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Quick actions options")
             }
 
             VStack(spacing: 0) {
@@ -1025,6 +1041,14 @@ struct QuickActionsSection: View {
             if let action = actionToDelete {
                 Text("Are you sure you want to delete \"\(action.name)\"? This cannot be undone.")
             }
+        }
+        .alert("Reset Quick Actions?", isPresented: $showResetConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset", role: .destructive) {
+                quickActionManager.resetToDefaults()
+            }
+        } message: {
+            Text("This will replace all your quick actions with the defaults (Run App, Commit & Push).")
         }
     }
 }
