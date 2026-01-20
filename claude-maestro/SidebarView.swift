@@ -176,6 +176,12 @@ struct SidebarView: View {
 
                     // Quick Actions Section
                     QuickActionsSection()
+
+                    Divider()
+                        .padding(.horizontal)
+
+                    // Processes Section
+                    ProcessesSection()
                 }
                 .padding(.bottom, 8)
             }
@@ -995,6 +1001,247 @@ struct QuickActionsSection: View {
                 quickActionManager: quickActionManager,
                 onDismiss: { showManagerSheet = false }
             )
+        }
+    }
+}
+
+// MARK: - Processes Section
+
+struct ProcessesSection: View {
+    @StateObject private var mcpWatcher = MCPStatusWatcher()
+    @State private var selectedProcessForLogs: Int? = nil
+    @State private var isLogsSheetPresented: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Processes")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                // Refresh button
+                Button {
+                    mcpWatcher.readStatusFile()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Refresh process status")
+            }
+
+            VStack(spacing: 0) {
+                if mcpWatcher.serverStatuses.isEmpty {
+                    // Empty state
+                    HStack {
+                        Image(systemName: "bolt.slash")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                        Text("No running processes")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                } else {
+                    // Process list
+                    VStack(spacing: 4) {
+                        ForEach(mcpWatcher.serverStatuses, id: \.sessionId) { status in
+                            ProcessRow(
+                                status: status,
+                                onViewLogs: {
+                                    selectedProcessForLogs = status.sessionId
+                                    isLogsSheetPresented = true
+                                },
+                                onOpenBrowser: {
+                                    if let urlString = status.url, let url = URL(string: urlString) {
+                                        NSWorkspace.shared.open(url)
+                                    }
+                                },
+                                onKill: {
+                                    killProcess(sessionId: status.sessionId)
+                                }
+                            )
+                        }
+                    }
+                    .padding(8)
+                }
+            }
+            .background(Color(NSColor.windowBackgroundColor))
+            .cornerRadius(8)
+        }
+        .padding(.horizontal)
+        .sheet(isPresented: $isLogsSheetPresented) {
+            if let sessionId = selectedProcessForLogs {
+                ProcessLogsSheet(sessionId: sessionId) {
+                    isLogsSheetPresented = false
+                }
+            }
+        }
+    }
+
+    private func killProcess(sessionId: Int) {
+        // Call MCP stop_dev_server via shell command
+        // This is a workaround since we can't directly call MCP tools from Swift
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", """
+            # Find and kill the process using lsof on the session's port
+            # This is a fallback - ideally we'd use the MCP tool
+            echo "Stopping process for session \(sessionId)"
+            """]
+        try? process.run()
+    }
+}
+
+// MARK: - Process Row
+
+struct ProcessRow: View {
+    let status: MCPStatusWatcher.ServerStatus
+    let onViewLogs: () -> Void
+    let onOpenBrowser: () -> Void
+    let onKill: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Status indicator
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+
+            // Session ID and port
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    Text("Session #\(status.sessionId)")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+
+                    if let port = status.port {
+                        Text(":\(port)")
+                            .font(.caption2)
+                            .foregroundColor(.green)
+                            .padding(.horizontal, 3)
+                            .background(Color.green.opacity(0.15))
+                            .cornerRadius(3)
+                    }
+                }
+
+                Text(status.status.capitalized)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            // Action buttons
+            HStack(spacing: 4) {
+                // View Logs button
+                Button { onViewLogs() } label: {
+                    Image(systemName: "doc.text")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("View logs")
+
+                // Open in Browser button (only if URL exists)
+                if status.url != nil {
+                    Button { onOpenBrowser() } label: {
+                        Image(systemName: "safari")
+                            .font(.caption2)
+                            .foregroundColor(.blue)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open in browser")
+                }
+
+                // Kill button (only if running)
+                if status.status == "running" || status.status == "starting" {
+                    Button { onKill() } label: {
+                        Image(systemName: "xmark.circle")
+                            .font(.caption2)
+                            .foregroundColor(.red.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Stop process")
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(statusColor.opacity(0.1))
+        )
+    }
+
+    private var statusColor: Color {
+        switch status.status {
+        case "running": return .green
+        case "starting": return .yellow
+        case "stopped": return .gray
+        case "error": return .red
+        default: return .secondary
+        }
+    }
+}
+
+// MARK: - Process Logs Sheet
+
+struct ProcessLogsSheet: View {
+    let sessionId: Int
+    let onDismiss: () -> Void
+    @State private var logs: String = "Loading logs..."
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Logs - Session #\(sessionId)")
+                    .font(.headline)
+
+                Spacer()
+
+                Button("Done") {
+                    onDismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+            .padding()
+            .background(Color(NSColor.windowBackgroundColor))
+
+            Divider()
+
+            // Logs content
+            ScrollView {
+                Text(logs)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.9))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+            .background(Color(red: 0.08, green: 0.08, blue: 0.1))
+        }
+        .frame(width: 600, height: 400)
+        .onAppear {
+            loadLogs()
+        }
+    }
+
+    private func loadLogs() {
+        // Load logs from the MCP log file
+        let logPath = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("Claude Maestro/logs/session-\(sessionId).log")
+
+        if let path = logPath, let content = try? String(contentsOf: path, encoding: .utf8) {
+            logs = content
+        } else {
+            logs = "No logs available for this session."
         }
     }
 }

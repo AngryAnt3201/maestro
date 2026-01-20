@@ -58,6 +58,14 @@ export class PortManager {
   }
 
   /**
+   * Mark a port as in use by a session (for recovery on startup).
+   * This is used when loading existing status from file to restore port assignments.
+   */
+  markPortInUse(sessionId: number, port: number): void {
+    this.assignedPorts.set(sessionId, port);
+  }
+
+  /**
    * Get the port assigned to a session.
    */
   getPort(sessionId: number): number | undefined {

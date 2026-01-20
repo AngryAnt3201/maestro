@@ -1,7 +1,7 @@
 import { spawn, exec } from 'child_process';
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, mkdirSync, renameSync, existsSync, readFileSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
-import { homedir } from 'os';
+import { homedir, tmpdir } from 'os';
 // Regex patterns to detect server URLs in output
 const URL_PATTERNS = [
     /https?:\/\/localhost:\d+/gi,
@@ -21,9 +21,49 @@ export class ProcessManager {
     childProcesses = new Map();
     portManager;
     logManager;
+    cleanupInterval = null;
     constructor(portManager, logManager) {
         this.portManager = portManager;
         this.logManager = logManager;
+        // Load existing status from file to recover port assignments
+        this.loadStatusFromFile();
+        // Clean up stale entries every 30 seconds
+        this.cleanupInterval = setInterval(() => this.cleanupStaleProcesses(), 30000);
+    }
+    /**
+     * Load existing status from file on startup to recover port assignments.
+     */
+    loadStatusFromFile() {
+        const statusFile = this.getStatusFilePath();
+        try {
+            if (existsSync(statusFile)) {
+                const data = JSON.parse(readFileSync(statusFile, 'utf-8'));
+                // Restore port assignments for processes that might still be running
+                for (const server of data.servers || []) {
+                    if ((server.status === 'running' || server.status === 'starting') && server.port) {
+                        this.portManager.markPortInUse(server.sessionId, server.port);
+                    }
+                }
+            }
+        }
+        catch (error) {
+            // Ignore - fresh start
+        }
+    }
+    /**
+     * Clean up stale process entries that have been stopped for too long.
+     */
+    cleanupStaleProcesses() {
+        const staleTime = 5 * 60 * 1000; // 5 minutes
+        const now = Date.now();
+        for (const [sessionId, managed] of this.processes.entries()) {
+            if (managed.status === 'stopped' || managed.status === 'error') {
+                if (managed.stoppedAt && now - managed.stoppedAt.getTime() > staleTime) {
+                    this.processes.delete(sessionId);
+                }
+            }
+        }
+        this.writeStatusFile();
     }
     /**
      * Start a dev server for a session.
@@ -71,20 +111,23 @@ export class ProcessManager {
         // Store references
         this.processes.set(sessionId, managed);
         this.childProcesses.set(sessionId, child);
+        // Mark as running immediately after spawn (don't wait for output)
+        managed.status = 'running';
+        this.writeStatusFile();
         // Handle stdout
         child.stdout?.on('data', (data) => {
             const text = data.toString();
             this.logManager.append(sessionId, 'stdout', text);
             this.detectServerUrl(sessionId, text);
-            // If we detect a URL, mark as running
-            if (managed.status === 'starting' && managed.detectedUrl) {
-                managed.status = 'running';
-            }
+            // Write status file on output to keep UI updated
+            this.writeStatusFile();
         });
         // Handle stderr
         child.stderr?.on('data', (data) => {
             const text = data.toString();
             this.logManager.append(sessionId, 'stderr', text);
+            // Write status file on stderr as well
+            this.writeStatusFile();
         });
         // Handle process exit
         child.on('exit', (code, signal) => {
@@ -104,20 +147,15 @@ export class ProcessManager {
             this.portManager.releasePort(sessionId);
             this.writeStatusFile();
         });
-        // After a short delay, assume running if not already detected
+        // After a short delay, generate fallback URL if not detected
         setTimeout(() => {
-            if (managed.status === 'starting' && this.childProcesses.has(sessionId)) {
-                managed.status = 'running';
-                if (!managed.detectedUrl && managed.port) {
-                    managed.detectedUrl = `http://localhost:${managed.port}`;
-                    // Auto-open browser with fallback URL
-                    exec(`open "${managed.detectedUrl}"`);
-                }
+            if (!managed.detectedUrl && managed.status === 'running' && managed.port) {
+                managed.detectedUrl = `http://localhost:${managed.port}`;
+                // Auto-open browser with fallback URL
+                exec(`open "${managed.detectedUrl}"`);
                 this.writeStatusFile();
             }
         }, 3000);
-        // Write initial status
-        this.writeStatusFile();
         return managed;
     }
     /**
@@ -246,19 +284,34 @@ export class ProcessManager {
     }
     /**
      * Write current server statuses to file for Swift app to read.
+     * Uses atomic file write (write to temp file, then rename) to prevent
+     * the Swift file watcher from reading partially-written files.
      */
     writeStatusFile() {
         const statuses = this.getAllStatuses();
         const statusFile = this.getStatusFilePath();
+        const tempFile = join(tmpdir(), `maestro-status-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
         try {
             // Ensure directory exists
             mkdirSync(dirname(statusFile), { recursive: true });
-            writeFileSync(statusFile, JSON.stringify({
+            // Write to temp file first
+            writeFileSync(tempFile, JSON.stringify({
                 servers: statuses,
                 updatedAt: new Date().toISOString()
             }, null, 2));
+            // Atomic rename to target file
+            renameSync(tempFile, statusFile);
         }
         catch (error) {
+            // Try to clean up temp file if rename failed
+            try {
+                if (existsSync(tempFile)) {
+                    unlinkSync(tempFile);
+                }
+            }
+            catch {
+                // Ignore cleanup errors
+            }
             // Silent fail - status file is optional
         }
     }
@@ -266,6 +319,11 @@ export class ProcessManager {
      * Cleanup all processes (for shutdown).
      */
     async cleanup() {
+        // Clear the cleanup interval
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+            this.cleanupInterval = null;
+        }
         const stopPromises = Array.from(this.childProcesses.keys()).map(sessionId => this.stopProcess(sessionId).catch(() => { }));
         await Promise.all(stopPromises);
     }

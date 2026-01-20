@@ -375,8 +375,6 @@ struct TerminalSessionView: View {
     @State private var terminalController = TerminalController()
     @StateObject private var quickActionManager = QuickActionManager.shared
     @State private var hasRegisteredController = false
-    @State private var terminalOutput: String = ""
-    @State private var showOutputPane: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -444,15 +442,6 @@ struct TerminalSessionView: View {
                     .font(.caption2)
                     .foregroundColor(status.color)
 
-                // Toggle output pane button
-                Button(action: { showOutputPane.toggle() }) {
-                    Image(systemName: showOutputPane ? "rectangle.bottomhalf.filled" : "rectangle.bottomhalf.inset.filled")
-                        .foregroundColor(.secondary)
-                        .font(.caption)
-                }
-                .buttonStyle(.plain)
-                .help(showOutputPane ? "Hide terminal output" : "Show terminal output")
-
                 // Close button
                 Button(action: onClose) {
                     Image(systemName: "xmark.circle.fill")
@@ -468,75 +457,28 @@ struct TerminalSessionView: View {
 
             // Terminal content area
             if shouldLaunch {
-                if showOutputPane {
-                    // VSplitView with terminal above and output pane below
-                    VSplitView {
-                        // Top: Interactive terminal
-                        EmbeddedTerminalView(
-                            sessionId: session.id,
-                            workingDirectory: workingDirectory,
-                            status: $status,
-                            shouldLaunch: shouldLaunch,
-                            assignedBranch: assignedBranch,
-                            mode: mode,
-                            onLaunched: {
-                                onTerminalLaunched()
-                                // Register controller with SessionManager for Run App feature
-                                if !hasRegisteredController {
-                                    hasRegisteredController = true
-                                    onControllerReady?(terminalController)
-                                }
-                            },
-                            onCLILaunched: {
-                                onLaunchClaude()
-                            },
-                            onServerReady: onServerReady,
-                            onOutputReceived: { text in
-                                terminalOutput += text
-                                // Trim if too long to prevent memory issues
-                                if terminalOutput.count > 50000 {
-                                    terminalOutput = String(terminalOutput.suffix(25000))
-                                }
-                            },
-                            controller: terminalController
-                        )
-                        .frame(minHeight: 100)
-
-                        // Bottom: Output pane
-                        TerminalOutputPane(outputText: terminalOutput, onClear: { terminalOutput = "" })
-                            .frame(minHeight: 80)
-                    }
-                } else {
-                    // Terminal only (no output pane)
-                    EmbeddedTerminalView(
-                        sessionId: session.id,
-                        workingDirectory: workingDirectory,
-                        status: $status,
-                        shouldLaunch: shouldLaunch,
-                        assignedBranch: assignedBranch,
-                        mode: mode,
-                        onLaunched: {
-                            onTerminalLaunched()
-                            // Register controller with SessionManager for Run App feature
-                            if !hasRegisteredController {
-                                hasRegisteredController = true
-                                onControllerReady?(terminalController)
-                            }
-                        },
-                        onCLILaunched: {
-                            onLaunchClaude()
-                        },
-                        onServerReady: onServerReady,
-                        onOutputReceived: { text in
-                            terminalOutput += text
-                            // Trim if too long to prevent memory issues
-                            if terminalOutput.count > 50000 {
-                                terminalOutput = String(terminalOutput.suffix(25000))
-                            }
-                        },
-                        controller: terminalController
-                    )
-                }
+                EmbeddedTerminalView(
+                    sessionId: session.id,
+                    workingDirectory: workingDirectory,
+                    status: $status,
+                    shouldLaunch: shouldLaunch,
+                    assignedBranch: assignedBranch,
+                    mode: mode,
+                    onLaunched: {
+                        onTerminalLaunched()
+                        // Register controller with SessionManager for Run App feature
+                        if !hasRegisteredController {
+                            hasRegisteredController = true
+                            onControllerReady?(terminalController)
+                        }
+                    },
+                    onCLILaunched: {
+                        onLaunchClaude()
+                    },
+                    onServerReady: onServerReady,
+                    onOutputReceived: nil,
+                    controller: terminalController
+                )
             } else {
                 // Pending state placeholder
                 VStack(spacing: 12) {
@@ -643,69 +585,5 @@ struct TerminalSessionView: View {
         if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
         }
-    }
-}
-
-// MARK: - Terminal Output Pane
-
-struct TerminalOutputPane: View {
-    let outputText: String
-    let maxLines: Int
-    var onClear: () -> Void
-
-    init(outputText: String, maxLines: Int = 500, onClear: @escaping () -> Void) {
-        self.outputText = outputText
-        self.maxLines = maxLines
-        self.onClear = onClear
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Output pane header
-            HStack {
-                Image(systemName: "text.justify.left")
-                    .font(.caption2)
-                Text("Terminal Output")
-                    .font(.caption2)
-                    .fontWeight(.medium)
-                Spacer()
-                Button(action: onClear) {
-                    Image(systemName: "trash")
-                        .font(.caption2)
-                }
-                .buttonStyle(.plain)
-                .help("Clear output")
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color.gray.opacity(0.2))
-
-            // Output content with auto-scroll
-            ScrollViewReader { proxy in
-                ScrollView {
-                    Text(trimmedOutput)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.9))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .id("bottom")
-                }
-                .background(Color(red: 0.08, green: 0.08, blue: 0.1))
-                .onChange(of: outputText) {
-                    withAnimation {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
-                }
-            }
-        }
-    }
-
-    private var trimmedOutput: String {
-        let lines = outputText.components(separatedBy: "\n")
-        if lines.count > maxLines {
-            return lines.suffix(maxLines).joined(separator: "\n")
-        }
-        return outputText
     }
 }

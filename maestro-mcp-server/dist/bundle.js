@@ -29970,6 +29970,13 @@ var PortManager = class {
     this.assignedPorts.delete(sessionId);
   }
   /**
+   * Mark a port as in use by a session (for recovery on startup).
+   * This is used when loading existing status from file to restore port assignments.
+   */
+  markPortInUse(sessionId, port) {
+    this.assignedPorts.set(sessionId, port);
+  }
+  /**
    * Get the port assigned to a session.
    */
   getPort(sessionId) {
@@ -30093,9 +30100,9 @@ var LogManager = class {
 
 // src/managers/ProcessManager.ts
 import { spawn, exec } from "child_process";
-import { writeFileSync, mkdirSync } from "fs";
+import { writeFileSync, mkdirSync, renameSync, existsSync, readFileSync, unlinkSync } from "fs";
 import { join, dirname } from "path";
-import { homedir } from "os";
+import { homedir, tmpdir } from "os";
 var URL_PATTERNS = [
   /https?:\/\/localhost:\d+/gi,
   /https?:\/\/127\.0\.0\.1:\d+/gi,
@@ -30113,9 +30120,44 @@ var ProcessManager = class {
   childProcesses = /* @__PURE__ */ new Map();
   portManager;
   logManager;
+  cleanupInterval = null;
   constructor(portManager, logManager) {
     this.portManager = portManager;
     this.logManager = logManager;
+    this.loadStatusFromFile();
+    this.cleanupInterval = setInterval(() => this.cleanupStaleProcesses(), 3e4);
+  }
+  /**
+   * Load existing status from file on startup to recover port assignments.
+   */
+  loadStatusFromFile() {
+    const statusFile = this.getStatusFilePath();
+    try {
+      if (existsSync(statusFile)) {
+        const data = JSON.parse(readFileSync(statusFile, "utf-8"));
+        for (const server of data.servers || []) {
+          if ((server.status === "running" || server.status === "starting") && server.port) {
+            this.portManager.markPortInUse(server.sessionId, server.port);
+          }
+        }
+      }
+    } catch (error48) {
+    }
+  }
+  /**
+   * Clean up stale process entries that have been stopped for too long.
+   */
+  cleanupStaleProcesses() {
+    const staleTime = 5 * 60 * 1e3;
+    const now = Date.now();
+    for (const [sessionId, managed] of this.processes.entries()) {
+      if (managed.status === "stopped" || managed.status === "error") {
+        if (managed.stoppedAt && now - managed.stoppedAt.getTime() > staleTime) {
+          this.processes.delete(sessionId);
+        }
+      }
+    }
+    this.writeStatusFile();
   }
   /**
    * Start a dev server for a session.
@@ -30157,17 +30199,18 @@ var ProcessManager = class {
     }
     this.processes.set(sessionId, managed);
     this.childProcesses.set(sessionId, child);
+    managed.status = "running";
+    this.writeStatusFile();
     child.stdout?.on("data", (data) => {
       const text = data.toString();
       this.logManager.append(sessionId, "stdout", text);
       this.detectServerUrl(sessionId, text);
-      if (managed.status === "starting" && managed.detectedUrl) {
-        managed.status = "running";
-      }
+      this.writeStatusFile();
     });
     child.stderr?.on("data", (data) => {
       const text = data.toString();
       this.logManager.append(sessionId, "stderr", text);
+      this.writeStatusFile();
     });
     child.on("exit", (code, signal) => {
       managed.status = code === 0 ? "stopped" : "error";
@@ -30186,16 +30229,12 @@ var ProcessManager = class {
       this.writeStatusFile();
     });
     setTimeout(() => {
-      if (managed.status === "starting" && this.childProcesses.has(sessionId)) {
-        managed.status = "running";
-        if (!managed.detectedUrl && managed.port) {
-          managed.detectedUrl = `http://localhost:${managed.port}`;
-          exec(`open "${managed.detectedUrl}"`);
-        }
+      if (!managed.detectedUrl && managed.status === "running" && managed.port) {
+        managed.detectedUrl = `http://localhost:${managed.port}`;
+        exec(`open "${managed.detectedUrl}"`);
         this.writeStatusFile();
       }
     }, 3e3);
-    this.writeStatusFile();
     return managed;
   }
   /**
@@ -30313,23 +30352,37 @@ var ProcessManager = class {
   }
   /**
    * Write current server statuses to file for Swift app to read.
+   * Uses atomic file write (write to temp file, then rename) to prevent
+   * the Swift file watcher from reading partially-written files.
    */
   writeStatusFile() {
     const statuses = this.getAllStatuses();
     const statusFile = this.getStatusFilePath();
+    const tempFile = join(tmpdir(), `maestro-status-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
     try {
       mkdirSync(dirname(statusFile), { recursive: true });
-      writeFileSync(statusFile, JSON.stringify({
+      writeFileSync(tempFile, JSON.stringify({
         servers: statuses,
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       }, null, 2));
+      renameSync(tempFile, statusFile);
     } catch (error48) {
+      try {
+        if (existsSync(tempFile)) {
+          unlinkSync(tempFile);
+        }
+      } catch {
+      }
     }
   }
   /**
    * Cleanup all processes (for shutdown).
    */
   async cleanup() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
     const stopPromises = Array.from(this.childProcesses.keys()).map(
       (sessionId) => this.stopProcess(sessionId).catch(() => {
       })

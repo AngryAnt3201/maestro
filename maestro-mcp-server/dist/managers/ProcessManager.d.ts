@@ -10,7 +10,16 @@ export declare class ProcessManager {
     private childProcesses;
     private portManager;
     private logManager;
+    private cleanupInterval;
     constructor(portManager: PortManager, logManager: LogManager);
+    /**
+     * Load existing status from file on startup to recover port assignments.
+     */
+    private loadStatusFromFile;
+    /**
+     * Clean up stale process entries that have been stopped for too long.
+     */
+    private cleanupStaleProcesses;
     /**
      * Start a dev server for a session.
      */
@@ -45,6 +54,8 @@ export declare class ProcessManager {
     private getStatusFilePath;
     /**
      * Write current server statuses to file for Swift app to read.
+     * Uses atomic file write (write to temp file, then rename) to prevent
+     * the Swift file watcher from reading partially-written files.
      */
     private writeStatusFile;
     /**

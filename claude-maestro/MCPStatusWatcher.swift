@@ -10,6 +10,11 @@ class MCPStatusWatcher: ObservableObject {
     private var dispatchSource: DispatchSourceFileSystemObject?
     private var retryTimer: Timer?
 
+    // Debouncing to prevent missed updates from rapid file changes
+    private var lastReadTime: Date = .distantPast
+    private let debounceInterval: TimeInterval = 0.1
+    private var pendingReadWorkItem: DispatchWorkItem?
+
     struct ServerStatus: Codable {
         let sessionId: Int
         let status: String
@@ -35,6 +40,7 @@ class MCPStatusWatcher: ObservableObject {
     deinit {
         stopWatching()
         retryTimer?.invalidate()
+        pendingReadWorkItem?.cancel()
     }
 
     func startWatching() {
@@ -54,12 +60,12 @@ class MCPStatusWatcher: ObservableObject {
 
         dispatchSource = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fileDescriptor,
-            eventMask: [.write, .extend, .rename, .delete],
+            eventMask: [.write, .extend, .rename, .delete, .attrib],
             queue: .main
         )
 
         dispatchSource?.setEventHandler { [weak self] in
-            self?.readStatusFile()
+            self?.debouncedReadStatusFile()
         }
 
         dispatchSource?.setCancelHandler { [weak self] in
@@ -81,13 +87,48 @@ class MCPStatusWatcher: ObservableObject {
         dispatchSource = nil
     }
 
+    /// Debounced read to handle rapid file updates without missing changes
+    private func debouncedReadStatusFile() {
+        // Cancel any pending read
+        pendingReadWorkItem?.cancel()
+
+        // Schedule a new read after debounce interval
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.readStatusFile()
+        }
+        pendingReadWorkItem = workItem
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + debounceInterval, execute: workItem)
+    }
+
     func readStatusFile() {
-        guard FileManager.default.fileExists(atPath: statusFilePath.path),
-              let data = try? Data(contentsOf: statusFilePath),
-              let statusFile = try? JSONDecoder().decode(StatusFile.self, from: data) else {
+        // Debounce rapid reads
+        let now = Date()
+        guard now.timeIntervalSince(lastReadTime) >= debounceInterval else { return }
+        lastReadTime = now
+
+        guard FileManager.default.fileExists(atPath: statusFilePath.path) else {
             return
         }
-        serverStatuses = statusFile.servers
+
+        // Read file with retry for atomic file operations
+        var attempts = 0
+        let maxAttempts = 3
+
+        while attempts < maxAttempts {
+            do {
+                let data = try Data(contentsOf: statusFilePath)
+                let statusFile = try JSONDecoder().decode(StatusFile.self, from: data)
+                serverStatuses = statusFile.servers
+                return
+            } catch {
+                // File might be in the middle of being written (atomic rename)
+                attempts += 1
+                if attempts < maxAttempts {
+                    Thread.sleep(forTimeInterval: 0.05) // 50ms retry delay
+                }
+            }
+        }
     }
 
     private func scheduleRetry() {
