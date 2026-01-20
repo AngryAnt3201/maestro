@@ -159,6 +159,67 @@ class WorktreeManager: ObservableObject {
         try await gitManager.pruneWorktrees()
     }
 
+    /// Register an existing worktree for a session (used to restore state on app launch)
+    func registerWorktree(sessionId: Int, branch: String, path: String) {
+        activeWorktrees[sessionId] = WorktreeInfo(
+            sessionId: sessionId,
+            branchName: branch,
+            path: path
+        )
+    }
+
+    /// Remove worktrees that don't belong to any active session
+    /// This cleans up orphaned worktrees left behind when the app crashes or quits unexpectedly
+    func cleanupOrphanedWorktrees(
+        activeSessions: [SessionInfo],
+        repoPath: String,
+        gitManager: GitManager
+    ) async throws {
+        let worktrees = try await listWorktrees(repoPath: repoPath, gitManager: gitManager)
+        let activeBranches = Set(activeSessions.compactMap { $0.assignedBranch })
+
+        for worktree in worktrees {
+            // Skip main repo (not in our managed directory)
+            guard worktree.path.contains(".claude-maestro/worktrees") else { continue }
+
+            // If no session claims this branch, remove the worktree
+            if !activeBranches.contains(worktree.branch) {
+                do {
+                    try await gitManager.removeWorktree(path: worktree.path)
+                    print("Cleaned up orphaned worktree: \(worktree.path) (branch: \(worktree.branch))")
+                } catch {
+                    print("Failed to remove orphaned worktree at \(worktree.path): \(error)")
+                }
+            }
+        }
+
+        // Clean up empty directories
+        cleanupEmptyDirectories(for: repoPath)
+    }
+
+    /// Sync activeWorktrees map with existing worktrees for sessions that have assigned branches
+    /// This restores the in-memory state after app restart
+    func syncWorktreesWithSessions(
+        sessions: [SessionInfo],
+        repoPath: String,
+        gitManager: GitManager
+    ) async throws {
+        let existingWorktrees = try await listWorktrees(repoPath: repoPath, gitManager: gitManager)
+
+        for session in sessions {
+            guard let assignedBranch = session.assignedBranch else { continue }
+
+            // Find matching worktree for this session's assigned branch
+            if let matching = existingWorktrees.first(where: { $0.branch == assignedBranch }) {
+                // Only register if it's in our managed directory
+                if matching.path.contains(".claude-maestro/worktrees") {
+                    registerWorktree(sessionId: session.id, branch: assignedBranch, path: matching.path)
+                    print("Re-registered worktree for session \(session.id): \(matching.path)")
+                }
+            }
+        }
+    }
+
     /// Check if worktree has uncommitted changes
     func hasUncommittedChanges(at path: String) async -> Bool {
         let process = Process()

@@ -295,15 +295,31 @@ class SessionManager: ObservableObject {
         }
         await gitManager.setRepository(path: path)
 
-        // Prune orphaned worktrees from previous sessions
+        // Cleanup worktrees from previous sessions
         if gitManager.isGitRepo {
             do {
+                // First, prune stale worktree references (directories that no longer exist)
                 try await worktreeManager.pruneOrphanedWorktrees(
                     repoPath: path,
                     gitManager: gitManager
                 )
+
+                // Then, sync in-memory activeWorktrees map with existing worktrees
+                // This restores the mapping so closing sessions properly cleans up worktrees
+                try await worktreeManager.syncWorktreesWithSessions(
+                    sessions: sessions,
+                    repoPath: path,
+                    gitManager: gitManager
+                )
+
+                // Finally, remove actual orphaned worktree directories that aren't claimed by any session
+                try await worktreeManager.cleanupOrphanedWorktrees(
+                    activeSessions: sessions,
+                    repoPath: path,
+                    gitManager: gitManager
+                )
             } catch {
-                print("Failed to prune orphaned worktrees: \(error)")
+                print("Failed to cleanup worktrees: \(error)")
             }
         }
     }
