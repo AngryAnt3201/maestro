@@ -9,6 +9,11 @@ import SwiftUI
 
 @main
 struct claude_maestroApp: App {
+    init() {
+        // One-time setup: Configure Codex and Gemini CLI to read CLAUDE.md
+        ClaudeDocManager.setupCLIContextFiles()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

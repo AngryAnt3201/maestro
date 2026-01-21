@@ -84,7 +84,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(sessionId: sessionId, status: $status, onServerReady: onServerReady, onOutputReceived: onOutputReceived)
+        Coordinator(sessionId: sessionId, mode: mode, status: $status, onServerReady: onServerReady, onOutputReceived: onOutputReceived)
     }
 
     private func launchTerminal(in terminal: LocalProcessTerminalView) {
@@ -116,14 +116,15 @@ struct EmbeddedTerminalView: NSViewRepresentable {
             command += " && exec $SHELL"
         }
 
-        // Generate claude.md in the working directory
-        ClaudeDocManager.writeClaudeMD(
+        // Generate session configs (CLAUDE.md + CLI-specific MCP config)
+        ClaudeDocManager.writeSessionConfigs(
             to: workingDirectory,
             projectPath: workingDirectory,
             runCommand: nil,  // Will be auto-detected from project files
             branch: assignedBranch,
             sessionId: sessionId,
-            port: nil
+            port: nil,
+            mode: mode
         )
 
         terminal.startProcess(
@@ -136,6 +137,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
 
     class Coordinator: NSObject, LocalProcessTerminalViewDelegate {
         let sessionId: Int
+        let mode: TerminalMode
         @Binding var status: SessionStatus
         var hasLaunched = false
         private var outputBuffer = ""
@@ -157,8 +159,9 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         private let initializingTimeout: TimeInterval = 3.0  // Time after launch before assuming idle
         private let idleTimeout: TimeInterval = 2.0          // Time without output = idle
 
-        init(sessionId: Int, status: Binding<SessionStatus>, onServerReady: ((String) -> Void)?, onOutputReceived: ((String) -> Void)?) {
+        init(sessionId: Int, mode: TerminalMode, status: Binding<SessionStatus>, onServerReady: ((String) -> Void)?, onOutputReceived: ((String) -> Void)?) {
             self.sessionId = sessionId
+            self.mode = mode
             self._status = status
             self.onServerReady = onServerReady
             self.onOutputReceived = onOutputReceived
@@ -183,6 +186,13 @@ struct EmbeddedTerminalView: NSViewRepresentable {
             // Clean up timers
             idleCheckTimer?.invalidate()
             initializingTimer?.invalidate()
+
+            // Clean up Codex MCP config if this was a Codex session
+            if mode == .openAiCodex {
+                Task { @MainActor in
+                    ClaudeDocManager.cleanupCodexMCPConfig(sessionId: sessionId)
+                }
+            }
 
             // Send exit command to terminate shell gracefully
             terminal?.send(txt: "exit\r")

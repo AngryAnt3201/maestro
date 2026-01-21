@@ -395,4 +395,386 @@ class ClaudeDocManager {
         // Write .mcp.json with session-specific MCP server configuration
         writeMCPConfigForSession(to: directory, sessionId: sessionId)
     }
+
+    // MARK: - Multi-CLI Support
+
+    /// Action for Codex config modification
+    enum CodexConfigAction {
+        case add
+        case remove
+    }
+
+    /// One-time setup: Configure Codex and Gemini CLI to read CLAUDE.md
+    static func setupCLIContextFiles() {
+        setupCodexFallbackFilenames()
+        setupGeminiContextFileName()
+    }
+
+    /// Configure Codex to read CLAUDE.md as fallback context file
+    private static func setupCodexFallbackFilenames() {
+        let fm = FileManager.default
+        let homeDir = fm.homeDirectoryForCurrentUser
+        let codexDir = homeDir.appendingPathComponent(".codex")
+        let configPath = codexDir.appendingPathComponent("config.toml")
+
+        do {
+            // Create .codex directory if it doesn't exist
+            if !fm.fileExists(atPath: codexDir.path) {
+                try fm.createDirectory(at: codexDir, withIntermediateDirectories: true)
+            }
+
+            // Read existing config or start fresh
+            var content = ""
+            if fm.fileExists(atPath: configPath.path) {
+                content = try String(contentsOf: configPath, encoding: .utf8)
+            }
+
+            // Check if already configured
+            if content.contains("project_doc_fallback_filenames") {
+                return // Already configured
+            }
+
+            // Append the fallback filenames configuration
+            let fallbackConfig = """
+
+            # Claude Maestro: Enable reading CLAUDE.md context files
+            project_doc_fallback_filenames = ["CLAUDE.md", "AGENTS.md"]
+            """
+
+            content += fallbackConfig
+            try content.write(to: configPath, atomically: true, encoding: .utf8)
+        } catch {
+            print("Failed to configure Codex fallback filenames: \(error)")
+        }
+    }
+
+    /// Configure Gemini CLI to read CLAUDE.md as context file
+    private static func setupGeminiContextFileName() {
+        let fm = FileManager.default
+        let homeDir = fm.homeDirectoryForCurrentUser
+        let geminiDir = homeDir.appendingPathComponent(".gemini")
+        let settingsPath = geminiDir.appendingPathComponent("settings.json")
+
+        do {
+            // Create .gemini directory if it doesn't exist
+            if !fm.fileExists(atPath: geminiDir.path) {
+                try fm.createDirectory(at: geminiDir, withIntermediateDirectories: true)
+            }
+
+            // Read existing settings or start fresh
+            var settings: [String: Any] = [:]
+            if fm.fileExists(atPath: settingsPath.path),
+               let data = try? Data(contentsOf: settingsPath),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                settings = json
+            }
+
+            // Check if context.fileName already configured
+            if let context = settings["context"] as? [String: Any],
+               context["fileName"] != nil {
+                return // Already configured
+            }
+
+            // Add or merge context configuration
+            var context = settings["context"] as? [String: Any] ?? [:]
+            context["fileName"] = ["GEMINI.md", "CLAUDE.md", "AGENTS.md"]
+            settings["context"] = context
+
+            // Write back
+            if let jsonData = try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys]) {
+                try jsonData.write(to: settingsPath)
+            }
+        } catch {
+            print("Failed to configure Gemini CLI context fileName: \(error)")
+        }
+    }
+
+    /// Generate Gemini CLI MCP config (for .gemini/settings.json)
+    static func generateGeminiMCPConfig(
+        sessionId: Int,
+        maestroServerPath: String?,
+        customServers: [MCPServerConfig],
+        portRangeStart: Int = 3000,
+        portRangeEnd: Int = 3099
+    ) -> [String: Any] {
+        var mcpServers: [String: Any] = [:]
+
+        // Add Maestro MCP if available
+        if let maestroPath = maestroServerPath {
+            mcpServers["maestro"] = [
+                "command": "node",
+                "args": [maestroPath],
+                "env": [
+                    "MAESTRO_SESSION_ID": "\(sessionId)",
+                    "MAESTRO_PORT_RANGE_START": "\(portRangeStart)",
+                    "MAESTRO_PORT_RANGE_END": "\(portRangeEnd)"
+                ]
+            ] as [String: Any]
+        }
+
+        // Add custom MCP servers
+        for server in customServers {
+            var config: [String: Any] = [
+                "command": server.command,
+                "args": server.args
+            ]
+            if !server.env.isEmpty {
+                config["env"] = server.env
+            }
+            mcpServers[server.mcpKey] = config
+        }
+
+        return ["mcpServers": mcpServers]
+    }
+
+    /// Write Gemini CLI MCP config to .gemini/settings.json in project directory
+    @MainActor
+    static func writeGeminiMCPConfig(to directory: String, sessionId: Int) {
+        let fm = FileManager.default
+        let geminiDir = URL(fileURLWithPath: directory).appendingPathComponent(".gemini")
+        let settingsPath = geminiDir.appendingPathComponent("settings.json")
+
+        let mcpManager = MCPServerManager.shared
+        let sessionConfig = mcpManager.getMCPConfig(for: sessionId)
+
+        // Get Maestro path if enabled
+        let maestroPath = sessionConfig.maestroEnabled ? mcpManager.getServerPath() : nil
+        let enabledServers = mcpManager.enabledServers(for: sessionId)
+
+        do {
+            // Create .gemini directory if needed
+            if !fm.fileExists(atPath: geminiDir.path) {
+                try fm.createDirectory(at: geminiDir, withIntermediateDirectories: true)
+            }
+
+            // Read existing settings or start fresh
+            var settings: [String: Any] = [:]
+            if fm.fileExists(atPath: settingsPath.path),
+               let data = try? Data(contentsOf: settingsPath),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                settings = json
+            }
+
+            // Generate and merge MCP config
+            let mcpConfig = generateGeminiMCPConfig(
+                sessionId: sessionId,
+                maestroServerPath: maestroPath,
+                customServers: enabledServers
+            )
+
+            // Merge mcpServers into existing settings
+            settings["mcpServers"] = mcpConfig["mcpServers"]
+
+            // Write back
+            if let jsonData = try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys]) {
+                try jsonData.write(to: settingsPath)
+            }
+        } catch {
+            print("Failed to write Gemini MCP config: \(error)")
+        }
+    }
+
+    /// Update Codex global config with session MCP server
+    @MainActor
+    static func updateCodexMCPConfig(
+        sessionId: Int,
+        action: CodexConfigAction,
+        maestroServerPath: String?,
+        customServers: [MCPServerConfig],
+        portRangeStart: Int = 3000,
+        portRangeEnd: Int = 3099
+    ) {
+        let fm = FileManager.default
+        let homeDir = fm.homeDirectoryForCurrentUser
+        let codexDir = homeDir.appendingPathComponent(".codex")
+        let configPath = codexDir.appendingPathComponent("config.toml")
+
+        do {
+            // Create .codex directory if it doesn't exist
+            if !fm.fileExists(atPath: codexDir.path) {
+                try fm.createDirectory(at: codexDir, withIntermediateDirectories: true)
+            }
+
+            // Read existing config
+            var content = ""
+            if fm.fileExists(atPath: configPath.path) {
+                content = try String(contentsOf: configPath, encoding: .utf8)
+            }
+
+            // Session-specific server key
+            let sessionKey = "maestro_session_\(sessionId)"
+
+            switch action {
+            case .add:
+                // Remove existing entry for this session if present
+                content = removeCodexMCPSection(from: content, sessionKey: sessionKey)
+
+                // Add Maestro MCP if available
+                if let maestroPath = maestroServerPath {
+                    let serverConfig = """
+
+                    # Claude Maestro Session \(sessionId)
+                    [mcp_servers.\(sessionKey)]
+                    command = "node"
+                    args = ["\(maestroPath)"]
+
+                    [mcp_servers.\(sessionKey).env]
+                    MAESTRO_SESSION_ID = "\(sessionId)"
+                    MAESTRO_PORT_RANGE_START = "\(portRangeStart)"
+                    MAESTRO_PORT_RANGE_END = "\(portRangeEnd)"
+                    """
+                    content += serverConfig
+                }
+
+                // Add custom servers
+                for (index, server) in customServers.enumerated() {
+                    let customKey = "\(sessionKey)_custom_\(index)"
+                    var serverConfig = """
+
+                    # Claude Maestro Session \(sessionId) - \(server.name)
+                    [mcp_servers.\(customKey)]
+                    command = "\(server.command)"
+                    args = [\(server.args.map { "\"\($0)\"" }.joined(separator: ", "))]
+                    """
+
+                    if !server.env.isEmpty {
+                        serverConfig += "\n\n[mcp_servers.\(customKey).env]"
+                        for (key, value) in server.env {
+                            serverConfig += "\n\(key) = \"\(value)\""
+                        }
+                    }
+                    content += serverConfig
+                }
+
+            case .remove:
+                // Remove the session entry and any custom servers for this session
+                content = removeCodexMCPSection(from: content, sessionKey: sessionKey)
+                // Also remove any custom server entries for this session
+                var index = 0
+                while true {
+                    let customKey = "\(sessionKey)_custom_\(index)"
+                    let newContent = removeCodexMCPSection(from: content, sessionKey: customKey)
+                    if newContent == content {
+                        break // No more custom entries
+                    }
+                    content = newContent
+                    index += 1
+                }
+            }
+
+            try content.write(to: configPath, atomically: true, encoding: .utf8)
+        } catch {
+            print("Failed to update Codex MCP config: \(error)")
+        }
+    }
+
+    /// Remove a session's MCP section from Codex config
+    private static func removeCodexMCPSection(from content: String, sessionKey: String) -> String {
+        var lines = content.components(separatedBy: "\n")
+        var result: [String] = []
+        var skipUntilNextSection = false
+
+        for line in lines {
+            // Check if this is the start of our session's section
+            if line.contains("[mcp_servers.\(sessionKey)]") ||
+               line.contains("# Claude Maestro Session") && line.contains(sessionKey) {
+                skipUntilNextSection = true
+                continue
+            }
+
+            // Check if we've reached a new section
+            if skipUntilNextSection {
+                // Stop skipping when we hit a new section or comment that's not part of our block
+                if line.hasPrefix("[") && !line.contains(sessionKey) {
+                    skipUntilNextSection = false
+                } else if line.isEmpty {
+                    // Keep skipping empty lines within the section
+                    continue
+                } else if !line.hasPrefix("#") && !line.contains("=") && !line.isEmpty {
+                    // Non-config line that's not a comment
+                    skipUntilNextSection = false
+                } else {
+                    continue
+                }
+            }
+
+            if !skipUntilNextSection {
+                result.append(line)
+            }
+        }
+
+        return result.joined(separator: "\n")
+    }
+
+    /// Write all session configs based on terminal mode
+    @MainActor
+    static func writeSessionConfigs(
+        to directory: String,
+        projectPath: String,
+        runCommand: String?,
+        branch: String?,
+        sessionId: Int,
+        port: Int?,
+        mode: TerminalMode
+    ) {
+        // Always write CLAUDE.md - all CLIs can be configured to read it
+        let effectiveRunCommand = runCommand ?? detectRunCommand(for: directory)
+        let mcpServerPath = getMCPServerPath()
+
+        let content = generateContent(
+            projectPath: projectPath,
+            runCommand: effectiveRunCommand,
+            branch: branch,
+            sessionId: sessionId,
+            port: port,
+            mcpServerPath: mcpServerPath
+        )
+
+        let filePath = URL(fileURLWithPath: directory).appendingPathComponent("CLAUDE.md")
+
+        do {
+            try content.write(to: filePath, atomically: true, encoding: .utf8)
+        } catch {
+            print("Failed to generate CLAUDE.md: \(error)")
+        }
+
+        // Initialize session MCP config
+        MCPServerManager.shared.initializeSessionConfig(for: sessionId)
+
+        // Write CLI-specific MCP configuration
+        switch mode {
+        case .claudeCode:
+            writeMCPConfigForSession(to: directory, sessionId: sessionId)
+
+        case .geminiCli:
+            writeGeminiMCPConfig(to: directory, sessionId: sessionId)
+
+        case .openAiCodex:
+            let mcpManager = MCPServerManager.shared
+            let sessionConfig = mcpManager.getMCPConfig(for: sessionId)
+            let maestroPath = sessionConfig.maestroEnabled ? mcpManager.getServerPath() : nil
+            let enabledServers = mcpManager.enabledServers(for: sessionId)
+
+            updateCodexMCPConfig(
+                sessionId: sessionId,
+                action: .add,
+                maestroServerPath: maestroPath,
+                customServers: enabledServers
+            )
+
+        case .plainTerminal:
+            break // No MCP config needed
+        }
+    }
+
+    /// Clean up Codex MCP config when session closes
+    @MainActor
+    static func cleanupCodexMCPConfig(sessionId: Int) {
+        updateCodexMCPConfig(
+            sessionId: sessionId,
+            action: .remove,
+            maestroServerPath: nil,
+            customServers: []
+        )
+    }
 }
