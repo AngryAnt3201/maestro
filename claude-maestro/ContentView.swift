@@ -985,6 +985,7 @@ struct DynamicTerminalGridView: View {
             }
             .help("Add new terminal")
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
