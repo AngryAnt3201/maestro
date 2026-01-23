@@ -8,7 +8,78 @@
 import SwiftUI
 import AppKit
 
+// MARK: - Sidebar Tab
+
+enum SidebarTab: String, CaseIterable {
+    case configuration = "Config"
+    case processes = "Processes"
+
+    var icon: String {
+        switch self {
+        case .configuration: return "gearshape"
+        case .processes: return "cpu"
+        }
+    }
+}
+
+// MARK: - Sidebar View
+
 struct SidebarView: View {
+    @ObservedObject var manager: SessionManager
+    @State private var selectedTab: SidebarTab = .configuration
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Tab Picker
+            HStack(spacing: 0) {
+                ForEach(SidebarTab.allCases, id: \.self) { tab in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            selectedTab = tab
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: tab.icon)
+                                .font(.caption)
+                            Text(tab.rawValue)
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            selectedTab == tab
+                                ? Color.accentColor.opacity(0.2)
+                                : Color.clear
+                        )
+                        .foregroundColor(selectedTab == tab ? .accentColor : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+
+            Divider()
+
+            // Tab Content
+            switch selectedTab {
+            case .configuration:
+                ConfigurationSidebarContent(manager: manager)
+            case .processes:
+                ProcessSidebarView(manager: manager)
+            }
+        }
+        .frame(width: 240)
+        .background(Color(NSColor.controlBackgroundColor))
+        .onAppear {
+            manager.loadPresets()
+        }
+    }
+}
+
+// MARK: - Configuration Sidebar Content
+
+struct ConfigurationSidebarContent: View {
     @ObservedObject var manager: SessionManager
 
     var body: some View {
@@ -36,6 +107,7 @@ struct SidebarView: View {
                 }
             }
             .padding(.horizontal)
+            .padding(.top, 12)
 
             Divider()
 
@@ -176,21 +248,9 @@ struct SidebarView: View {
 
                     // Quick Actions Section
                     QuickActionsSection()
-
-                    Divider()
-                        .padding(.horizontal)
-
-                    // Processes Section
-                    ProcessesSection()
                 }
                 .padding(.bottom, 8)
             }
-        }
-        .padding(.vertical)
-        .frame(width: 240)
-        .background(Color(NSColor.controlBackgroundColor))
-        .onAppear {
-            manager.loadPresets()
         }
     }
 }
@@ -565,8 +625,6 @@ struct SelectableSessionRow: View {
 
 struct MaestroMCPSection: View {
     @StateObject private var mcpManager = MCPServerManager.shared
-    @State private var isBuilding: Bool = false
-    @State private var buildError: String?
     @State private var showDetails: Bool = false
 
     var body: some View {
@@ -608,39 +666,12 @@ struct MaestroMCPSection: View {
                         .fontWeight(.medium)
 
                     Spacer()
-
-                    if !mcpManager.isServerAvailable && !isBuilding {
-                        Button("Build") {
-                            buildServer()
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.mini)
-                    }
-
-                    if isBuilding {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                            .frame(width: 16, height: 16)
-                    }
                 }
 
                 // Details (expanded)
                 if showDetails {
                     VStack(alignment: .leading, spacing: 4) {
                         Divider()
-
-                        // Node.js status
-                        HStack(spacing: 4) {
-                            Image(systemName: mcpManager.verifyNodeAvailable() ? "checkmark.circle" : "xmark.circle")
-                                .foregroundColor(mcpManager.verifyNodeAvailable() ? .green : .red)
-                                .font(.caption2)
-                            Text("Node.js")
-                                .font(.caption2)
-                            Spacer()
-                            Text(mcpManager.verifyNodeAvailable() ? "Available" : "Missing")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
 
                         // Server path
                         if let path = mcpManager.serverPath {
@@ -692,21 +723,8 @@ struct MaestroMCPSection: View {
                     }
                 }
 
-                // Error message
-                if let error = buildError {
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .foregroundColor(.red)
-                            .font(.caption2)
-                        Text(error)
-                            .font(.caption2)
-                            .foregroundColor(.red)
-                            .lineLimit(2)
-                    }
-                }
-
                 // Last error from manager
-                if let error = mcpManager.lastError, buildError == nil {
+                if let error = mcpManager.lastError {
                     Text(error)
                         .font(.caption2)
                         .foregroundColor(.secondary)
@@ -718,25 +736,6 @@ struct MaestroMCPSection: View {
             .cornerRadius(8)
         }
         .padding(.horizontal)
-    }
-
-    private func buildServer() {
-        isBuilding = true
-        buildError = nil
-
-        Task {
-            do {
-                try await mcpManager.buildServerIfNeeded()
-                await MainActor.run {
-                    isBuilding = false
-                }
-            } catch {
-                await MainActor.run {
-                    buildError = error.localizedDescription
-                    isBuilding = false
-                }
-            }
-        }
     }
 
     private func shortenPath(_ path: String) -> String {
@@ -1001,389 +1000,6 @@ struct QuickActionsSection: View {
                 quickActionManager: quickActionManager,
                 onDismiss: { showManagerSheet = false }
             )
-        }
-    }
-}
-
-// MARK: - Processes Section
-
-struct ProcessesSection: View {
-    @StateObject private var mcpWatcher = MCPStatusWatcher()
-    @State private var selectedProcessForLogs: Int? = nil
-    @State private var isLogsSheetPresented: Bool = false
-    @State private var showSystemProcesses: Bool = true
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Processes")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-
-                Spacer()
-
-                // Refresh button
-                Button {
-                    mcpWatcher.readStatusFile()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Refresh process status")
-            }
-
-            VStack(spacing: 0) {
-                let hasAnyProcesses = !mcpWatcher.serverStatuses.isEmpty || !mcpWatcher.systemProcesses.isEmpty
-
-                if !hasAnyProcesses {
-                    // Empty state
-                    HStack {
-                        Image(systemName: "bolt.slash")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                        Text("No running processes")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
-                } else {
-                    VStack(spacing: 8) {
-                        // MCP Managed Servers Section
-                        if !mcpWatcher.serverStatuses.isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "checkmark.seal.fill")
-                                        .font(.caption2)
-                                        .foregroundColor(.green)
-                                    Text("MCP Managed")
-                                        .font(.caption2)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.secondary)
-                                }
-
-                                ForEach(mcpWatcher.serverStatuses, id: \.sessionId) { status in
-                                    ProcessRow(
-                                        status: status,
-                                        onViewLogs: {
-                                            selectedProcessForLogs = status.sessionId
-                                            isLogsSheetPresented = true
-                                        },
-                                        onOpenBrowser: {
-                                            if let urlString = status.url, let url = URL(string: urlString) {
-                                                NSWorkspace.shared.open(url)
-                                            }
-                                        },
-                                        onKill: {
-                                            killProcess(sessionId: status.sessionId)
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        // System Processes Section (non-MCP managed)
-                        let unmanagedProcesses = mcpWatcher.systemProcesses.filter { !$0.managed }
-                        if !unmanagedProcesses.isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(spacing: 4) {
-                                    Button {
-                                        withAnimation(.easeInOut(duration: 0.2)) {
-                                            showSystemProcesses.toggle()
-                                        }
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "network")
-                                                .font(.caption2)
-                                                .foregroundColor(.blue)
-                                            Text("System (\(unmanagedProcesses.count))")
-                                                .font(.caption2)
-                                                .fontWeight(.medium)
-                                                .foregroundColor(.secondary)
-                                            Spacer()
-                                            Image(systemName: showSystemProcesses ? "chevron.up" : "chevron.down")
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-
-                                if showSystemProcesses {
-                                    ForEach(unmanagedProcesses) { process in
-                                        SystemProcessRow(process: process)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .padding(8)
-                }
-            }
-            .background(Color(NSColor.windowBackgroundColor))
-            .cornerRadius(8)
-        }
-        .padding(.horizontal)
-        .sheet(isPresented: $isLogsSheetPresented) {
-            ProcessLogsSheet(sessionId: selectedProcessForLogs ?? 0) {
-                isLogsSheetPresented = false
-                selectedProcessForLogs = nil
-            }
-        }
-    }
-
-    private func killProcess(sessionId: Int) {
-        guard let status = mcpWatcher.serverStatuses.first(where: { $0.sessionId == sessionId }),
-              let pid = status.pid else {
-            return
-        }
-
-        // Send SIGTERM for graceful shutdown
-        let killProcess = Process()
-        killProcess.executableURL = URL(fileURLWithPath: "/bin/kill")
-        killProcess.arguments = ["-TERM", String(pid)]
-        try? killProcess.run()
-        killProcess.waitUntilExit()
-
-        // After 2 seconds, force kill if still running
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak mcpWatcher] in
-            let forceKill = Process()
-            forceKill.executableURL = URL(fileURLWithPath: "/bin/kill")
-            forceKill.arguments = ["-KILL", String(pid)]
-            try? forceKill.run()
-
-            // Refresh status after kill attempt
-            mcpWatcher?.readStatusFile()
-        }
-    }
-}
-
-// MARK: - System Process Row
-
-struct SystemProcessRow: View {
-    let process: MCPStatusWatcher.SystemProcess
-
-    var body: some View {
-        HStack(spacing: 8) {
-            // Status indicator (blue for system processes)
-            Circle()
-                .fill(Color.blue)
-                .frame(width: 8, height: 8)
-
-            // Process info
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
-                    Text(process.command)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-
-                    Text(":\(process.port)")
-                        .font(.caption2)
-                        .foregroundColor(.blue)
-                        .padding(.horizontal, 3)
-                        .background(Color.blue.opacity(0.15))
-                        .cornerRadius(3)
-                }
-
-                HStack(spacing: 4) {
-                    Text("PID: \(process.pid)")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-
-                    Text("•")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-
-                    Text(process.address)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            Spacer()
-
-            // Open in browser button (if it's a web port)
-            if isWebPort(process.port) {
-                Button {
-                    let urlString = "http://localhost:\(process.port)"
-                    if let url = URL(string: urlString) {
-                        NSWorkspace.shared.open(url)
-                    }
-                } label: {
-                    Image(systemName: "safari")
-                        .font(.caption2)
-                        .foregroundColor(.blue)
-                }
-                .buttonStyle(.plain)
-                .help("Open in browser")
-            }
-        }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color.blue.opacity(0.1))
-        )
-    }
-
-    private func isWebPort(_ port: Int) -> Bool {
-        // Common web development ports
-        let webPorts = [3000, 3001, 3002, 3003, 3004, 3005,
-                        4000, 4200, 5000, 5173, 5174,
-                        8000, 8080, 8888, 9000]
-        return webPorts.contains(port) || (3000...3099).contains(port) || (8000...8999).contains(port)
-    }
-}
-
-// MARK: - Process Row
-
-struct ProcessRow: View {
-    let status: MCPStatusWatcher.ServerStatus
-    let onViewLogs: () -> Void
-    let onOpenBrowser: () -> Void
-    let onKill: () -> Void
-
-    var body: some View {
-        HStack(spacing: 8) {
-            // Status indicator
-            Circle()
-                .fill(statusColor)
-                .frame(width: 8, height: 8)
-
-            // Session ID and port
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
-                    Text("Session #\(status.sessionId)")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-
-                    if let port = status.port {
-                        Text(":\(port)")
-                            .font(.caption2)
-                            .foregroundColor(.green)
-                            .padding(.horizontal, 3)
-                            .background(Color.green.opacity(0.15))
-                            .cornerRadius(3)
-                    }
-                }
-
-                Text(status.status.capitalized)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-
-            Spacer()
-
-            // Action buttons
-            HStack(spacing: 4) {
-                // View Logs button
-                Button { onViewLogs() } label: {
-                    Image(systemName: "doc.text")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("View logs")
-
-                // Open in Browser button (only if URL exists)
-                if status.url != nil {
-                    Button { onOpenBrowser() } label: {
-                        Image(systemName: "safari")
-                            .font(.caption2)
-                            .foregroundColor(.blue)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Open in browser")
-                }
-
-                // Kill button (only if running)
-                if status.status == "running" || status.status == "starting" {
-                    Button { onKill() } label: {
-                        Image(systemName: "xmark.circle")
-                            .font(.caption2)
-                            .foregroundColor(.red.opacity(0.7))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Stop process")
-                }
-            }
-        }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(statusColor.opacity(0.1))
-        )
-    }
-
-    private var statusColor: Color {
-        switch status.status {
-        case "running": return .green
-        case "starting": return .yellow
-        case "stopped": return .gray
-        case "error": return .red
-        default: return .secondary
-        }
-    }
-}
-
-// MARK: - Process Logs Sheet
-
-struct ProcessLogsSheet: View {
-    let sessionId: Int
-    let onDismiss: () -> Void
-    @State private var logs: String = "Loading logs..."
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("Logs - Session #\(sessionId)")
-                    .font(.headline)
-
-                Spacer()
-
-                Button("Done") {
-                    onDismiss()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .keyboardShortcut(.escape, modifiers: [])
-            }
-            .padding()
-            .background(Color(NSColor.windowBackgroundColor))
-
-            Divider()
-
-            // Logs content
-            ScrollView {
-                Text(logs)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.9))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-            }
-            .background(Color(red: 0.08, green: 0.08, blue: 0.1))
-        }
-        .frame(width: 600, height: 400)
-        .onAppear {
-            loadLogs()
-        }
-    }
-
-    private func loadLogs() {
-        // Load logs from the MCP log file
-        let logPath = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("Claude Maestro/logs/session-\(sessionId).log")
-
-        if let path = logPath, let content = try? String(contentsOf: path, encoding: .utf8) {
-            logs = content
-        } else {
-            logs = "No logs available for this session."
         }
     }
 }

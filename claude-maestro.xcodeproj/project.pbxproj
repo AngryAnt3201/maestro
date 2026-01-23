@@ -8,12 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		CB2099152F0D030900779863 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = CB2099002F0CBD0000779863 /* SwiftTerm */; };
-		CB2099162F0D040000779863 /* dist in Resources */ = {isa = PBXBuildFile; fileRef = CB2099172F0D040000779863 /* dist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		CB2098F02F0CBC2600779863 /* claude-maestro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "claude-maestro.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		CB2099172F0D040000779863 /* dist */ = {isa = PBXFileReference; lastKnownFileType = folder; name = dist; path = "maestro-mcp-server/dist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -40,7 +38,6 @@
 			isa = PBXGroup;
 			children = (
 				CB2098F22F0CBC2600779863 /* claude-maestro */,
-				CB2099172F0D040000779863 /* dist */,
 				CB2098F12F0CBC2600779863 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -121,7 +118,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CB2099162F0D040000779863 /* dist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

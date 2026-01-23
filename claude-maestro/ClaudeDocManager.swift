@@ -9,100 +9,6 @@ import Foundation
 
 class ClaudeDocManager {
 
-    /// Get the Application Support directory for Claude Maestro
-    private static func getAppSupportDirectory() -> URL? {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            return nil
-        }
-        return appSupport.appendingPathComponent("Claude Maestro")
-    }
-
-    /// Get the stable path to the MCP server in Application Support
-    private static func getStableMCPServerPath() -> URL? {
-        guard let appSupport = getAppSupportDirectory() else { return nil }
-        return appSupport.appendingPathComponent("mcp-server").appendingPathComponent("bundle.js")
-    }
-
-    /// Copy MCP server from bundle to Application Support for stable access
-    private static func copyMCPServerToAppSupport() -> String? {
-        let fm = FileManager.default
-
-        // Find source bundle.js in bundle
-        guard let bundlePath = Bundle.main.resourcePath else { return nil }
-        let bundledBundlePath = URL(fileURLWithPath: bundlePath).appendingPathComponent("dist/bundle.js")
-
-        // Check bundle first
-        var sourceBundlePath: URL? = nil
-        if fm.fileExists(atPath: bundledBundlePath.path) {
-            sourceBundlePath = bundledBundlePath
-        } else {
-            // Fallback for development: relative to Xcode build output
-            let devPath = URL(fileURLWithPath: bundlePath)
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .appendingPathComponent("maestro-mcp-server/dist/bundle.js")
-            if fm.fileExists(atPath: devPath.path) {
-                sourceBundlePath = devPath
-            }
-        }
-
-        guard let source = sourceBundlePath else { return nil }
-        guard let appSupport = getAppSupportDirectory() else { return nil }
-
-        let destMCPDir = appSupport.appendingPathComponent("mcp-server")
-        let destBundlePath = destMCPDir.appendingPathComponent("bundle.js")
-
-        do {
-            // Create mcp-server directory if needed
-            try fm.createDirectory(at: destMCPDir, withIntermediateDirectories: true)
-
-            // Remove old bundle.js if it exists
-            if fm.fileExists(atPath: destBundlePath.path) {
-                try fm.removeItem(at: destBundlePath)
-            }
-
-            // Copy only bundle.js (self-contained, no node_modules needed)
-            try fm.copyItem(at: source, to: destBundlePath)
-
-            return destBundlePath.path
-        } catch {
-            print("Failed to copy MCP server to Application Support: \(error)")
-            return nil
-        }
-    }
-
-    /// Get the path to the MCP server, using stable Application Support location
-    static func getMCPServerPath() -> String? {
-        let fm = FileManager.default
-
-        // Check stable Application Support path first
-        if let stablePath = getStableMCPServerPath(),
-           fm.fileExists(atPath: stablePath.path) {
-            return stablePath.path
-        }
-
-        // Copy from bundle to Application Support
-        if let copiedPath = copyMCPServerToAppSupport() {
-            return copiedPath
-        }
-
-        // Final fallback: try bundle directly (for first-run scenarios)
-        if let bundlePath = Bundle.main.resourcePath {
-            let bundledPath = URL(fileURLWithPath: bundlePath)
-                .appendingPathComponent("dist/bundle.js")
-            if fm.fileExists(atPath: bundledPath.path) {
-                // Try to copy again, but return bundle path if copy fails
-                if let copied = copyMCPServerToAppSupport() {
-                    return copied
-                }
-                return bundledPath.path
-            }
-        }
-
-        return nil
-    }
-
     /// Detect run command based on common project configuration files
     static func detectRunCommand(for projectPath: String) -> String? {
         let fm = FileManager.default
@@ -281,12 +187,12 @@ class ClaudeDocManager {
     ) -> String {
         var mcpServers: [String: Any] = [:]
 
-        // Add Maestro MCP if available
+        // Add Maestro MCP if available (native Swift binary)
         if let maestroPath = maestroServerPath {
             mcpServers["maestro"] = [
                 "type": "stdio",
-                "command": "node",
-                "args": [maestroPath],
+                "command": maestroPath,
+                "args": [] as [String],
                 "env": [
                     "MAESTRO_SESSION_ID": "\(sessionId)",
                     "MAESTRO_PORT_RANGE_START": "\(portRangeStart)",
@@ -369,7 +275,7 @@ class ClaudeDocManager {
         port: Int?
     ) {
         let effectiveRunCommand = runCommand ?? detectRunCommand(for: directory)
-        let mcpServerPath = getMCPServerPath()
+        let mcpServerPath = MCPServerManager.shared.getServerPath()
 
         let content = generateContent(
             projectPath: projectPath,
@@ -499,11 +405,11 @@ class ClaudeDocManager {
     ) -> [String: Any] {
         var mcpServers: [String: Any] = [:]
 
-        // Add Maestro MCP if available
+        // Add Maestro MCP if available (native Swift binary)
         if let maestroPath = maestroServerPath {
             mcpServers["maestro"] = [
-                "command": "node",
-                "args": [maestroPath],
+                "command": maestroPath,
+                "args": [] as [String],
                 "env": [
                     "MAESTRO_SESSION_ID": "\(sessionId)",
                     "MAESTRO_PORT_RANGE_START": "\(portRangeStart)",
@@ -609,14 +515,14 @@ class ClaudeDocManager {
                 // Remove existing entry for this session if present
                 content = removeCodexMCPSection(from: content, sessionKey: sessionKey)
 
-                // Add Maestro MCP if available
+                // Add Maestro MCP if available (native Swift binary)
                 if let maestroPath = maestroServerPath {
                     let serverConfig = """
 
                     # Claude Maestro Session \(sessionId)
                     [mcp_servers.\(sessionKey)]
-                    command = "node"
-                    args = ["\(maestroPath)"]
+                    command = "\(maestroPath)"
+                    args = []
 
                     [mcp_servers.\(sessionKey).env]
                     MAESTRO_SESSION_ID = "\(sessionId)"
@@ -719,7 +625,7 @@ class ClaudeDocManager {
     ) {
         // Always write CLAUDE.md - all CLIs can be configured to read it
         let effectiveRunCommand = runCommand ?? detectRunCommand(for: directory)
-        let mcpServerPath = getMCPServerPath()
+        let mcpServerPath = MCPServerManager.shared.getServerPath()
 
         let content = generateContent(
             projectPath: projectPath,
