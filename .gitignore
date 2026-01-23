@@ -1,1 +1,5 @@
 node_modules/
+
+# Swift Package Manager
+MaestroMCPServer/.build/
+.swiftpm/

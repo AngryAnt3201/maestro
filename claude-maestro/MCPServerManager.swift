@@ -176,6 +176,37 @@ class MCPServerManager: ObservableObject {
             return devPath
         }
 
+        // Check in DerivedData/Build/Products for development builds
+        // This finds the binary when building from Xcode
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+        let derivedDataPaths = [
+            "\(homeDir)/Library/Developer/Xcode/DerivedData",
+        ]
+        for derivedPath in derivedDataPaths {
+            if let dirs = try? FileManager.default.contentsOfDirectory(atPath: derivedPath) {
+                for dir in dirs where dir.hasPrefix("claude-maestro") || dir.hasPrefix("MaestroMCPServer") {
+                    let debugPath = "\(derivedPath)/\(dir)/Build/Products/Debug/MaestroMCPServer"
+                    if FileManager.default.isExecutableFile(atPath: debugPath) {
+                        return debugPath
+                    }
+                    let releasePath = "\(derivedPath)/\(dir)/Build/Products/Release/MaestroMCPServer"
+                    if FileManager.default.isExecutableFile(atPath: releasePath) {
+                        return releasePath
+                    }
+                }
+            }
+        }
+
+        // Check project-relative path (for Swift Package build)
+        if let projectPath = Bundle.main.bundleURL.deletingLastPathComponent().path
+            .components(separatedBy: "/").dropLast().joined(separator: "/") as String?,
+           !projectPath.isEmpty {
+            let swiftBuildPath = "\(projectPath)/MaestroMCPServer/.build/debug/MaestroMCPServer"
+            if FileManager.default.isExecutableFile(atPath: swiftBuildPath) {
+                return swiftBuildPath
+            }
+        }
+
         // Check in /usr/local/bin (if installed system-wide)
         let systemPath = "/usr/local/bin/MaestroMCPServer"
         if FileManager.default.isExecutableFile(atPath: systemPath) {

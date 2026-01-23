@@ -282,6 +282,9 @@ class SessionManager: ObservableObject {
     // Agent state monitoring via MCP-reported status files
     @Published var stateMonitor = MaestroStateMonitor()
 
+    // Agent state subscription for syncing to session status
+    private var agentStateSubscription: AnyCancellable?
+
     // MCP server status watcher for auto-open and UI sync (legacy - can be removed after migration)
     private var mcpWatcher = MCPStatusWatcher()
 
@@ -317,9 +320,42 @@ class SessionManager: ObservableObject {
         loadPresets()
         loadSessions()
 
-        // Start agent state monitoring
+        // Start agent state monitoring and sync to session status
         Task { @MainActor in
             stateMonitor.start()
+            startAgentStateSync()
+        }
+    }
+
+    /// Start syncing agent state changes to session status
+    private func startAgentStateSync() {
+        agentStateSubscription = stateMonitor.$agents
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] agents in
+                self?.syncAgentStatesToSessions(agents)
+            }
+    }
+
+    /// Sync agent states from MaestroStateMonitor to corresponding SessionInfo.status
+    private func syncAgentStatesToSessions(_ agents: [String: AgentState]) {
+        for (agentId, agentState) in agents {
+            // Parse session ID from agent ID (e.g., "agent-1" -> 1)
+            if agentId.hasPrefix("agent-"),
+               let sessionId = Int(agentId.dropFirst("agent-".count)) {
+                let sessionStatus = mapAgentStateToSessionStatus(agentState.state)
+                updateStatus(for: sessionId, status: sessionStatus)
+            }
+        }
+    }
+
+    /// Map AgentStatusState to SessionStatus for window border colors
+    private func mapAgentStateToSessionStatus(_ state: AgentStatusState) -> SessionStatus {
+        switch state {
+        case .idle: return .idle
+        case .working: return .working
+        case .needsInput: return .waiting
+        case .finished: return .done
+        case .error: return .error
         }
     }
 
