@@ -25,6 +25,27 @@ public struct ProcessInfo: Identifiable, Sendable, Hashable {
         self.path = path
         self.startTime = startTime
     }
+
+    /// Human-friendly display name, extracted from path for versioned binaries
+    public var displayName: String {
+        guard let path = path else { return name }
+
+        let url = URL(fileURLWithPath: path)
+
+        // Check if filename looks like a version number (e.g., "2.1.17")
+        // If parent is "versions", use grandparent directory name
+        if url.pathComponents.count >= 3 {
+            let parentName = url.deletingLastPathComponent().lastPathComponent
+            if parentName == "versions" {
+                // Return the app name (e.g., "claude" from ".../claude/versions/2.1.17")
+                return url.deletingLastPathComponent()
+                    .deletingLastPathComponent()
+                    .lastPathComponent
+            }
+        }
+
+        return name
+    }
 }
 
 /// Complete process tree visibility using libproc

@@ -265,13 +265,39 @@ public actor ProcessRegistry {
         // AI agent process names to look for
         let agentNames: Set<String> = ["claude", "gemini", "codex"]
 
+        // Path patterns for AI agents with versioned binaries
+        // Note: Claude Code binary is at ~/.local/share/claude/versions/X.X.X
+        // so pbi_name returns the version number, not "claude"
+        let agentPathPatterns = [
+            "/.local/share/claude/",      // Claude Code installation
+            "/.local/bin/claude",          // Claude symlink
+            "/claude/versions/",           // Claude versioned binary
+            "/gemini/",                     // Gemini CLI
+            "/codex"                        // OpenAI Codex
+        ]
+
         return allProcesses.filter { proc in
             // Check if orphaned (reparented to launchd/PID 1)
-            proc.ppid == 1 &&
-            // Is an AI agent process
-            agentNames.contains(proc.name.lowercased()) &&
+            guard proc.ppid == 1 else { return false }
+
             // Not managed by us
-            !isRegistered(pid: proc.pid)
+            guard !isRegistered(pid: proc.pid) else { return false }
+
+            // Check 1: Direct name match (works for some agents)
+            if agentNames.contains(proc.name.lowercased()) {
+                return true
+            }
+
+            // Check 2: Path-based detection for versioned binaries
+            if let path = proc.path?.lowercased() {
+                for pattern in agentPathPatterns {
+                    if path.contains(pattern.lowercased()) {
+                        return true
+                    }
+                }
+            }
+
+            return false
         }
     }
 

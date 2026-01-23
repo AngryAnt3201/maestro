@@ -630,7 +630,7 @@ struct OrphanedProcessRow: View {
                 .font(.caption2)
 
             // Process name
-            Text(process.name)
+            Text(process.displayName)
                 .font(.caption)
                 .fontWeight(.medium)
 

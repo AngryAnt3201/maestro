@@ -233,7 +233,7 @@ struct ProcessNodeRow: View {
                     .frame(width: 8, height: 8)
 
                 // Process name
-                Text(node.info.name)
+                Text(node.info.displayName)
                     .font(.system(.body, design: .monospaced))
                     .fontWeight(node.isManagedByMaestro ? .medium : .regular)
 
