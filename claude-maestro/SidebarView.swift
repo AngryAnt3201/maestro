@@ -235,6 +235,9 @@ struct ConfigurationSidebarContent: View {
                     Divider()
                         .padding(.horizontal, 8)
 
+                    // Maestro MCP Status Section
+                    MaestroMCPStatusSection()
+
                     // Custom MCP Servers Section
                     CustomMCPServersSection()
 
@@ -613,6 +616,66 @@ struct SelectableSessionRow: View {
                 onSelect()
             }
         }
+    }
+}
+
+// MARK: - Maestro MCP Status Section
+
+struct MaestroMCPStatusSection: View {
+    @StateObject private var mcpManager = MCPServerManager.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Maestro MCP")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Button {
+                    mcpManager.checkServerAvailability()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Refresh status")
+            }
+
+            HStack(spacing: 8) {
+                // Status indicator
+                Circle()
+                    .fill(mcpManager.isServerAvailable ? Color.green : Color.orange)
+                    .frame(width: 8, height: 8)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mcpManager.isServerAvailable ? "Available" : "Not Available")
+                        .font(.caption)
+                        .fontWeight(.medium)
+
+                    if let path = mcpManager.serverPath {
+                        Text(path)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(path)
+                    } else if let error = mcpManager.lastError {
+                        Text(error)
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                            .lineLimit(2)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(8)
+            .background(Color(NSColor.windowBackgroundColor))
+            .cornerRadius(8)
+        }
+        .padding(.horizontal, 8)
     }
 }
 
