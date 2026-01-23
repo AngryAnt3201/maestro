@@ -175,11 +175,12 @@ class ClaudeDocManager {
     }
 
     /// Generate .mcp.json content for Claude Code MCP configuration (legacy single-server)
-    static func generateMCPConfig(mcpServerPath: String, sessionId: Int, portRangeStart: Int = 3000, portRangeEnd: Int = 3099) -> String {
+    static func generateMCPConfig(mcpServerPath: String, sessionId: Int, projectPath: String? = nil, portRangeStart: Int = 3000, portRangeEnd: Int = 3099) -> String {
         return generateMCPConfig(
             sessionId: sessionId,
             maestroServerPath: mcpServerPath,
             customServers: [],
+            projectPath: projectPath,
             portRangeStart: portRangeStart,
             portRangeEnd: portRangeEnd
         )
@@ -190,6 +191,7 @@ class ClaudeDocManager {
         sessionId: Int,
         maestroServerPath: String?,
         customServers: [MCPServerConfig],
+        projectPath: String? = nil,
         portRangeStart: Int = 3000,
         portRangeEnd: Int = 3099
     ) -> String {
@@ -210,7 +212,7 @@ class ClaudeDocManager {
         }
 
         // Add Maestro Status MCP server for agent status reporting
-        if let statusServerPath = getStatusServerPath() {
+        if let statusServerPath = getStatusServerPath(projectPath: projectPath) {
             mcpServers["maestro-status"] = [
                 "type": "stdio",
                 "command": "node",
@@ -237,17 +239,27 @@ class ClaudeDocManager {
     }
 
     /// Get the path to the maestro-status MCP server
-    static func getStatusServerPath() -> String? {
-        // Look for the status server in the app bundle's Resources
+    /// - Parameter projectPath: Optional path to the main project/repo directory
+    static func getStatusServerPath(projectPath: String? = nil) -> String? {
+        let fm = FileManager.default
+
+        // First priority: Look relative to the project path (works for any clone location)
+        if let projectPath = projectPath {
+            let projectServerPath = (projectPath as NSString).appendingPathComponent("maestro-mcp-server/dist/index.js")
+            if fm.fileExists(atPath: projectServerPath) {
+                return projectServerPath
+            }
+        }
+
+        // Second priority: Look in the app bundle's Resources (for release builds)
         if let bundlePath = Bundle.main.resourcePath {
             let serverPath = (bundlePath as NSString).appendingPathComponent("maestro-mcp-server/dist/index.js")
-            if FileManager.default.fileExists(atPath: serverPath) {
+            if fm.fileExists(atPath: serverPath) {
                 return serverPath
             }
         }
 
-        // Fallback: Look for it relative to the main repo (for development)
-        let fm = FileManager.default
+        // Fallback: Look in common development locations
         let homeDir = fm.homeDirectoryForCurrentUser.path
         let devPaths = [
             "\(homeDir)/.claude-maestro/maestro-mcp-server/dist/index.js",
@@ -284,7 +296,8 @@ class ClaudeDocManager {
     @MainActor
     static func writeMCPConfigForSession(
         to directory: String,
-        sessionId: Int
+        sessionId: Int,
+        projectPath: String? = nil
     ) {
         let mcpManager = MCPServerManager.shared
         let sessionConfig = mcpManager.getMCPConfig(for: sessionId)
@@ -298,7 +311,8 @@ class ClaudeDocManager {
         let content = generateMCPConfig(
             sessionId: sessionId,
             maestroServerPath: maestroPath,
-            customServers: enabledServers
+            customServers: enabledServers,
+            projectPath: projectPath
         )
 
         let filePath = URL(fileURLWithPath: directory)
@@ -346,7 +360,7 @@ class ClaudeDocManager {
         MCPServerManager.shared.initializeSessionConfig(for: sessionId)
 
         // Write .mcp.json with session-specific MCP server configuration
-        writeMCPConfigForSession(to: directory, sessionId: sessionId)
+        writeMCPConfigForSession(to: directory, sessionId: sessionId, projectPath: projectPath)
     }
 
     // MARK: - Multi-CLI Support
@@ -447,6 +461,7 @@ class ClaudeDocManager {
         sessionId: Int,
         maestroServerPath: String?,
         customServers: [MCPServerConfig],
+        projectPath: String? = nil,
         portRangeStart: Int = 3000,
         portRangeEnd: Int = 3099
     ) -> [String: Any] {
@@ -466,7 +481,7 @@ class ClaudeDocManager {
         }
 
         // Add Maestro Status MCP server for agent status reporting
-        if let statusServerPath = getStatusServerPath() {
+        if let statusServerPath = getStatusServerPath(projectPath: projectPath) {
             mcpServers["maestro-status"] = [
                 "command": "node",
                 "args": [statusServerPath],
@@ -493,7 +508,7 @@ class ClaudeDocManager {
 
     /// Write Gemini CLI MCP config to .gemini/settings.json in project directory
     @MainActor
-    static func writeGeminiMCPConfig(to directory: String, sessionId: Int) {
+    static func writeGeminiMCPConfig(to directory: String, sessionId: Int, projectPath: String? = nil) {
         let fm = FileManager.default
         let geminiDir = URL(fileURLWithPath: directory).appendingPathComponent(".gemini")
         let settingsPath = geminiDir.appendingPathComponent("settings.json")
@@ -523,7 +538,8 @@ class ClaudeDocManager {
             let mcpConfig = generateGeminiMCPConfig(
                 sessionId: sessionId,
                 maestroServerPath: maestroPath,
-                customServers: enabledServers
+                customServers: enabledServers,
+                projectPath: projectPath
             )
 
             // Merge mcpServers into existing settings
@@ -545,6 +561,7 @@ class ClaudeDocManager {
         action: CodexConfigAction,
         maestroServerPath: String?,
         customServers: [MCPServerConfig],
+        projectPath: String? = nil,
         portRangeStart: Int = 3000,
         portRangeEnd: Int = 3099
     ) {
@@ -592,7 +609,7 @@ class ClaudeDocManager {
                 }
 
                 // Add Maestro Status MCP server for agent status reporting
-                if let statusServerPath = getStatusServerPath() {
+                if let statusServerPath = getStatusServerPath(projectPath: projectPath) {
                     let statusConfig = """
 
                     # Claude Maestro Session \(sessionId) - Status Reporting
@@ -726,10 +743,10 @@ class ClaudeDocManager {
         // Write CLI-specific MCP configuration
         switch mode {
         case .claudeCode:
-            writeMCPConfigForSession(to: directory, sessionId: sessionId)
+            writeMCPConfigForSession(to: directory, sessionId: sessionId, projectPath: projectPath)
 
         case .geminiCli:
-            writeGeminiMCPConfig(to: directory, sessionId: sessionId)
+            writeGeminiMCPConfig(to: directory, sessionId: sessionId, projectPath: projectPath)
 
         case .openAiCodex:
             let mcpManager = MCPServerManager.shared
@@ -741,7 +758,8 @@ class ClaudeDocManager {
                 sessionId: sessionId,
                 action: .add,
                 maestroServerPath: maestroPath,
-                customServers: enabledServers
+                customServers: enabledServers,
+                projectPath: projectPath
             )
 
         case .plainTerminal:
