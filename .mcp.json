@@ -1,5 +1,12 @@
 {
-  "mcpServers" : {
-
+  "mcpServers": {
+    "maestro-status": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/Users/jackwakem/Desktop/claude-maestro/maestro-mcp-server/dist/index.js"],
+      "env": {
+        "MAESTRO_AGENT_ID": "agent-1"
+      }
+    }
   }
 }
