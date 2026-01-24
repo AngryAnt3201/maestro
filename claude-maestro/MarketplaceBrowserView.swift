@@ -18,6 +18,7 @@ struct MarketplaceBrowserView: View {
     @State private var showInstallSheet: Bool = false
     @State private var showAddSource: Bool = false
     @State private var newSourceURL: String = ""
+    @State private var showErrorDetail: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -236,12 +237,53 @@ struct MarketplaceBrowserView: View {
             // Footer
             HStack {
                 if let error = marketplaceManager.lastError {
-                    Image(systemName: "exclamationmark.triangle")
-                        .foregroundColor(.orange)
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                        .lineLimit(1)
+                    Button {
+                        showErrorDetail = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle")
+                                .foregroundColor(.orange)
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundColor(.orange.opacity(0.6))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showErrorDetail) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.orange)
+                                Text("Marketplace Error")
+                                    .font(.headline)
+                            }
+                            Divider()
+                            ScrollView {
+                                Text(error)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .textSelection(.enabled)
+                            }
+                            .frame(maxHeight: 200)
+                            HStack {
+                                Spacer()
+                                Button("Copy") {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(error, forType: .string)
+                                }
+                                .buttonStyle(.bordered)
+                                Button("Close") {
+                                    showErrorDetail = false
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                        }
+                        .padding()
+                        .frame(width: 500)
+                    }
                 }
 
                 Spacer()
