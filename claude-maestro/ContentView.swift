@@ -1183,7 +1183,8 @@ struct DynamicTerminalGridView: View {
                                 onServerReady: { url in manager.setServerURL(url, for: session.id) },
                                 onControllerReady: { controller in manager.terminalControllers[session.id] = controller },
                                 onCustomAction: { prompt in manager.executeCustomAction(prompt: prompt, for: session.id) },
-                                onProcessStarted: { pid in manager.registerTerminalProcess(sessionId: session.id, pid: pid) }
+                                onProcessStarted: { pid in manager.registerTerminalProcess(sessionId: session.id, pid: pid) },
+                                agentState: manager.stateMonitor.agentState(forSessionId: session.id)
                             )
                             .id(session.id)  // Explicit session ID for view identity
                         }

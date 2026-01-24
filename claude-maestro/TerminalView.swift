@@ -446,6 +446,7 @@ struct TerminalSessionView: View {
     var onCustomAction: ((String) -> Void)?  // Custom quick action callback
     var onProcessStarted: ((pid_t) -> Void)?  // Register PID for native process management
     var activityMonitor: ProcessActivityMonitor?  // For accurate state detection
+    var agentState: AgentState?  // MCP-reported agent status
 
     @State private var terminalController = TerminalController()
     @StateObject private var quickActionManager = QuickActionManager.shared
@@ -476,6 +477,18 @@ struct TerminalSessionView: View {
                     mcpManager: MCPServerManager.shared,
                     isDisabled: shouldLaunch
                 )
+
+                // Agent status (only when terminal launched)
+                if shouldLaunch, let state = agentState {
+                    HStack(spacing: 4) {
+                        StatusPill(state: state.state)
+                        Text(state.message)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
 
                 Spacer()
 
