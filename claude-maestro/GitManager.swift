@@ -172,38 +172,26 @@ class GitManager: ObservableObject {
     // MARK: - Commit History Methods
 
     func fetchCommitHistory(limit: Int = 50, skip: Int = 0) async throws -> [Commit] {
-        // Format: fullHash|shortHash|subject|authorName|authorEmail|isoDate|parentHashes|refs
-        // Use %x00 (null byte) as record separator to handle --shortstat output
         let format = "%H|%h|%s|%an|%ae|%aI|%P|%D%x00"
-        var args = ["log", "--all", "--topo-order", "--format=\(format)", "--shortstat", "-n", "\(limit)"]
+        var args = ["log", "--all", "--topo-order", "--format=\(format)", "-n", "\(limit)"]
         if skip > 0 {
             args.append("--skip=\(skip)")
         }
         let output = try await runGitCommand(args)
 
-        // Get current HEAD hash
         let headHash = try? await runGitCommand(["rev-parse", "HEAD"])
         let currentHead = headHash?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withInternetDateTime]
 
-        // Split by null byte to separate commit records
         let commitBlocks = output.components(separatedBy: "\u{0000}")
 
         return commitBlocks.compactMap { block -> Commit? in
-            let trimmedBlock = block.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedBlock.isEmpty else { return nil }
+            let trimmed = block.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
 
-            // Split block into lines - first line is format data, second (if present) is stats
-            let lines = trimmedBlock.components(separatedBy: "\n")
-            guard !lines.isEmpty else { return nil }
-
-            let formatLine = lines[0]
-            let statsLine = lines.count > 1 ? lines[1] : ""
-
-            // Parse the format line
-            let parts = formatLine.components(separatedBy: "|")
+            let parts = trimmed.components(separatedBy: "|")
             guard parts.count >= 6 else { return nil }
 
             let hash = parts[0]
@@ -219,9 +207,6 @@ class GitManager: ObservableObject {
             let refs = parseRefs(refStr, currentHead: currentHead)
             let date = dateFormatter.date(from: dateStr) ?? Date()
 
-            // Parse shortstat line: "3 files changed, 10 insertions(+), 5 deletions(-)"
-            let (insertions, deletions) = parseShortStats(statsLine)
-
             return Commit(
                 id: hash,
                 shortHash: shortHash,
@@ -232,38 +217,10 @@ class GitManager: ObservableObject {
                 parentHashes: parents,
                 isHead: hash == currentHead,
                 refs: refs,
-                insertions: insertions,
-                deletions: deletions
+                insertions: nil,
+                deletions: nil
             )
         }
-    }
-
-    private func parseShortStats(_ statsLine: String) -> (insertions: Int?, deletions: Int?) {
-        guard !statsLine.isEmpty else { return (nil, nil) }
-
-        var insertions: Int?
-        var deletions: Int?
-
-        // Match "X insertions(+)" or "X insertion(+)"
-        if let range = statsLine.range(of: #"(\d+) insertion"#, options: .regularExpression) {
-            let match = statsLine[range]
-            let numberStr = match.replacingOccurrences(of: " insertion", with: "")
-            insertions = Int(numberStr)
-        }
-
-        // Match "X deletions(-)" or "X deletion(-)"
-        if let range = statsLine.range(of: #"(\d+) deletion"#, options: .regularExpression) {
-            let match = statsLine[range]
-            let numberStr = match.replacingOccurrences(of: " deletion", with: "")
-            deletions = Int(numberStr)
-        }
-
-        // If we parsed any stats but one is missing, it means 0 for that stat
-        if insertions != nil || deletions != nil {
-            return (insertions ?? 0, deletions ?? 0)
-        }
-
-        return (nil, nil)
     }
 
     func fetchCommitFiles(hash: String) async throws -> [CommitFile] {
