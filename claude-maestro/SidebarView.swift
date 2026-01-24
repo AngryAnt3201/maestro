@@ -172,6 +172,15 @@ struct ConfigurationSidebarContent: View {
                     Divider()
                         .padding(.horizontal, 8)
 
+                    // Project Context (CLAUDE.md) Section
+                    ClaudeMDSection(
+                        claudeMDManager: manager.claudeMDManager,
+                        projectPath: manager.projectPath
+                    )
+
+                    Divider()
+                        .padding(.horizontal, 8)
+
                     // Batch Action Bar (when selection active, only when not running)
                     if !manager.isRunning && manager.selectionManager.hasSelection {
                         BatchActionBar(manager: manager)
@@ -912,6 +921,71 @@ struct QuickActionsSection: View {
                 quickActionManager: quickActionManager,
                 onDismiss: { showManagerSheet = false }
             )
+        }
+    }
+}
+
+// MARK: - Claude.md Section
+
+struct ClaudeMDSection: View {
+    @ObservedObject var claudeMDManager: ClaudeMDManager
+    let projectPath: String
+    @State private var showEditor: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Project Context")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button {
+                    showEditor = true
+                } label: {
+                    Image(systemName: "pencil.circle")
+                        .foregroundColor(.accentColor)
+                }
+                .buttonStyle(.plain)
+                .help("Edit CLAUDE.md")
+                .disabled(projectPath.isEmpty)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    Image(systemName: claudeMDManager.fileExists ? "doc.text.fill" : "doc.badge.plus")
+                        .foregroundColor(claudeMDManager.fileExists ? .green : .orange)
+                        .font(.caption)
+                    Text(claudeMDManager.fileExists ? "CLAUDE.md" : "No CLAUDE.md")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+
+                if claudeMDManager.fileExists {
+                    // Preview first few lines
+                    let preview = String(claudeMDManager.content.prefix(100))
+                    Text(preview.isEmpty ? "Empty file" : preview + (claudeMDManager.content.count > 100 ? "..." : ""))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                } else {
+                    Text("Click to create project context file")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(NSColor.windowBackgroundColor))
+            .cornerRadius(8)
+            .onTapGesture {
+                if !projectPath.isEmpty {
+                    showEditor = true
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .sheet(isPresented: $showEditor) {
+            ClaudeMDEditorSheet(claudeMDManager: claudeMDManager)
         }
     }
 }

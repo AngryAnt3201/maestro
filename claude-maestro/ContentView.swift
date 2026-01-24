@@ -259,6 +259,7 @@ class SessionManager: ObservableObject {
     @Published var defaultMode: TerminalMode = .claudeCode
     @Published var gitManager = GitManager()
     @Published var worktreeManager = WorktreeManager()
+    @Published var claudeMDManager = ClaudeMDManager()
 
     // Selection management
     @Published var selectionManager = SelectionManager()
@@ -373,6 +374,8 @@ class SessionManager: ObservableObject {
 
         await MainActor.run {
             projectPath = path
+            // Load the main project's CLAUDE.md content
+            claudeMDManager.loadContent(from: path)
         }
         await gitManager.setRepository(path: path)
 
@@ -451,6 +454,9 @@ class SessionManager: ObservableObject {
         if let oldPath = oldPath, !oldPath.isEmpty {
             await cleanupOldRepoWorktrees(oldRepoPath: oldPath)
         }
+
+        // 6a. Clear CLAUDE.md manager state
+        claudeMDManager.clear()
 
         // 7. Clear worktree manager state
         await worktreeManager.clearAllWorktrees()
