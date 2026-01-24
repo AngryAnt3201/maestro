@@ -138,7 +138,7 @@ class MarketplaceManager: ObservableObject {
         // Try parsing as MarketplaceManifest first
         do {
             let manifest = try decoder.decode(MarketplaceManifest.self, from: data)
-            return manifest.plugins.map { $0.toMarketplacePlugin(marketplace: source.name, baseURL: baseURL) }
+            return (manifest.plugins ?? []).map { $0.toMarketplacePlugin(marketplace: source.name, baseURL: baseURL) }
         } catch let manifestError {
             // Try parsing as array of plugins directly
             do {

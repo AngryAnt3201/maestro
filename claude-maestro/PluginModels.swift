@@ -297,7 +297,7 @@ struct SessionPluginConfig: Codable {
 struct MarketplaceManifest: Codable {
     var name: String
     var description: String?
-    var plugins: [MarketplacePluginManifest]
+    var plugins: [MarketplacePluginManifest]?
 }
 
 /// Plugin entry in marketplace.json
