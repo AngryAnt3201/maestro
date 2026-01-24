@@ -57,6 +57,39 @@ class ClaudeDocManager {
         return nil
     }
 
+    /// Generate skills section for CLAUDE.md
+    static func generateSkillsSection(enabledSkills: [SkillConfig]) -> String {
+        guard !enabledSkills.isEmpty else { return "" }
+
+        var section = """
+
+        ## Available Skills
+
+        The following skills are enabled for this session:
+
+        """
+
+        for skill in enabledSkills {
+            section += "- `/\(skill.commandName)` - \(skill.description)\n"
+            if let hint = skill.argumentHint {
+                section += "  - Usage: `/\(skill.commandName) \(hint)`\n"
+            }
+        }
+
+        section += """
+
+        ### Skill Locations
+
+        Skills are loaded from these paths:
+        """
+
+        for skill in enabledSkills {
+            section += "\n- `\(skill.path)`"
+        }
+
+        return section
+    }
+
     /// Generate claude.md content for a project
     static func generateContent(
         projectPath: String,
@@ -65,7 +98,8 @@ class ClaudeDocManager {
         sessionId: Int,
         port: Int?,
         mcpServerPath: String? = nil,
-        mainRepoClaudeMD: String? = nil
+        mainRepoClaudeMD: String? = nil,
+        skillsSection: String? = nil
     ) -> String {
         var content = """
         # Claude Code Session Context
@@ -158,6 +192,11 @@ class ClaudeDocManager {
             Use the `detect_project_type` MCP tool to auto-detect the run command.
             """
             }
+        }
+
+        // Add skills section if provided
+        if let skills = skillsSection, !skills.isEmpty {
+            content += skills
         }
 
         content += """
@@ -743,6 +782,12 @@ class ClaudeDocManager {
             mainRepoClaudeMD = try? String(contentsOfFile: mainClaudeMDPath, encoding: .utf8)
         }
 
+        // Initialize skill manager session config and generate skills section
+        SkillManager.shared.initializeSessionConfig(for: sessionId)
+        SkillManager.shared.scanProjectSkills(projectPath: projectPath)
+        let enabledSkills = SkillManager.shared.enabledSkills(for: sessionId)
+        let skillsSection = generateSkillsSection(enabledSkills: enabledSkills)
+
         let content = generateContent(
             projectPath: projectPath,
             runCommand: effectiveRunCommand,
@@ -750,7 +795,8 @@ class ClaudeDocManager {
             sessionId: sessionId,
             port: port,
             mcpServerPath: mcpServerPath,
-            mainRepoClaudeMD: mainRepoClaudeMD
+            mainRepoClaudeMD: mainRepoClaudeMD,
+            skillsSection: skillsSection
         )
 
         let filePath = URL(fileURLWithPath: directory).appendingPathComponent("CLAUDE.md")

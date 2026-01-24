@@ -253,6 +253,12 @@ struct ConfigurationSidebarContent: View {
                     Divider()
                         .padding(.horizontal, 8)
 
+                    // Plugins & Skills Section
+                    MarketplaceSection()
+
+                    Divider()
+                        .padding(.horizontal, 8)
+
                     // Quick Actions Section
                     QuickActionsSection()
                 }
