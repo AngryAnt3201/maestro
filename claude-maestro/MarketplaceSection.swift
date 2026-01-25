@@ -83,11 +83,6 @@ struct MarketplaceSection: View {
                         ForEach(marketplaceManager.installedPlugins) { plugin in
                             InstalledPluginRow(
                                 plugin: plugin,
-                                onToggle: { enabled in
-                                    var updated = plugin
-                                    updated.isEnabled = enabled
-                                    // Update in manager (would need update method)
-                                },
                                 onTap: { showPluginDetail = plugin },
                                 onDelete: {
                                     pluginToDelete = plugin
@@ -98,14 +93,7 @@ struct MarketplaceSection: View {
 
                         // Discovered skills (not from plugins)
                         ForEach(skillManager.installedSkills) { skill in
-                            SkillRow(
-                                skill: skill,
-                                onToggle: { enabled in
-                                    var updated = skill
-                                    updated.isEnabled = enabled
-                                    skillManager.updateSkill(updated)
-                                }
-                            )
+                            SkillRow(skill: skill)
                         }
                     }
                     .padding(8)
@@ -145,20 +133,11 @@ struct MarketplaceSection: View {
 
 struct InstalledPluginRow: View {
     let plugin: InstalledPlugin
-    let onToggle: (Bool) -> Void
     let onTap: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
-            // Enable toggle
-            Toggle("", isOn: Binding(
-                get: { plugin.isEnabled },
-                set: { onToggle($0) }
-            ))
-            .toggleStyle(.switch)
-            .controlSize(.mini)
-
             // Plugin type icon
             Image(systemName: "puzzlepiece.extension")
                 .foregroundColor(.purple)
@@ -206,7 +185,7 @@ struct InstalledPluginRow: View {
         .padding(.horizontal, 4)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(plugin.isEnabled ? Color.purple.opacity(0.1) : Color.clear)
+                .fill(Color.purple.opacity(0.05))
         )
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
@@ -217,18 +196,9 @@ struct InstalledPluginRow: View {
 
 struct SkillRow: View {
     let skill: SkillConfig
-    let onToggle: (Bool) -> Void
 
     var body: some View {
         HStack(spacing: 8) {
-            // Enable toggle
-            Toggle("", isOn: Binding(
-                get: { skill.isEnabled },
-                set: { onToggle($0) }
-            ))
-            .toggleStyle(.switch)
-            .controlSize(.mini)
-
             // Skill type icon
             Image(systemName: skill.source.icon)
                 .foregroundColor(.orange)
@@ -267,7 +237,7 @@ struct SkillRow: View {
         .padding(.horizontal, 4)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(skill.isEnabled ? Color.orange.opacity(0.1) : Color.clear)
+                .fill(Color.orange.opacity(0.05))
         )
     }
 }

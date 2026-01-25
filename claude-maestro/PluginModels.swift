@@ -248,6 +248,7 @@ struct InstalledPlugin: Codable, Identifiable, Hashable {
     var skills: [String]                // Skill names from this plugin
     var mcpServers: [String]            // MCP server names from this plugin
     var isEnabled: Bool
+    var skillSymlinks: [String]         // Symlink paths created in ~/.claude/skills/
 
     init(
         id: UUID = UUID(),
@@ -260,7 +261,8 @@ struct InstalledPlugin: Codable, Identifiable, Hashable {
         path: String,
         skills: [String] = [],
         mcpServers: [String] = [],
-        isEnabled: Bool = true
+        isEnabled: Bool = true,
+        skillSymlinks: [String] = []
     ) {
         self.id = id
         self.name = name
@@ -273,6 +275,7 @@ struct InstalledPlugin: Codable, Identifiable, Hashable {
         self.skills = skills
         self.mcpServers = mcpServers
         self.isEnabled = isEnabled
+        self.skillSymlinks = skillSymlinks
     }
 }
 

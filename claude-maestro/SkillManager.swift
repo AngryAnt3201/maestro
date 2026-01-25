@@ -43,19 +43,42 @@ class SkillManager: ObservableObject {
             .appendingPathComponent(".claude/skills").path
     }
 
+    /// Plugins directory path
+    private var pluginsPath: String {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/plugins").path
+    }
+
+    /// Ensure the skills directory exists
+    func ensureSkillsDirectory() {
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: personalSkillsPath) {
+            try? fm.createDirectory(atPath: personalSkillsPath, withIntermediateDirectories: true)
+        }
+    }
+
     /// Scan standard skill locations for installed skills
     func scanForSkills() {
         isScanning = true
         lastScanError = nil
 
+        // Ensure skills directory exists
+        ensureSkillsDirectory()
+
         var discoveredSkills: [SkillConfig] = []
 
-        // 1. Personal skills: ~/.claude/skills/*/SKILL.md
+        // 1. Personal skills: ~/.claude/skills/*/SKILL.md (includes symlinks from plugins)
         if let personalSkills = scanDirectory(personalSkillsPath, source: .personal) {
             discoveredSkills.append(contentsOf: personalSkills)
         }
 
-        // 2. Project skills (if project path is set)
+        // 2. Scan plugins directory for skills: ~/.claude/plugins/*/skills/*/SKILL.md
+        // This catches skills from plugins that weren't symlinked (e.g., installed outside Maestro)
+        if let pluginSkills = scanPluginsDirectory() {
+            discoveredSkills.append(contentsOf: pluginSkills)
+        }
+
+        // 3. Project skills (if project path is set)
         if let projectPath = currentProjectPath {
             let projectSkillsPath = "\(projectPath)/.claude/skills"
             if let projectSkills = scanDirectory(projectSkillsPath, source: .project(projectPath: projectPath)) {
@@ -67,6 +90,61 @@ class SkillManager: ObservableObject {
         mergeDiscoveredSkills(discoveredSkills)
 
         isScanning = false
+    }
+
+    /// Scan the plugins directory for skills
+    private func scanPluginsDirectory() -> [SkillConfig]? {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: pluginsPath) else { return nil }
+
+        guard let pluginDirs = try? fm.contentsOfDirectory(atPath: pluginsPath) else {
+            return nil
+        }
+
+        var skills: [SkillConfig] = []
+
+        for pluginName in pluginDirs {
+            let pluginPath = "\(pluginsPath)/\(pluginName)"
+            var isDir: ObjCBool = false
+
+            guard fm.fileExists(atPath: pluginPath, isDirectory: &isDir), isDir.boolValue else {
+                continue
+            }
+
+            // Check if plugin root contains SKILL.md
+            let rootSkillPath = "\(pluginPath)/SKILL.md"
+            if fm.fileExists(atPath: rootSkillPath) {
+                if let skill = parseSkill(at: pluginPath, source: .plugin(pluginName: pluginName)) {
+                    // Check if already discovered via symlink (avoid duplicates)
+                    if !skills.contains(where: { $0.name == skill.name }) {
+                        skills.append(skill)
+                    }
+                }
+            }
+
+            // Check for skills subdirectory
+            let skillsDir = "\(pluginPath)/skills"
+            if let skillDirContents = try? fm.contentsOfDirectory(atPath: skillsDir) {
+                for skillName in skillDirContents {
+                    let skillPath = "\(skillsDir)/\(skillName)"
+                    let skillMDPath = "\(skillPath)/SKILL.md"
+
+                    var skillIsDir: ObjCBool = false
+                    if fm.fileExists(atPath: skillPath, isDirectory: &skillIsDir),
+                       skillIsDir.boolValue,
+                       fm.fileExists(atPath: skillMDPath) {
+                        if let skill = parseSkill(at: skillPath, source: .plugin(pluginName: pluginName)) {
+                            // Check if already discovered via symlink (avoid duplicates)
+                            if !skills.contains(where: { $0.name == skill.name }) {
+                                skills.append(skill)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return skills.isEmpty ? nil : skills
     }
 
     /// Scan a project directory for project-specific skills

@@ -38,6 +38,50 @@ class MarketplaceManager: ObservableObject {
         loadInstalledPlugins()
         loadSessionConfigs()
         setupDefaultSources()
+        verifyPluginSymlinks()
+    }
+
+    /// Verify and recreate any missing symlinks for installed plugins
+    private func verifyPluginSymlinks() {
+        let fm = FileManager.default
+
+        // Ensure skills directory exists
+        try? ensureSkillsDirectory()
+
+        var needsPersist = false
+
+        for index in installedPlugins.indices {
+            var plugin = installedPlugins[index]
+
+            // Check if symlinks exist
+            var validSymlinks: [String] = []
+            var missingSymlinks = false
+
+            for symlinkPath in plugin.skillSymlinks {
+                if fm.fileExists(atPath: symlinkPath) {
+                    validSymlinks.append(symlinkPath)
+                } else {
+                    missingSymlinks = true
+                }
+            }
+
+            // If some symlinks are missing, try to recreate them
+            if missingSymlinks && fm.fileExists(atPath: plugin.path) {
+                do {
+                    let newSymlinks = try symlinkPluginSkills(from: plugin.path, pluginName: plugin.name)
+                    plugin.skillSymlinks = newSymlinks
+                    plugin.skills = newSymlinks.map { URL(fileURLWithPath: $0).lastPathComponent }
+                    installedPlugins[index] = plugin
+                    needsPersist = true
+                } catch {
+                    print("Warning: Failed to recreate symlinks for \(plugin.name): \(error)")
+                }
+            }
+        }
+
+        if needsPersist {
+            persistInstalledPlugins()
+        }
     }
 
     // MARK: - Default Setup
@@ -156,6 +200,75 @@ class MarketplaceManager: ObservableObject {
 
     // MARK: - Plugin Installation
 
+    /// Personal skills directory path
+    private var personalSkillsPath: String {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/skills").path
+    }
+
+    /// Ensure the skills directory exists
+    private func ensureSkillsDirectory() throws {
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: personalSkillsPath) {
+            try fm.createDirectory(atPath: personalSkillsPath, withIntermediateDirectories: true)
+        }
+    }
+
+    /// Create symlinks for plugin skills in ~/.claude/skills/
+    private func symlinkPluginSkills(from pluginPath: String, pluginName: String) throws -> [String] {
+        let fm = FileManager.default
+        var createdSymlinks: [String] = []
+
+        // Ensure skills directory exists
+        try ensureSkillsDirectory()
+
+        // Look for skills directory in plugin
+        let skillsDir = "\(pluginPath)/skills"
+        guard fm.fileExists(atPath: skillsDir) else {
+            // No skills directory - check if plugin root contains SKILL.md
+            let rootSkillPath = "\(pluginPath)/SKILL.md"
+            if fm.fileExists(atPath: rootSkillPath) {
+                // Plugin root is a skill - symlink it
+                let symlinkPath = "\(personalSkillsPath)/\(pluginName)"
+                try? fm.removeItem(atPath: symlinkPath) // Remove existing symlink if any
+                try fm.createSymbolicLink(atPath: symlinkPath, withDestinationPath: pluginPath)
+                createdSymlinks.append(symlinkPath)
+            }
+            return createdSymlinks
+        }
+
+        // Scan skills directory for subdirectories with SKILL.md
+        guard let contents = try? fm.contentsOfDirectory(atPath: skillsDir) else {
+            return createdSymlinks
+        }
+
+        for skillName in contents {
+            let skillPath = "\(skillsDir)/\(skillName)"
+            let skillMDPath = "\(skillPath)/SKILL.md"
+
+            var isDir: ObjCBool = false
+            if fm.fileExists(atPath: skillPath, isDirectory: &isDir),
+               isDir.boolValue,
+               fm.fileExists(atPath: skillMDPath) {
+                // Create symlink in ~/.claude/skills/
+                let symlinkPath = "\(personalSkillsPath)/\(skillName)"
+                try? fm.removeItem(atPath: symlinkPath) // Remove existing symlink if any
+                try fm.createSymbolicLink(atPath: symlinkPath, withDestinationPath: skillPath)
+                createdSymlinks.append(symlinkPath)
+            }
+        }
+
+        return createdSymlinks
+    }
+
+    /// Remove skill symlinks created for a plugin
+    private func removePluginSymlinks(_ symlinks: [String]) {
+        let fm = FileManager.default
+        for symlinkPath in symlinks {
+            try? fm.removeItem(atPath: symlinkPath)
+        }
+    }
+
     /// Install a plugin from marketplace
     func installPlugin(_ plugin: MarketplacePlugin, scope: InstallScope) async throws -> InstalledPlugin {
         // Determine installation path based on scope
@@ -182,6 +295,19 @@ class MarketplaceManager: ObservableObject {
             try data.write(to: URL(fileURLWithPath: targetPath))
         }
 
+        // Create symlinks for plugin skills
+        var skillSymlinks: [String] = []
+        var discoveredSkills: [String] = []
+        if plugin.types.contains(.skill) {
+            do {
+                skillSymlinks = try symlinkPluginSkills(from: installPath, pluginName: plugin.name)
+                // Extract skill names from symlink paths
+                discoveredSkills = skillSymlinks.map { URL(fileURLWithPath: $0).lastPathComponent }
+            } catch {
+                print("Warning: Failed to create skill symlinks: \(error)")
+            }
+        }
+
         // Create installed plugin record
         let installed = InstalledPlugin(
             name: plugin.name,
@@ -190,17 +316,16 @@ class MarketplaceManager: ObservableObject {
             source: plugin.marketplace == "claude-plugins-official" ? .official : .marketplace(name: plugin.marketplace),
             installScope: scope,
             path: installPath,
-            skills: plugin.types.contains(.skill) ? [plugin.name] : [],
-            mcpServers: plugin.types.contains(.mcp) ? [plugin.name] : []
+            skills: discoveredSkills.isEmpty ? (plugin.types.contains(.skill) ? [plugin.name] : []) : discoveredSkills,
+            mcpServers: plugin.types.contains(.mcp) ? [plugin.name] : [],
+            skillSymlinks: skillSymlinks
         )
 
         installedPlugins.append(installed)
         persistInstalledPlugins()
 
-        // If plugin contains skills, trigger skill rescan
-        if plugin.types.contains(.skill) {
-            SkillManager.shared.scanForSkills()
-        }
+        // Trigger skill rescan to pick up the new symlinks
+        SkillManager.shared.scanForSkills()
 
         return installed
     }
@@ -210,6 +335,9 @@ class MarketplaceManager: ObservableObject {
         guard let plugin = installedPlugins.first(where: { $0.id == id }) else {
             throw MarketplaceError.pluginNotFound
         }
+
+        // Remove skill symlinks first
+        removePluginSymlinks(plugin.skillSymlinks)
 
         // Remove plugin directory
         try? FileManager.default.removeItem(atPath: plugin.path)
