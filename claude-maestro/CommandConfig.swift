@@ -88,6 +88,18 @@ enum CommandSource: Codable, Hashable {
             return "storefront"
         }
     }
+
+    /// Plugin name for bundling purposes (nil for personal/project commands)
+    var pluginName: String? {
+        switch self {
+        case .personal, .project:
+            return nil
+        case .plugin(let name):
+            return name
+        case .marketplace(_, let plugin):
+            return plugin
+        }
+    }
 }
 
 /// Per-session configuration for which commands are enabled

@@ -69,6 +69,39 @@ struct CapabilitySelector: View {
         }
     }
 
+    /// Commands grouped by plugin for bundling
+    /// Returns array of (pluginName, commands) tuples
+    /// Plugins with 2+ commands are bundled; single-command plugins shown individually
+    private var commandsByPlugin: [(pluginName: String?, commands: [CommandConfig])] {
+        // Group commands by plugin name
+        var grouped: [String?: [CommandConfig]] = [:]
+        for command in filteredCommands {
+            let pluginName = command.source.pluginName
+            grouped[pluginName, default: []].append(command)
+        }
+
+        // Build result: bundle plugins with 2+ commands, show single commands individually
+        var result: [(pluginName: String?, commands: [CommandConfig])] = []
+
+        // First add bundles (plugins with 2+ commands)
+        for (pluginName, commands) in grouped.sorted(by: { ($0.key ?? "") < ($1.key ?? "") }) {
+            if pluginName != nil && commands.count >= 2 {
+                result.append((pluginName: pluginName, commands: commands))
+            }
+        }
+
+        // Then add individual commands (single-command plugins or non-plugin commands)
+        for (pluginName, commands) in grouped.sorted(by: { ($0.key ?? "") < ($1.key ?? "") }) {
+            if pluginName == nil || commands.count < 2 {
+                for command in commands {
+                    result.append((pluginName: nil, commands: [command]))
+                }
+            }
+        }
+
+        return result
+    }
+
     /// List of enabled skill names for tooltip
     private var enabledSkillNames: [String] {
         skillManager.installedSkills
@@ -196,14 +229,32 @@ struct CapabilitySelector: View {
                                 .padding(.vertical, 4)
                         }
                         SectionHeader(title: "Commands", count: enabledCommandCount, total: filteredCommands.count)
-                        ForEach(filteredCommands) { command in
-                            CommandToggleRow(
-                                command: command,
-                                isEnabled: sessionCommandConfig.isCommandEnabled(command.id),
-                                onToggle: { enabled in
-                                    commandManager.setCommandEnabled(command.id, enabled: enabled, for: sessionId)
-                                }
-                            )
+                        ForEach(Array(commandsByPlugin.enumerated()), id: \.offset) { _, item in
+                            if let pluginName = item.pluginName, item.commands.count >= 2 {
+                                // Render as bundle
+                                PluginCommandBundleRow(
+                                    pluginName: pluginName,
+                                    commands: item.commands,
+                                    enabledIds: sessionCommandConfig.enabledCommandIds,
+                                    onToggleAll: { enabled in
+                                        for command in item.commands {
+                                            commandManager.setCommandEnabled(command.id, enabled: enabled, for: sessionId)
+                                        }
+                                    },
+                                    onToggleCommand: { command, enabled in
+                                        commandManager.setCommandEnabled(command.id, enabled: enabled, for: sessionId)
+                                    }
+                                )
+                            } else if let command = item.commands.first {
+                                // Render as individual command
+                                CommandToggleRow(
+                                    command: command,
+                                    isEnabled: sessionCommandConfig.isCommandEnabled(command.id),
+                                    onToggle: { enabled in
+                                        commandManager.setCommandEnabled(command.id, enabled: enabled, for: sessionId)
+                                    }
+                                )
+                            }
                         }
                     }
 
@@ -338,6 +389,7 @@ private struct CommandToggleRow: View {
     let command: CommandConfig
     let isEnabled: Bool
     let onToggle: (Bool) -> Void
+    var indented: Bool = false
 
     var body: some View {
         Button {
@@ -370,17 +422,20 @@ private struct CommandToggleRow: View {
 
                 Spacer()
 
-                // Source badge
-                Text(command.source.displayName)
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(Color.secondary.opacity(0.1))
-                    .cornerRadius(3)
+                // Source badge (hide when indented in bundle)
+                if !indented {
+                    Text(command.source.displayName)
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.secondary.opacity(0.1))
+                        .cornerRadius(3)
+                }
             }
             .padding(.vertical, 4)
             .padding(.horizontal, 4)
+            .padding(.leading, indented ? 20 : 0)
             .background(
                 RoundedRectangle(cornerRadius: 4)
                     .fill(isEnabled ? Color.blue.opacity(0.05) : Color.clear)
@@ -388,6 +443,125 @@ private struct CommandToggleRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Plugin Command Bundle Row
+
+private struct PluginCommandBundleRow: View {
+    let pluginName: String
+    let commands: [CommandConfig]
+    let enabledIds: Set<UUID>
+    let onToggleAll: (Bool) -> Void
+    let onToggleCommand: (CommandConfig, Bool) -> Void
+
+    @State private var isExpanded = false
+
+    private var enabledCount: Int {
+        commands.filter { enabledIds.contains($0.id) }.count
+    }
+
+    private var checkboxState: CheckboxState {
+        if enabledCount == 0 {
+            return .none
+        } else if enabledCount == commands.count {
+            return .all
+        } else {
+            return .partial
+        }
+    }
+
+    private enum CheckboxState {
+        case none, partial, all
+
+        var icon: String {
+            switch self {
+            case .none: return "circle"
+            case .partial: return "minus.circle.fill"
+            case .all: return "checkmark.circle.fill"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .none: return .secondary
+            case .partial, .all: return .blue
+            }
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Bundle header row
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    // Expand/collapse chevron
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .frame(width: 10)
+
+                    // Bundle checkbox (clickable separately)
+                    Button {
+                        let shouldEnable = checkboxState != .all
+                        onToggleAll(shouldEnable)
+                    } label: {
+                        Image(systemName: checkboxState.icon)
+                            .foregroundColor(checkboxState.color)
+                    }
+                    .buttonStyle(.plain)
+
+                    // Plugin icon
+                    Image(systemName: "puzzlepiece.extension")
+                        .foregroundColor(.blue)
+                        .font(.caption)
+                        .frame(width: 16)
+
+                    // Plugin name
+                    Text(pluginName)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+
+                    Spacer()
+
+                    // Command count badge
+                    Text("\(enabledCount)/\(commands.count)")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.secondary.opacity(0.1))
+                        .cornerRadius(3)
+                }
+                .padding(.vertical, 4)
+                .padding(.horizontal, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(enabledCount > 0 ? Color.blue.opacity(0.05) : Color.clear)
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Expanded commands
+            if isExpanded {
+                ForEach(commands) { command in
+                    CommandToggleRow(
+                        command: command,
+                        isEnabled: enabledIds.contains(command.id),
+                        onToggle: { enabled in
+                            onToggleCommand(command, enabled)
+                        },
+                        indented: true
+                    )
+                }
+            }
+        }
     }
 }
 
