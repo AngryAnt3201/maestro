@@ -80,16 +80,17 @@ class SkillManager: ObservableObject {
 
         // 2. Scan plugins directory for skills: ~/.claude/plugins/*/skills/*/SKILL.md
         // This catches skills from plugins that weren't symlinked (e.g., installed outside Maestro)
+        // Note: We exclude the marketplaces subdirectory since those skills should only appear
+        // after being explicitly installed (which creates symlinks to ~/.claude/skills/)
         if let pluginSkills = scanPluginsDirectory() {
             discoveredSkills.append(contentsOf: pluginSkills)
         }
 
-        // 3. Scan marketplaces directory for skills: ~/.claude/plugins/marketplaces/*/plugins/*/skills/*/SKILL.md
-        if let marketplaceSkills = scanMarketplacesDirectory() {
-            discoveredSkills.append(contentsOf: marketplaceSkills)
-        }
+        // Note: We intentionally don't scan marketplaces directory directly.
+        // Marketplace skills should only appear after being installed via MarketplaceManager.installPlugin(),
+        // which creates symlinks in ~/.claude/skills/ that get picked up by the personal skills scan above.
 
-        // 4. Project skills (if project path is set)
+        // 3. Project skills (if project path is set)
         if let projectPath = currentProjectPath {
             let projectSkillsPath = "\(projectPath)/.claude/skills"
             if let projectSkills = scanDirectory(projectSkillsPath, source: .project(projectPath: projectPath)) {
@@ -115,6 +116,11 @@ class SkillManager: ObservableObject {
         var skills: [SkillConfig] = []
 
         for pluginName in pluginDirs {
+            // Skip marketplaces directory - those skills should only appear after explicit installation
+            if pluginName == "marketplaces" {
+                continue
+            }
+
             let pluginPath = "\(pluginsPath)/\(pluginName)"
             var isDir: ObjCBool = false
 

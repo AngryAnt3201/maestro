@@ -39,7 +39,8 @@ class MarketplaceManager: ObservableObject {
         loadSessionConfigs()
         setupDefaultSources()
         verifyPluginSymlinks()
-        syncMarketplaceSkills()
+        // Note: Don't call syncMarketplaceSkills() here - skills should only appear
+        // after being explicitly installed via installPlugin()
     }
 
     /// Verify and recreate any missing symlinks for installed plugins
@@ -275,7 +276,7 @@ class MarketplaceManager: ObservableObject {
 
         availablePlugins = allPlugins
         persistSources()
-        syncMarketplaceSkills()
+        // Note: Don't sync marketplace skills here - only installed plugins should have their skills visible
         isLoading = false
     }
 
