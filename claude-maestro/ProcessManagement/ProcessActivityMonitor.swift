@@ -276,7 +276,7 @@ extension ProcessActivityMonitor {
     ///   - activity: Detected activity level
     ///   - outputPattern: Optional pattern detected in terminal output
     /// - Returns: Recommended SessionStatus
-    func determineState(
+    internal func determineState(
         activity: ActivityLevel,
         outputPattern: OutputPattern?
     ) -> SessionStatus {
