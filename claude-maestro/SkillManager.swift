@@ -19,6 +19,9 @@ class SkillManager: ObservableObject {
     // Per-session skill configurations (sessionId -> config)
     @Published var sessionSkillConfigs: [Int: SessionSkillConfig] = [:]
 
+    // Per-session worktree paths (sessionId -> worktreePath) for skill syncing
+    private var sessionWorktreePaths: [Int: String] = [:]
+
     // Discovery status
     @Published var isScanning: Bool = false
     @Published var lastScanError: String?
@@ -73,24 +76,26 @@ class SkillManager: ObservableObject {
 
         var discoveredSkills: [SkillConfig] = []
 
-        // 1. Personal skills: ~/.claude/skills/*/SKILL.md (includes symlinks from plugins)
-        if let personalSkills = scanDirectory(personalSkillsPath, source: .personal) {
+        // 1. Personal skills: ~/.claude/skills/*/SKILL.md
+        // Note: Only scans non-symlinked skills now. Marketplace skills are discovered via MarketplaceManager.
+        if let personalSkills = scanDirectory(personalSkillsPath, source: .personal, followSymlinks: false) {
             discoveredSkills.append(contentsOf: personalSkills)
         }
 
         // 2. Scan plugins directory for skills: ~/.claude/plugins/*/skills/*/SKILL.md
-        // This catches skills from plugins that weren't symlinked (e.g., installed outside Maestro)
-        // Note: We exclude the marketplaces subdirectory since those skills should only appear
-        // after being explicitly installed (which creates symlinks to ~/.claude/skills/)
+        // This catches skills from plugins that weren't installed via marketplace
+        // Note: We exclude the marketplaces subdirectory since those are handled separately
         if let pluginSkills = scanPluginsDirectory() {
             discoveredSkills.append(contentsOf: pluginSkills)
         }
 
-        // Note: We intentionally don't scan marketplaces directory directly.
-        // Marketplace skills should only appear after being installed via MarketplaceManager.installPlugin(),
-        // which creates symlinks in ~/.claude/skills/ that get picked up by the personal skills scan above.
+        // 3. Scan installed marketplace plugins for skills (via MarketplaceManager)
+        // This replaces the old symlink-based discovery
+        if let marketplaceSkills = scanInstalledMarketplacePlugins() {
+            discoveredSkills.append(contentsOf: marketplaceSkills)
+        }
 
-        // 3. Project skills (if project path is set)
+        // 4. Project skills (if project path is set)
         if let projectPath = currentProjectPath {
             let projectSkillsPath = "\(projectPath)/.claude/skills"
             if let projectSkills = scanDirectory(projectSkillsPath, source: .project(projectPath: projectPath)) {
@@ -102,6 +107,69 @@ class SkillManager: ObservableObject {
         mergeDiscoveredSkills(discoveredSkills)
 
         isScanning = false
+    }
+
+    /// Scan installed marketplace plugins for skills
+    private func scanInstalledMarketplacePlugins() -> [SkillConfig]? {
+        // Access MarketplaceManager to get installed plugins
+        let installedPlugins = MarketplaceManager.shared.installedPlugins
+        guard !installedPlugins.isEmpty else { return nil }
+
+        var skills: [SkillConfig] = []
+
+        for plugin in installedPlugins {
+            let pluginPath = plugin.path
+            let fm = FileManager.default
+            var isDir: ObjCBool = false
+
+            guard fm.fileExists(atPath: pluginPath, isDirectory: &isDir), isDir.boolValue else {
+                continue
+            }
+
+            let marketplaceName: String
+            switch plugin.source {
+            case .official:
+                marketplaceName = "claude-plugins-official"
+            case .marketplace(let name):
+                marketplaceName = name
+            case .local:
+                marketplaceName = "local"
+            }
+
+            let source: SkillSource = .marketplace(name: marketplaceName, pluginName: plugin.name)
+
+            // Check if plugin root contains SKILL.md
+            let rootSkillPath = "\(pluginPath)/SKILL.md"
+            if fm.fileExists(atPath: rootSkillPath) {
+                if let skill = parseSkill(at: pluginPath, source: source) {
+                    if !skills.contains(where: { $0.path == skill.path }) {
+                        skills.append(skill)
+                    }
+                }
+            }
+
+            // Check for skills subdirectory
+            let skillsDir = "\(pluginPath)/skills"
+            if let skillDirContents = try? fm.contentsOfDirectory(atPath: skillsDir) {
+                for skillName in skillDirContents {
+                    let skillPath = "\(skillsDir)/\(skillName)"
+                    let skillMDPath = "\(skillPath)/SKILL.md"
+
+                    var skillIsDir: ObjCBool = false
+                    if fm.fileExists(atPath: skillPath, isDirectory: &skillIsDir),
+                       skillIsDir.boolValue,
+                       fm.fileExists(atPath: skillMDPath) {
+                        if let skill = parseSkill(at: skillPath, source: source) {
+                            if !skills.contains(where: { $0.path == skill.path }) {
+                                skills.append(skill)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return skills.isEmpty ? nil : skills
     }
 
     /// Scan the plugins directory for skills
@@ -265,7 +333,11 @@ class SkillManager: ObservableObject {
     }
 
     /// Scan a directory for skill directories containing SKILL.md
-    private func scanDirectory(_ path: String, source: SkillSource) -> [SkillConfig]? {
+    /// - Parameters:
+    ///   - path: Directory path to scan
+    ///   - source: Source attribution for discovered skills
+    ///   - followSymlinks: If false, skips symlinked directories (default: true)
+    private func scanDirectory(_ path: String, source: SkillSource, followSymlinks: Bool = true) -> [SkillConfig]? {
         let fm = FileManager.default
         guard fm.fileExists(atPath: path) else { return nil }
 
@@ -278,6 +350,15 @@ class SkillManager: ObservableObject {
         for item in contents {
             let skillPath = "\(path)/\(item)"
             let skillMDPath = "\(skillPath)/SKILL.md"
+
+            // Skip symlinks if followSymlinks is false
+            if !followSymlinks {
+                if let attrs = try? fm.attributesOfItem(atPath: skillPath),
+                   let fileType = attrs[.type] as? FileAttributeType,
+                   fileType == .typeSymbolicLink {
+                    continue
+                }
+            }
 
             // Check if it's a directory with SKILL.md
             var isDir: ObjCBool = false
@@ -527,6 +608,11 @@ class SkillManager: ObservableObject {
         }
         sessionSkillConfigs[sessionId] = config
         persistSessionConfigs()
+
+        // Re-sync worktree skills if we know the worktree path
+        if let worktreePath = sessionWorktreePaths[sessionId] {
+            syncWorktreeSkills(worktreePath: worktreePath, for: sessionId)
+        }
     }
 
     /// Get all skills that are enabled for a specific session
@@ -543,6 +629,100 @@ class SkillManager: ObservableObject {
             // Start with empty set - user must enable skills explicitly per session
             sessionSkillConfigs[sessionId] = SessionSkillConfig(enabledSkillIds: [])
             persistSessionConfigs()
+        }
+    }
+
+    // MARK: - Per-Session Worktree Skills
+
+    /// Sync skills to a worktree's .claude/skills/ directory based on session config
+    /// This creates symlinks to only the skills enabled for this session
+    func syncWorktreeSkills(worktreePath: String, for sessionId: Int) {
+        // Store the worktree path for future syncs (when skills are toggled)
+        sessionWorktreePaths[sessionId] = worktreePath
+
+        let fm = FileManager.default
+        let worktreeSkillsPath = "\(worktreePath)/.claude/skills"
+
+        // Get enabled skills for this session
+        let enabledSkillsList = enabledSkills(for: sessionId)
+        let enabledSkillPaths = Set(enabledSkillsList.map { $0.path })
+
+        // Ensure .claude directory exists
+        let claudeDir = "\(worktreePath)/.claude"
+        if !fm.fileExists(atPath: claudeDir) {
+            try? fm.createDirectory(atPath: claudeDir, withIntermediateDirectories: true)
+        }
+
+        // Get current symlinks in worktree skills directory
+        var existingSymlinks: [String: String] = [:] // name -> target
+        if fm.fileExists(atPath: worktreeSkillsPath) {
+            if let contents = try? fm.contentsOfDirectory(atPath: worktreeSkillsPath) {
+                for item in contents {
+                    let itemPath = "\(worktreeSkillsPath)/\(item)"
+                    if let target = try? fm.destinationOfSymbolicLink(atPath: itemPath) {
+                        // Resolve relative symlinks to absolute paths
+                        let resolvedTarget = URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: itemPath).deletingLastPathComponent()).standardized.path
+                        existingSymlinks[item] = resolvedTarget
+                    }
+                }
+            }
+        } else {
+            // Create skills directory
+            try? fm.createDirectory(atPath: worktreeSkillsPath, withIntermediateDirectories: true)
+        }
+
+        // Determine what symlinks need to be added/removed
+        let desiredSymlinks: [String: String] = enabledSkillsList.reduce(into: [:]) { result, skill in
+            let skillName = URL(fileURLWithPath: skill.path).lastPathComponent
+            result[skillName] = skill.path
+        }
+
+        // Remove symlinks that shouldn't exist anymore
+        for (name, _) in existingSymlinks {
+            if desiredSymlinks[name] == nil {
+                let symlinkPath = "\(worktreeSkillsPath)/\(name)"
+                try? fm.removeItem(atPath: symlinkPath)
+            }
+        }
+
+        // Add symlinks that don't exist yet or point to wrong target
+        for (name, targetPath) in desiredSymlinks {
+            let symlinkPath = "\(worktreeSkillsPath)/\(name)"
+
+            if let existingTarget = existingSymlinks[name] {
+                if existingTarget == targetPath {
+                    continue // Symlink already correct
+                }
+                // Wrong target, remove and recreate
+                try? fm.removeItem(atPath: symlinkPath)
+            }
+
+            // Create symlink
+            do {
+                try fm.createSymbolicLink(atPath: symlinkPath, withDestinationPath: targetPath)
+            } catch {
+                print("Warning: Failed to create skill symlink '\(name)' in worktree: \(error)")
+            }
+        }
+    }
+
+    /// Clean up worktree skills directory (remove all symlinks)
+    func cleanupWorktreeSkills(worktreePath: String) {
+        let fm = FileManager.default
+        let worktreeSkillsPath = "\(worktreePath)/.claude/skills"
+
+        guard fm.fileExists(atPath: worktreeSkillsPath) else { return }
+
+        if let contents = try? fm.contentsOfDirectory(atPath: worktreeSkillsPath) {
+            for item in contents {
+                let itemPath = "\(worktreeSkillsPath)/\(item)"
+                // Only remove symlinks, not actual directories
+                if let attrs = try? fm.attributesOfItem(atPath: itemPath),
+                   let fileType = attrs[.type] as? FileAttributeType,
+                   fileType == .typeSymbolicLink {
+                    try? fm.removeItem(atPath: itemPath)
+                }
+            }
         }
     }
 

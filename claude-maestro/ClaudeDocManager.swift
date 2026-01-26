@@ -788,6 +788,9 @@ class ClaudeDocManager {
         let enabledSkills = SkillManager.shared.enabledSkills(for: sessionId)
         let skillsSection = generateSkillsSection(enabledSkills: enabledSkills)
 
+        // Sync skills to worktree's .claude/skills/ directory (per-session skill control)
+        SkillManager.shared.syncWorktreeSkills(worktreePath: directory, for: sessionId)
+
         let content = generateContent(
             projectPath: projectPath,
             runCommand: effectiveRunCommand,
