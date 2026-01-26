@@ -19,6 +19,9 @@ class SkillManager: ObservableObject {
     // Per-session skill configurations (sessionId -> config)
     @Published var sessionSkillConfigs: [Int: SessionSkillConfig] = [:]
 
+    // Global visibility preferences for skill sources
+    @Published var visibleSkillSources: Set<SkillSource.SourceType> = Set(SkillSource.SourceType.allCases)
+
     // Per-session worktree paths (sessionId -> worktreePath) for skill syncing
     private var sessionWorktreePaths: [Int: String] = [:]
 
@@ -31,10 +34,12 @@ class SkillManager: ObservableObject {
 
     private let installedSkillsKey = "claude-maestro-installed-skills"
     private let sessionSkillConfigsKey = "claude-maestro-session-skill-configs"
+    private let visibleSourcesKey = "claude-maestro-visible-skill-sources"
 
     private init() {
         loadInstalledSkills()
         loadSessionConfigs()
+        loadVisibleSources()
         scanForSkills()
     }
 
@@ -632,6 +637,23 @@ class SkillManager: ObservableObject {
         }
     }
 
+    // MARK: - Global Source Visibility
+
+    /// Set whether a skill source type is visible in the selector
+    func setSourceVisible(_ sourceType: SkillSource.SourceType, visible: Bool) {
+        if visible {
+            visibleSkillSources.insert(sourceType)
+        } else {
+            visibleSkillSources.remove(sourceType)
+        }
+        persistVisibleSources()
+    }
+
+    /// Check if a skill source type is visible
+    func isSourceVisible(_ sourceType: SkillSource.SourceType) -> Bool {
+        visibleSkillSources.contains(sourceType)
+    }
+
     // MARK: - Per-Session Worktree Skills
 
     /// Sync skills to a worktree's .claude/skills/ directory based on session config
@@ -751,6 +773,24 @@ class SkillManager: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: sessionSkillConfigsKey),
            let decoded = try? JSONDecoder().decode([Int: SessionSkillConfig].self, from: data) {
             sessionSkillConfigs = decoded
+        }
+    }
+
+    private func persistVisibleSources() {
+        let rawValues = visibleSkillSources.map { $0.rawValue }
+        if let encoded = try? JSONEncoder().encode(rawValues) {
+            UserDefaults.standard.set(encoded, forKey: visibleSourcesKey)
+        }
+    }
+
+    private func loadVisibleSources() {
+        if let data = UserDefaults.standard.data(forKey: visibleSourcesKey),
+           let rawValues = try? JSONDecoder().decode([String].self, from: data) {
+            visibleSkillSources = Set(rawValues.compactMap { SkillSource.SourceType(rawValue: $0) })
+        }
+        // If empty (first launch or all disabled), default to all visible
+        if visibleSkillSources.isEmpty && UserDefaults.standard.object(forKey: visibleSourcesKey) == nil {
+            visibleSkillSources = Set(SkillSource.SourceType.allCases)
         }
     }
 }

@@ -74,6 +74,43 @@ enum SkillSource: Codable, Hashable {
     case marketplace(name: String, pluginName: String)   // From marketplace plugin
     case local(path: String)                             // Manually added local path
 
+    /// Simplified source type for filtering
+    enum SourceType: String, Codable, CaseIterable {
+        case personal
+        case project
+        case plugin
+        case marketplace
+
+        var displayName: String {
+            switch self {
+            case .personal: return "User Skills (~/.claude/skills)"
+            case .project: return "Project Skills (.claude/skills)"
+            case .plugin: return "Plugin Skills"
+            case .marketplace: return "Marketplace Skills"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .personal: return "person.circle"
+            case .project: return "folder"
+            case .plugin: return "puzzlepiece.extension"
+            case .marketplace: return "storefront"
+            }
+        }
+    }
+
+    /// Get the simplified source type for filtering
+    var sourceType: SourceType {
+        switch self {
+        case .personal: return .personal
+        case .project: return .project
+        case .plugin: return .plugin
+        case .marketplace: return .marketplace
+        case .local: return .personal  // Treat local as personal
+        }
+    }
+
     var displayName: String {
         switch self {
         case .personal:

@@ -30,9 +30,16 @@ struct SkillSelector: View {
             .map { "/\($0.commandName)" }
     }
 
-    /// All discovered skills (available for selection)
+    /// All discovered skills filtered by visible sources (available for selection)
     private var availableSkills: [SkillConfig] {
-        skillManager.installedSkills
+        skillManager.installedSkills.filter { skill in
+            skillManager.visibleSkillSources.contains(skill.source.sourceType)
+        }
+    }
+
+    /// Group skills by source type for organized display
+    private var skillsBySourceType: [SkillSource.SourceType: [SkillConfig]] {
+        Dictionary(grouping: availableSkills) { $0.source.sourceType }
     }
 
     var body: some View {
@@ -73,7 +80,7 @@ struct SkillSelector: View {
         Menu {
             Section("Skills") {
                 if availableSkills.isEmpty {
-                    Text("No skills installed")
+                    Text("No skills visible")
                         .foregroundColor(.secondary)
                 } else {
                     ForEach(availableSkills) { skill in
@@ -94,6 +101,19 @@ struct SkillSelector: View {
                                 Image(systemName: skill.source.icon)
                             }
                         }
+                    }
+                }
+            }
+
+            Divider()
+
+            Section("Skill Sources") {
+                ForEach(SkillSource.SourceType.allCases, id: \.self) { sourceType in
+                    Toggle(isOn: Binding(
+                        get: { skillManager.visibleSkillSources.contains(sourceType) },
+                        set: { skillManager.setSourceVisible(sourceType, visible: $0) }
+                    )) {
+                        Label(sourceType.displayName, systemImage: sourceType.icon)
                     }
                 }
             }
