@@ -57,6 +57,39 @@ class ClaudeDocManager {
         return nil
     }
 
+    /// Generate skills section for CLAUDE.md
+    static func generateSkillsSection(enabledSkills: [SkillConfig]) -> String {
+        guard !enabledSkills.isEmpty else { return "" }
+
+        var section = """
+
+        ## Available Skills
+
+        The following skills are enabled for this session:
+
+        """
+
+        for skill in enabledSkills {
+            section += "- `/\(skill.commandName)` - \(skill.description)\n"
+            if let hint = skill.argumentHint {
+                section += "  - Usage: `/\(skill.commandName) \(hint)`\n"
+            }
+        }
+
+        section += """
+
+        ### Skill Locations
+
+        Skills are loaded from these paths:
+        """
+
+        for skill in enabledSkills {
+            section += "\n- `\(skill.path)`"
+        }
+
+        return section
+    }
+
     /// Generate claude.md content for a project
     static func generateContent(
         projectPath: String,
@@ -65,7 +98,8 @@ class ClaudeDocManager {
         sessionId: Int,
         port: Int?,
         mcpServerPath: String? = nil,
-        mainRepoClaudeMD: String? = nil
+        mainRepoClaudeMD: String? = nil,
+        skillsSection: String? = nil
     ) -> String {
         var content = """
         # Claude Code Session Context
@@ -160,6 +194,11 @@ class ClaudeDocManager {
             }
         }
 
+        // Add skills section if provided
+        if let skills = skillsSection, !skills.isEmpty {
+            content += skills
+        }
+
         content += """
 
 
@@ -205,6 +244,7 @@ class ClaudeDocManager {
         sessionId: Int,
         maestroServerPath: String?,
         customServers: [MCPServerConfig],
+        pluginMCPServers: [String: Any] = [:],
         projectPath: String? = nil,
         portRangeStart: Int = 3000,
         portRangeEnd: Int = 3099
@@ -240,6 +280,11 @@ class ClaudeDocManager {
         // Add custom MCP servers
         for server in customServers {
             mcpServers[server.mcpKey] = server.toMCPJSON()
+        }
+
+        // Add plugin MCP servers
+        for (key, value) in pluginMCPServers {
+            mcpServers[key] = value
         }
 
         let config: [String: Any] = ["mcpServers": mcpServers]
@@ -322,10 +367,14 @@ class ClaudeDocManager {
         // Get enabled custom servers for this session
         let enabledServers = mcpManager.enabledServers(for: sessionId)
 
+        // Get enabled plugins and collect their MCP server configs
+        let pluginMCPServers = collectPluginMCPServers(for: sessionId)
+
         let content = generateMCPConfig(
             sessionId: sessionId,
             maestroServerPath: maestroPath,
             customServers: enabledServers,
+            pluginMCPServers: pluginMCPServers,
             projectPath: projectPath
         )
 
@@ -337,6 +386,100 @@ class ClaudeDocManager {
         } catch {
             print("Failed to generate .mcp.json: \(error)")
         }
+    }
+
+    /// Collect MCP server configurations from enabled plugins
+    @MainActor
+    static func collectPluginMCPServers(for sessionId: Int) -> [String: Any] {
+        var pluginMCPServers: [String: Any] = [:]
+        let fm = FileManager.default
+        var processedPaths = Set<String>()
+
+        // Get enabled plugins for this session from MarketplaceManager
+        let enabledPlugins = MarketplaceManager.shared.enabledPlugins(for: sessionId)
+
+        for plugin in enabledPlugins {
+            // Check if plugin has a .mcp.json file
+            let mcpJsonPath = "\(plugin.path)/.mcp.json"
+            processedPaths.insert(plugin.path)
+
+            guard fm.fileExists(atPath: mcpJsonPath),
+                  let data = try? Data(contentsOf: URL(fileURLWithPath: mcpJsonPath)),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let servers = json["mcpServers"] as? [String: Any] else {
+                continue
+            }
+
+            // Merge plugin's MCP servers (prefix with plugin name to avoid conflicts)
+            for (serverName, serverConfig) in servers {
+                // Use plugin-prefixed name to avoid conflicts
+                let prefixedName = "\(plugin.name):\(serverName)"
+                pluginMCPServers[prefixedName] = serverConfig
+            }
+        }
+
+        // Also scan ~/.claude/plugins/ directory for symlinked plugins with .mcp.json
+        // This catches plugins that exist as symlinks but aren't in the installedPlugins list
+        // (e.g., due to UserDefaults data loss or manual installation)
+        let pluginsDir = fm.homeDirectoryForCurrentUser.appendingPathComponent(".claude/plugins").path
+
+        if let pluginDirs = try? fm.contentsOfDirectory(atPath: pluginsDir) {
+            for pluginName in pluginDirs {
+                // Skip non-plugin directories
+                if ["cache", "repos", "marketplaces"].contains(pluginName) {
+                    continue
+                }
+                // Skip files that aren't directories (like config.json, installed_plugins.json)
+                if pluginName.hasSuffix(".json") {
+                    continue
+                }
+
+                let pluginPath = "\(pluginsDir)/\(pluginName)"
+
+                // Skip if already processed from enabledPlugins
+                if processedPaths.contains(pluginPath) {
+                    continue
+                }
+
+                // Resolve symlink to get the actual path
+                var resolvedPath = pluginPath
+                if let target = try? fm.destinationOfSymbolicLink(atPath: pluginPath) {
+                    // Resolve relative symlinks to absolute paths
+                    if target.hasPrefix("/") {
+                        resolvedPath = target
+                    } else {
+                        resolvedPath = URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: pluginPath).deletingLastPathComponent()).standardized.path
+                    }
+                }
+
+                // Skip if we've already processed this resolved path
+                if processedPaths.contains(resolvedPath) {
+                    continue
+                }
+                processedPaths.insert(resolvedPath)
+
+                // Check if this plugin has a .mcp.json file
+                let mcpJsonPath = "\(resolvedPath)/.mcp.json"
+
+                guard fm.fileExists(atPath: mcpJsonPath),
+                      let data = try? Data(contentsOf: URL(fileURLWithPath: mcpJsonPath)),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let servers = json["mcpServers"] as? [String: Any] else {
+                    continue
+                }
+
+                // Merge plugin's MCP servers (prefix with plugin name to avoid conflicts)
+                for (serverName, serverConfig) in servers {
+                    let prefixedName = "\(pluginName):\(serverName)"
+                    // Don't override if already set from enabledPlugins
+                    if pluginMCPServers[prefixedName] == nil {
+                        pluginMCPServers[prefixedName] = serverConfig
+                    }
+                }
+            }
+        }
+
+        return pluginMCPServers
     }
 
     /// Write claude.md to the specified directory
@@ -475,6 +618,7 @@ class ClaudeDocManager {
         sessionId: Int,
         maestroServerPath: String?,
         customServers: [MCPServerConfig],
+        pluginMCPServers: [String: Any] = [:],
         projectPath: String? = nil,
         portRangeStart: Int = 3000,
         portRangeEnd: Int = 3099
@@ -517,6 +661,11 @@ class ClaudeDocManager {
             mcpServers[server.mcpKey] = config
         }
 
+        // Add plugin MCP servers
+        for (key, value) in pluginMCPServers {
+            mcpServers[key] = value
+        }
+
         return ["mcpServers": mcpServers]
     }
 
@@ -533,6 +682,9 @@ class ClaudeDocManager {
         // Get Maestro path if enabled
         let maestroPath = sessionConfig.maestroEnabled ? mcpManager.getServerPath() : nil
         let enabledServers = mcpManager.enabledServers(for: sessionId)
+
+        // Get enabled plugins and collect their MCP server configs
+        let pluginMCPServers = collectPluginMCPServers(for: sessionId)
 
         do {
             // Create .gemini directory if needed
@@ -553,6 +705,7 @@ class ClaudeDocManager {
                 sessionId: sessionId,
                 maestroServerPath: maestroPath,
                 customServers: enabledServers,
+                pluginMCPServers: pluginMCPServers,
                 projectPath: projectPath
             )
 
@@ -743,6 +896,24 @@ class ClaudeDocManager {
             mainRepoClaudeMD = try? String(contentsOfFile: mainClaudeMDPath, encoding: .utf8)
         }
 
+        // Initialize skill manager session config and generate skills section
+        SkillManager.shared.initializeSessionConfig(for: sessionId)
+        SkillManager.shared.scanProjectSkills(projectPath: projectPath)
+        let enabledSkills = SkillManager.shared.enabledSkills(for: sessionId)
+        let skillsSection = generateSkillsSection(enabledSkills: enabledSkills)
+
+        // Sync skills to worktree's .claude/skills/ directory (per-session skill control)
+        SkillManager.shared.syncWorktreeSkills(worktreePath: directory, for: sessionId)
+
+        // Initialize command manager session config and sync commands
+        CommandManager.shared.initializeSessionConfig(for: sessionId)
+        CommandManager.shared.scanProjectCommands(projectPath: projectPath)
+        CommandManager.shared.syncWorktreeCommands(worktreePath: directory, for: sessionId)
+
+        // Sync hooks from enabled plugins to worktree's .claude/settings.local.json
+        HookManager.shared.scanForHooks()
+        HookManager.shared.syncWorktreeHooks(worktreePath: directory, for: sessionId)
+
         let content = generateContent(
             projectPath: projectPath,
             runCommand: effectiveRunCommand,
@@ -750,7 +921,8 @@ class ClaudeDocManager {
             sessionId: sessionId,
             port: port,
             mcpServerPath: mcpServerPath,
-            mainRepoClaudeMD: mainRepoClaudeMD
+            mainRepoClaudeMD: mainRepoClaudeMD,
+            skillsSection: skillsSection
         )
 
         let filePath = URL(fileURLWithPath: directory).appendingPathComponent("CLAUDE.md")

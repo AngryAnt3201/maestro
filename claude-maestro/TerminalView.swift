@@ -478,6 +478,14 @@ struct TerminalSessionView: View {
                     isDisabled: shouldLaunch
                 )
 
+                // Skills & Commands selector
+                CapabilitySelector(
+                    sessionId: session.id,
+                    skillManager: SkillManager.shared,
+                    commandManager: CommandManager.shared,
+                    isDisabled: shouldLaunch
+                )
+
                 // Agent status (only when terminal launched)
                 if shouldLaunch, let state = agentState {
                     HStack(spacing: 4) {

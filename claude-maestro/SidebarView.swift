@@ -253,6 +253,12 @@ struct ConfigurationSidebarContent: View {
                     Divider()
                         .padding(.horizontal, 8)
 
+                    // Plugins & Skills Section
+                    MarketplaceSection()
+
+                    Divider()
+                        .padding(.horizontal, 8)
+
                     // Quick Actions Section
                     QuickActionsSection()
                 }
@@ -692,10 +698,23 @@ struct MaestroMCPStatusSection: View {
 
 struct CustomMCPServersSection: View {
     @StateObject private var mcpManager = MCPServerManager.shared
+    @StateObject private var marketplaceManager = MarketplaceManager.shared
     @State private var showAddSheet: Bool = false
     @State private var editingServer: MCPServerConfig? = nil
     @State private var showDeleteConfirmation: Bool = false
     @State private var serverToDelete: MCPServerConfig? = nil
+
+    /// Plugins that have MCP servers and are enabled
+    private var pluginsWithMCP: [InstalledPlugin] {
+        marketplaceManager.installedPlugins.filter {
+            $0.isEnabled && !$0.mcpServers.isEmpty
+        }
+    }
+
+    /// Whether there are any MCP servers (custom or from plugins)
+    private var hasAnyServers: Bool {
+        !mcpManager.customServers.isEmpty || !pluginsWithMCP.isEmpty
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -717,12 +736,12 @@ struct CustomMCPServersSection: View {
             }
 
             VStack(spacing: 0) {
-                if mcpManager.customServers.isEmpty {
+                if !hasAnyServers {
                     HStack {
                         Image(systemName: "server.rack")
                             .foregroundColor(.secondary)
                             .font(.caption)
-                        Text("No custom servers")
+                        Text("No MCP servers")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -730,6 +749,7 @@ struct CustomMCPServersSection: View {
                     .padding(10)
                 } else {
                     VStack(spacing: 4) {
+                        // Custom MCP servers
                         ForEach(mcpManager.customServers) { server in
                             MCPServerRow(
                                 server: server,
@@ -744,6 +764,16 @@ struct CustomMCPServersSection: View {
                                     mcpManager.updateServer(updated)
                                 }
                             )
+                        }
+
+                        // Plugin MCP servers
+                        ForEach(pluginsWithMCP) { plugin in
+                            ForEach(plugin.mcpServers, id: \.self) { serverName in
+                                PluginMCPServerRow(
+                                    serverName: serverName,
+                                    pluginName: plugin.name
+                                )
+                            }
                         }
                     }
                     .padding(8)
@@ -849,6 +879,48 @@ struct MCPServerRow: View {
             RoundedRectangle(cornerRadius: 4)
                 .fill(server.isEnabled ? Color.accentColor.opacity(0.1) : Color.clear)
         )
+    }
+}
+
+// MARK: - Plugin MCP Server Row
+
+struct PluginMCPServerRow: View {
+    let serverName: String
+    let pluginName: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Plugin icon (read-only indicator)
+            Image(systemName: "puzzlepiece.extension.fill")
+                .font(.caption)
+                .foregroundColor(.accentColor)
+
+            // Server info
+            VStack(alignment: .leading, spacing: 1) {
+                Text(serverName)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text("from")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Text(pluginName)
+                        .font(.caption2)
+                        .foregroundColor(.accentColor)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color.accentColor.opacity(0.1))
+        )
+        .help("MCP server from \(pluginName) plugin")
     }
 }
 
