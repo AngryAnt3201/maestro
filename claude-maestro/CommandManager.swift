@@ -324,6 +324,52 @@ class CommandManager: ObservableObject {
         return nil
     }
 
+    // MARK: - Plugin Variable Substitution
+
+    /// Resolve the plugin root directory from a command's source
+    private func resolvePluginRoot(from commandPath: String, source: CommandSource) -> String? {
+        switch source {
+        case .personal, .project:
+            return nil
+        case .plugin(let pluginName):
+            let symlinkPath = "\(pluginsPath)/\(pluginName)"
+            if let target = try? FileManager.default.destinationOfSymbolicLink(atPath: symlinkPath) {
+                // Handle both absolute and relative symlink targets
+                if target.hasPrefix("/") {
+                    return target
+                }
+                return URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: pluginsPath)).standardized.path
+            }
+            return derivePluginRootFromPath(commandPath)
+        case .marketplace(let marketplaceName, let pluginName):
+            // Marketplace plugins are stored at ~/.claude/plugins/marketplaces/<marketplace>/<plugin>
+            let marketplacesPath = "\(pluginsPath)/marketplaces"
+            let pluginPath = "\(marketplacesPath)/\(marketplaceName)/\(pluginName)"
+            let fm = FileManager.default
+            if fm.fileExists(atPath: pluginPath) {
+                return pluginPath
+            }
+            return derivePluginRootFromPath(commandPath)
+        }
+    }
+
+    /// Derive plugin root by walking up the directory tree looking for "commands" directory
+    private func derivePluginRootFromPath(_ commandPath: String) -> String? {
+        var url = URL(fileURLWithPath: commandPath)
+        while url.path != "/" {
+            url = url.deletingLastPathComponent()
+            if url.lastPathComponent == "commands" {
+                return url.deletingLastPathComponent().path
+            }
+        }
+        return nil
+    }
+
+    /// Substitute ${CLAUDE_PLUGIN_ROOT} variable in command content
+    private func substitutePluginVariables(content: String, pluginRoot: String) -> String {
+        content.replacingOccurrences(of: "${CLAUDE_PLUGIN_ROOT}", with: pluginRoot)
+    }
+
     /// Merge discovered commands with existing, preserving IDs
     private func mergeDiscoveredCommands(_ discovered: [CommandConfig]) {
         var merged: [CommandConfig] = []
@@ -406,7 +452,7 @@ class CommandManager: ObservableObject {
     private var sessionWorktreePaths: [Int: String] = [:]
 
     /// Sync commands to a worktree's .claude/commands/ directory based on session config
-    /// This creates symlinks to only the commands enabled for this session
+    /// This creates symlinks or processed copies (for commands with ${CLAUDE_PLUGIN_ROOT}) to only the commands enabled for this session
     func syncWorktreeCommands(worktreePath: String, for sessionId: Int) {
         // Store the worktree path for future syncs (when commands are toggled)
         sessionWorktreePaths[sessionId] = worktreePath
@@ -423,8 +469,8 @@ class CommandManager: ObservableObject {
             try? fm.createDirectory(atPath: claudeDir, withIntermediateDirectories: true)
         }
 
-        // Get current symlinks in worktree commands directory
-        var existingSymlinks: [String: String] = [:] // name -> target
+        // Get current items in worktree commands directory (symlinks and processed copies)
+        var existingItems: [String: (isSymlink: Bool, target: String?)] = [:]
         if fm.fileExists(atPath: worktreeCommandsPath) {
             if let contents = try? fm.contentsOfDirectory(atPath: worktreeCommandsPath) {
                 for item in contents {
@@ -432,7 +478,10 @@ class CommandManager: ObservableObject {
                     if let target = try? fm.destinationOfSymbolicLink(atPath: itemPath) {
                         // Resolve relative symlinks to absolute paths
                         let resolvedTarget = URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: itemPath).deletingLastPathComponent()).standardized.path
-                        existingSymlinks[item] = resolvedTarget
+                        existingItems[item] = (isSymlink: true, target: resolvedTarget)
+                    } else {
+                        // Regular file (processed copy)
+                        existingItems[item] = (isSymlink: false, target: nil)
                     }
                 }
             }
@@ -441,43 +490,81 @@ class CommandManager: ObservableObject {
             try? fm.createDirectory(atPath: worktreeCommandsPath, withIntermediateDirectories: true)
         }
 
-        // Determine what symlinks need to be added/removed
-        // Commands are .md files, so we symlink the file directly
-        let desiredSymlinks: [String: String] = enabledCommandsList.reduce(into: [:]) { result, command in
+        // Build desired state for each command
+        let desiredCommands: [String: CommandConfig] = enabledCommandsList.reduce(into: [:]) { result, command in
             let commandFileName = URL(fileURLWithPath: command.path).lastPathComponent
-            result[commandFileName] = command.path
+            result[commandFileName] = command
         }
 
-        // Remove symlinks that shouldn't exist anymore
-        for (name, _) in existingSymlinks {
-            if desiredSymlinks[name] == nil {
-                let symlinkPath = "\(worktreeCommandsPath)/\(name)"
-                try? fm.removeItem(atPath: symlinkPath)
+        // Remove items that shouldn't exist anymore
+        for (name, _) in existingItems {
+            if desiredCommands[name] == nil {
+                let itemPath = "\(worktreeCommandsPath)/\(name)"
+                try? fm.removeItem(atPath: itemPath)
             }
         }
 
-        // Add symlinks that don't exist yet or point to wrong target
-        for (name, targetPath) in desiredSymlinks {
-            let symlinkPath = "\(worktreeCommandsPath)/\(name)"
+        // Add or update commands
+        for (name, command) in desiredCommands {
+            let destinationPath = "\(worktreeCommandsPath)/\(name)"
 
-            if let existingTarget = existingSymlinks[name] {
-                if existingTarget == targetPath {
-                    continue // Symlink already correct
+            // Check if command content contains ${CLAUDE_PLUGIN_ROOT}
+            guard let content = try? String(contentsOfFile: command.path, encoding: .utf8) else {
+                print("Warning: Failed to read command file '\(command.path)'")
+                continue
+            }
+
+            let needsSubstitution = content.contains("${CLAUDE_PLUGIN_ROOT}")
+
+            if needsSubstitution {
+                // Resolve plugin root and create processed copy
+                guard let pluginRoot = resolvePluginRoot(from: command.path, source: command.source) else {
+                    print("Warning: Could not resolve plugin root for command '\(name)'")
+                    continue
                 }
-                // Wrong target, remove and recreate
-                try? fm.removeItem(atPath: symlinkPath)
-            }
 
-            // Create symlink
-            do {
-                try fm.createSymbolicLink(atPath: symlinkPath, withDestinationPath: targetPath)
-            } catch {
-                print("Warning: Failed to create command symlink '\(name)' in worktree: \(error)")
+                let processedContent = substitutePluginVariables(content: content, pluginRoot: pluginRoot)
+
+                // Check if we need to update the file
+                if let existingItem = existingItems[name] {
+                    if !existingItem.isSymlink {
+                        // Already a processed copy, check if content matches
+                        if let existingContent = try? String(contentsOfFile: destinationPath, encoding: .utf8),
+                           existingContent == processedContent {
+                            continue // Content already correct
+                        }
+                    }
+                    // Remove existing item (either symlink or outdated copy)
+                    try? fm.removeItem(atPath: destinationPath)
+                }
+
+                // Write processed content as regular file
+                do {
+                    try processedContent.write(toFile: destinationPath, atomically: true, encoding: .utf8)
+                } catch {
+                    print("Warning: Failed to write processed command '\(name)' to worktree: \(error)")
+                }
+            } else {
+                // No substitution needed, use symlink for efficiency
+                if let existingItem = existingItems[name] {
+                    if existingItem.isSymlink && existingItem.target == command.path {
+                        continue // Symlink already correct
+                    }
+                    // Remove existing item (either wrong symlink or unnecessary copy)
+                    try? fm.removeItem(atPath: destinationPath)
+                }
+
+                // Create symlink
+                do {
+                    try fm.createSymbolicLink(atPath: destinationPath, withDestinationPath: command.path)
+                } catch {
+                    print("Warning: Failed to create command symlink '\(name)' in worktree: \(error)")
+                }
             }
         }
     }
 
-    /// Clean up worktree commands directory (remove all symlinks)
+    /// Clean up worktree commands directory (remove all symlinks and processed copies)
     func cleanupWorktreeCommands(worktreePath: String) {
         let fm = FileManager.default
         let worktreeCommandsPath = "\(worktreePath)/.claude/commands"
@@ -486,13 +573,13 @@ class CommandManager: ObservableObject {
 
         if let contents = try? fm.contentsOfDirectory(atPath: worktreeCommandsPath) {
             for item in contents {
+                // Only process .md files (our synced commands)
+                guard item.hasSuffix(".md") else { continue }
+
                 let itemPath = "\(worktreeCommandsPath)/\(item)"
-                // Only remove symlinks, not actual files
-                if let attrs = try? fm.attributesOfItem(atPath: itemPath),
-                   let fileType = attrs[.type] as? FileAttributeType,
-                   fileType == .typeSymbolicLink {
-                    try? fm.removeItem(atPath: itemPath)
-                }
+                // Remove both symlinks and regular files (processed copies)
+                // We only touch .md files to avoid removing unrelated files
+                try? fm.removeItem(atPath: itemPath)
             }
         }
     }
