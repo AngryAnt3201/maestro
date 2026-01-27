@@ -393,13 +393,15 @@ class ClaudeDocManager {
     static func collectPluginMCPServers(for sessionId: Int) -> [String: Any] {
         var pluginMCPServers: [String: Any] = [:]
         let fm = FileManager.default
+        var processedPaths = Set<String>()
 
-        // Get enabled plugins for this session
+        // Get enabled plugins for this session from MarketplaceManager
         let enabledPlugins = MarketplaceManager.shared.enabledPlugins(for: sessionId)
 
         for plugin in enabledPlugins {
             // Check if plugin has a .mcp.json file
             let mcpJsonPath = "\(plugin.path)/.mcp.json"
+            processedPaths.insert(plugin.path)
 
             guard fm.fileExists(atPath: mcpJsonPath),
                   let data = try? Data(contentsOf: URL(fileURLWithPath: mcpJsonPath)),
@@ -413,6 +415,67 @@ class ClaudeDocManager {
                 // Use plugin-prefixed name to avoid conflicts
                 let prefixedName = "\(plugin.name):\(serverName)"
                 pluginMCPServers[prefixedName] = serverConfig
+            }
+        }
+
+        // Also scan ~/.claude/plugins/ directory for symlinked plugins with .mcp.json
+        // This catches plugins that exist as symlinks but aren't in the installedPlugins list
+        // (e.g., due to UserDefaults data loss or manual installation)
+        let pluginsDir = fm.homeDirectoryForCurrentUser.appendingPathComponent(".claude/plugins").path
+
+        if let pluginDirs = try? fm.contentsOfDirectory(atPath: pluginsDir) {
+            for pluginName in pluginDirs {
+                // Skip non-plugin directories
+                if ["cache", "repos", "marketplaces"].contains(pluginName) {
+                    continue
+                }
+                // Skip files that aren't directories (like config.json, installed_plugins.json)
+                if pluginName.hasSuffix(".json") {
+                    continue
+                }
+
+                let pluginPath = "\(pluginsDir)/\(pluginName)"
+
+                // Skip if already processed from enabledPlugins
+                if processedPaths.contains(pluginPath) {
+                    continue
+                }
+
+                // Resolve symlink to get the actual path
+                var resolvedPath = pluginPath
+                if let target = try? fm.destinationOfSymbolicLink(atPath: pluginPath) {
+                    // Resolve relative symlinks to absolute paths
+                    if target.hasPrefix("/") {
+                        resolvedPath = target
+                    } else {
+                        resolvedPath = URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: pluginPath).deletingLastPathComponent()).standardized.path
+                    }
+                }
+
+                // Skip if we've already processed this resolved path
+                if processedPaths.contains(resolvedPath) {
+                    continue
+                }
+                processedPaths.insert(resolvedPath)
+
+                // Check if this plugin has a .mcp.json file
+                let mcpJsonPath = "\(resolvedPath)/.mcp.json"
+
+                guard fm.fileExists(atPath: mcpJsonPath),
+                      let data = try? Data(contentsOf: URL(fileURLWithPath: mcpJsonPath)),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let servers = json["mcpServers"] as? [String: Any] else {
+                    continue
+                }
+
+                // Merge plugin's MCP servers (prefix with plugin name to avoid conflicts)
+                for (serverName, serverConfig) in servers {
+                    let prefixedName = "\(pluginName):\(serverName)"
+                    // Don't override if already set from enabledPlugins
+                    if pluginMCPServers[prefixedName] == nil {
+                        pluginMCPServers[prefixedName] = serverConfig
+                    }
+                }
             }
         }
 
