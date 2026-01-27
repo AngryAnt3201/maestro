@@ -535,8 +535,15 @@ struct MarketplacePluginManifest: Codable {
         }()
 
         var downloadURL: String? = nil
-        if let path = path, let base = baseURL {
-            downloadURL = "\(base)/\(path)"
+        if let path = path {
+            // Check if path is already an absolute URL (external repository)
+            if path.hasPrefix("https://") || path.hasPrefix("git@") {
+                // External URL source - use path directly as the download URL
+                downloadURL = path
+            } else if let base = baseURL {
+                // Relative path - combine with base URL
+                downloadURL = "\(base)/\(path)"
+            }
         }
 
         return MarketplacePlugin(

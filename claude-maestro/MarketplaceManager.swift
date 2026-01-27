@@ -569,6 +569,13 @@ class MarketplaceManager: ObservableObject {
     private func deriveMarketplaceSourcePath(from plugin: MarketplacePlugin) -> String? {
         guard let downloadURL = plugin.downloadURL else { return nil }
 
+        // Check if this is an external URL source (full git repo URL)
+        // These are stored in external_cloned/ subdirectory after cloning
+        if isExternalURLSource(downloadURL) {
+            let externalClonedPath = "\(marketplacesPath)/\(plugin.marketplace)/external_cloned/\(plugin.name)"
+            return externalClonedPath
+        }
+
         // Extract the path portion after the branch (usually "main/")
         // Format: https://raw.githubusercontent.com/owner/repo/main/./plugins/plugin-name
         // or: https://raw.githubusercontent.com/owner/repo/main/plugins/plugin-name
@@ -597,6 +604,75 @@ class MarketplaceManager: ObservableObject {
         return sourcePath
     }
 
+    /// Check if a download URL is an external repository URL (not a raw content URL)
+    private func isExternalURLSource(_ url: String) -> Bool {
+        // External URLs are git repository URLs, not raw.githubusercontent.com paths
+        // Examples:
+        // - https://github.com/makenotion/claude-code-notion-plugin.git
+        // - https://github.com/figma/mcp-server-guide.git
+        // NOT: https://raw.githubusercontent.com/owner/repo/main/plugins/name
+        return (url.hasPrefix("https://github.com/") || url.hasPrefix("git@github.com:"))
+            && !url.contains("raw.githubusercontent.com")
+            && (url.hasSuffix(".git") || !url.contains("/main/") && !url.contains("/master/"))
+    }
+
+    /// Extract the git clone URL from a download URL
+    private func extractGitCloneURL(from downloadURL: String) -> String? {
+        // If it already looks like a git URL, return it
+        if downloadURL.hasSuffix(".git") {
+            return downloadURL
+        }
+
+        // Add .git suffix if it's a GitHub URL without it
+        if downloadURL.hasPrefix("https://github.com/") && !downloadURL.contains("/tree/") && !downloadURL.contains("/blob/") {
+            return downloadURL + ".git"
+        }
+
+        return nil
+    }
+
+    /// Clone an external plugin repository
+    private func cloneExternalPluginRepository(plugin: MarketplacePlugin) async throws -> String {
+        guard let downloadURL = plugin.downloadURL else {
+            throw MarketplaceError.installationError("Plugin has no download URL")
+        }
+
+        guard let cloneURL = extractGitCloneURL(from: downloadURL) else {
+            throw MarketplaceError.installationError("Cannot determine git clone URL from: \(downloadURL)")
+        }
+
+        let externalClonedDir = "\(marketplacesPath)/\(plugin.marketplace)/external_cloned"
+        let clonePath = "\(externalClonedDir)/\(plugin.name)"
+        let fm = FileManager.default
+
+        // Skip if already cloned
+        if fm.fileExists(atPath: clonePath) {
+            return clonePath
+        }
+
+        // Create parent directory
+        try fm.createDirectory(atPath: externalClonedDir, withIntermediateDirectories: true)
+
+        // Shallow clone
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["clone", "--depth", "1", cloneURL, clonePath]
+
+        let pipe = Pipe()
+        process.standardError = pipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            let errorData = pipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            throw MarketplaceError.installationError("Failed to clone external plugin repository: \(errorMessage)")
+        }
+
+        return clonePath
+    }
+
     /// Check if a plugin exists at the given marketplace source path
     private func pluginExistsAtMarketplaceSource(_ path: String) -> Bool {
         let fm = FileManager.default
@@ -620,7 +696,7 @@ class MarketplaceManager: ObservableObject {
         }
 
         // Determine the source path for symlinking
-        // Priority: 1. Local marketplace source (already cloned), 2. Download
+        // Priority: 1. Local marketplace source (already cloned), 2. Clone external URL, 3. Error
         var sourcePath: String = installPath
         var useMarketplaceSource = false
 
@@ -628,6 +704,10 @@ class MarketplaceManager: ObservableObject {
            pluginExistsAtMarketplaceSource(marketplaceSourcePath) {
             // Use the existing marketplace source path
             sourcePath = marketplaceSourcePath
+            useMarketplaceSource = true
+        } else if let downloadURL = plugin.downloadURL, isExternalURLSource(downloadURL) {
+            // External URL source - clone the repository
+            sourcePath = try await cloneExternalPluginRepository(plugin: plugin)
             useMarketplaceSource = true
         } else {
             // Plugin source not found in local marketplace - cannot install
