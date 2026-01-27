@@ -1310,9 +1310,16 @@ struct PreLaunchView: View {
                         .id(session.id)  // Force view identity based on session ID
                 }
             }
-            .padding()
-            .background(Color(NSColor.windowBackgroundColor))
-            .cornerRadius(12)
+            .padding(24)
+            .background {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.2), radius: 12, x: 0, y: 4)
+            }
 
             // Path display
             if !manager.projectPath.isEmpty {
