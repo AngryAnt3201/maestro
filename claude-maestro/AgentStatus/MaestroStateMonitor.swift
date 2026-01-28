@@ -134,16 +134,7 @@ class MaestroStateMonitor: ObservableObject {
 
     /// Play a sound when an agent finishes a task
     private func playCompletionSound() {
-        // Try to play a bundled sound file first
-        if let sound = NSSound(named: "agent-complete") {
-            sound.play()
-        } else if let sound = NSSound(named: NSSound.Name("Glass")) {
-            // Fall back to system "Glass" sound
-            sound.play()
-        } else {
-            // Last resort: system beep
-            NSSound.beep()
-        }
+        NSSound(named: "Glass")?.play()
     }
 
     /// Manually refresh state (useful for testing)
