@@ -277,18 +277,6 @@ class ClaudeDocManager {
             ] as [String: Any]
         }
 
-        // Add Maestro Status MCP server for agent status reporting
-        if let statusServerPath = getStatusServerPath(projectPath: projectPath) {
-            mcpServers["maestro-status"] = [
-                "type": "stdio",
-                "command": "node",
-                "args": [statusServerPath],
-                "env": [
-                    "MAESTRO_AGENT_ID": "agent-\(sessionId)"
-                ]
-            ] as [String: Any]
-        }
-
         // Add custom MCP servers
         for server in customServers {
             mcpServers[server.mcpKey] = server.toMCPJSON()
@@ -307,43 +295,6 @@ class ClaudeDocManager {
         }
 
         return "{}"
-    }
-
-    /// Get the path to the maestro-status MCP server
-    /// - Parameter projectPath: Optional path to the main project/repo directory
-    static func getStatusServerPath(projectPath: String? = nil) -> String? {
-        let fm = FileManager.default
-
-        // First priority: Look relative to the project path (works for any clone location)
-        if let projectPath = projectPath {
-            let projectServerPath = (projectPath as NSString).appendingPathComponent("maestro-mcp-server/dist/index.js")
-            if fm.fileExists(atPath: projectServerPath) {
-                return projectServerPath
-            }
-        }
-
-        // Second priority: Look in the app bundle's Resources (for release builds)
-        if let bundlePath = Bundle.main.resourcePath {
-            let serverPath = (bundlePath as NSString).appendingPathComponent("maestro-mcp-server/dist/index.js")
-            if fm.fileExists(atPath: serverPath) {
-                return serverPath
-            }
-        }
-
-        // Fallback: Look in common development locations
-        let homeDir = fm.homeDirectoryForCurrentUser.path
-        let devPaths = [
-            "\(homeDir)/.claude-maestro/maestro-mcp-server/dist/index.js",
-            "\(homeDir)/claude-maestro/maestro-mcp-server/dist/index.js"
-        ]
-
-        for path in devPaths {
-            if fm.fileExists(atPath: path) {
-                return path
-            }
-        }
-
-        return nil
     }
 
     /// Write .mcp.json to the specified directory (legacy single-server)
@@ -650,17 +601,6 @@ class ClaudeDocManager {
             ] as [String: Any]
         }
 
-        // Add Maestro Status MCP server for agent status reporting
-        if let statusServerPath = getStatusServerPath(projectPath: projectPath) {
-            mcpServers["maestro-status"] = [
-                "command": "node",
-                "args": [statusServerPath],
-                "env": [
-                    "MAESTRO_AGENT_ID": "agent-\(sessionId)"
-                ]
-            ] as [String: Any]
-        }
-
         // Add custom MCP servers
         for server in customServers {
             var config: [String: Any] = [
@@ -768,7 +708,6 @@ class ClaudeDocManager {
             case .add:
                 // Remove existing entry for this session if present
                 content = removeCodexMCPSection(from: content, sessionKey: sessionKey)
-                content = removeCodexMCPSection(from: content, sessionKey: "\(sessionKey)_status")
 
                 // Add Maestro MCP if available (native Swift binary)
                 if let maestroPath = maestroServerPath {
@@ -785,21 +724,6 @@ class ClaudeDocManager {
                     MAESTRO_PORT_RANGE_END = "\(portRangeEnd)"
                     """
                     content += serverConfig
-                }
-
-                // Add Maestro Status MCP server for agent status reporting
-                if let statusServerPath = getStatusServerPath(projectPath: projectPath) {
-                    let statusConfig = """
-
-                    # Claude Maestro Session \(sessionId) - Status Reporting
-                    [mcp_servers.\(sessionKey)_status]
-                    command = "node"
-                    args = ["\(statusServerPath)"]
-
-                    [mcp_servers.\(sessionKey)_status.env]
-                    MAESTRO_AGENT_ID = "agent-\(sessionId)"
-                    """
-                    content += statusConfig
                 }
 
                 // Add custom servers
@@ -825,8 +749,6 @@ class ClaudeDocManager {
             case .remove:
                 // Remove the session entry and any custom servers for this session
                 content = removeCodexMCPSection(from: content, sessionKey: sessionKey)
-                // Remove the status server entry
-                content = removeCodexMCPSection(from: content, sessionKey: "\(sessionKey)_status")
                 // Also remove any custom server entries for this session
                 var index = 0
                 while true {

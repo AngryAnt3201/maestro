@@ -8,19 +8,13 @@
       "env" : {
         "MAESTRO_PORT_RANGE_END" : "3099",
         "MAESTRO_PORT_RANGE_START" : "3000",
-        "MAESTRO_SESSION_ID" : "2"
+        "MAESTRO_SESSION_ID" : "5"
       },
       "type" : "stdio"
     },
-    "maestro-status" : {
-      "args" : [
-        "\/Users\/jackwakem\/Desktop\/claude-maestro\/maestro-mcp-server\/dist\/index.js"
-      ],
-      "command" : "node",
-      "env" : {
-        "MAESTRO_AGENT_ID" : "agent-2"
-      },
-      "type" : "stdio"
+    "Notion:notion" : {
+      "type" : "http",
+      "url" : "https:\/\/mcp.notion.com\/mcp"
     }
   }
 }

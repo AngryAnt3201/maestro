@@ -94,11 +94,11 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
                               │ MCP Protocol (stdio)
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                 maestro-mcp-server (Node.js)                    │
+│                  MaestroMCPServer (Swift)                       │
 │                                                                 │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
-│  │  PortManager    │  │  ProcessManager │  │   LogManager    │ │
-│  │  (3000-3099)    │  │  (spawn/kill)   │  │  (stdout/err)   │ │
+│  │  PortManager    │  │  ProcessManager │  │  StatusManager  │ │
+│  │  (3000-3099)    │  │  (spawn/kill)   │  │ (agent status)  │ │
 │  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -109,7 +109,7 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
 |-----------|------------|
 | Desktop App | Swift 5.9, SwiftUI, AppKit |
 | Terminal Emulator | SwiftTerm |
-| MCP Server | Node.js 18+, TypeScript, MCP SDK |
+| MCP Server | Swift, Swift MCP SDK |
 | Git Operations | Native git CLI |
 
 ---
@@ -120,7 +120,6 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
 
 - macOS 14 (Sonoma) or later
 - Xcode 15 or later
-- Node.js 18 or later
 - Claude Code CLI (`npm install -g @anthropic-ai/claude-code`)
 
 ### Build from Source
@@ -131,20 +130,14 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
    cd claude-maestro
    ```
 
-2. **Build the MCP server:**
-   ```bash
-   cd maestro-mcp-server
-   npm install
-   npm run build
-   cd ..
-   ```
-
-3. **Open in Xcode:**
+2. **Open in Xcode:**
    ```bash
    open claude-maestro.xcodeproj
    ```
 
-4. **Build and run** (⌘R)
+3. **Build and run** (⌘R)
+
+The Swift MCP server (`MaestroMCPServer/`) is built automatically as part of the Xcode build process.
 
 ### Optional: Install AI CLIs
 
@@ -249,9 +242,9 @@ Session configurations (modes, branches, count) are automatically persisted to U
 
 ### MCP Server Not Connecting
 
-1. Ensure the MCP server is built: `cd maestro-mcp-server && npm run build`
-2. Check that `bundle.js` exists in `maestro-mcp-server/dist/`
-3. Verify Node.js 18+ is installed: `node --version`
+1. Ensure the app has been built at least once in Xcode
+2. Check that `MaestroMCPServer` binary exists in `~/Library/Application Support/Claude Maestro/`
+3. The MCP server is a native Swift binary that's built and copied automatically
 
 ### Claude Command Not Found
 
@@ -282,10 +275,9 @@ git worktree prune
 ### Development Setup
 
 1. Fork and clone the repository
-2. Build the MCP server: `cd maestro-mcp-server && npm install && npm run build`
-3. Open `claude-maestro.xcodeproj` in Xcode
-4. Make your changes
-5. Test thoroughly with multiple sessions
+2. Open `claude-maestro.xcodeproj` in Xcode
+3. Make your changes
+4. Test thoroughly with multiple sessions
 
 ### Project Structure
 
@@ -298,18 +290,16 @@ claude-maestro/
 │   ├── GitManager.swift         # Git operations
 │   ├── GitTreeView.swift        # Commit graph visualization
 │   └── ...
-├── maestro-mcp-server/          # Node.js MCP server
-│   ├── src/
-│   │   ├── server.ts            # MCP tool definitions
-│   │   └── managers/            # Port, Process, Log managers
-│   └── package.json
+├── MaestroMCPServer/            # Swift MCP server
+│   ├── Sources/
+│   │   └── MaestroMCPServer/    # MCP tool implementations
+│   └── Package.swift
 └── README.md
 ```
 
 ### Code Style
 
-- Swift: Follow Apple's Swift API Design Guidelines
-- TypeScript: Use strict mode, prefer `const`, async/await over callbacks
+- Follow Apple's Swift API Design Guidelines
 
 ---
 
