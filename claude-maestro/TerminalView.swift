@@ -45,30 +45,31 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         terminal.processDelegate = context.coordinator
         terminal.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
 
-        // Configure dark terminal color scheme
-        terminal.nativeBackgroundColor = NSColor(red: 0.1, green: 0.1, blue: 0.12, alpha: 1.0)
-        terminal.nativeForegroundColor = NSColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 1.0)
+        // Configure Catppuccin Mocha color scheme
+        // Base: RGB(30, 30, 46), Text: RGB(205, 214, 244)
+        terminal.nativeBackgroundColor = NSColor(red: 30/255.0, green: 30/255.0, blue: 46/255.0, alpha: 1.0)
+        terminal.nativeForegroundColor = NSColor(red: 205/255.0, green: 214/255.0, blue: 244/255.0, alpha: 1.0)
 
-        // Install a rich ANSI color palette (16 colors)
+        // Install Catppuccin Mocha ANSI color palette (16 colors)
         let colors: [SwiftTerm.Color] = [
             // Standard colors (0-7)
-            SwiftTerm.Color(red: 88, green: 88, blue: 92),      // Black (visible on dark bg)
-            SwiftTerm.Color(red: 242, green: 89, blue: 89),     // Red
-            SwiftTerm.Color(red: 89, green: 217, blue: 115),    // Green
-            SwiftTerm.Color(red: 242, green: 204, blue: 89),    // Yellow
-            SwiftTerm.Color(red: 115, green: 153, blue: 242),   // Blue
-            SwiftTerm.Color(red: 217, green: 127, blue: 217),   // Magenta
-            SwiftTerm.Color(red: 115, green: 217, blue: 217),   // Cyan
-            SwiftTerm.Color(red: 217, green: 217, blue: 217),   // White
+            SwiftTerm.Color(red: 69, green: 71, blue: 90),      // Black (Surface1)
+            SwiftTerm.Color(red: 243, green: 139, blue: 168),   // Red
+            SwiftTerm.Color(red: 166, green: 227, blue: 161),   // Green
+            SwiftTerm.Color(red: 249, green: 226, blue: 175),   // Yellow
+            SwiftTerm.Color(red: 137, green: 180, blue: 250),   // Blue
+            SwiftTerm.Color(red: 245, green: 194, blue: 231),   // Magenta (Pink)
+            SwiftTerm.Color(red: 148, green: 226, blue: 213),   // Cyan (Teal)
+            SwiftTerm.Color(red: 186, green: 194, blue: 222),   // White (Subtext1)
             // Bright colors (8-15)
-            SwiftTerm.Color(red: 115, green: 115, blue: 128),   // Bright Black
-            SwiftTerm.Color(red: 255, green: 115, blue: 115),   // Bright Red
-            SwiftTerm.Color(red: 115, green: 242, blue: 140),   // Bright Green
-            SwiftTerm.Color(red: 255, green: 230, blue: 115),   // Bright Yellow
-            SwiftTerm.Color(red: 140, green: 179, blue: 255),   // Bright Blue
-            SwiftTerm.Color(red: 242, green: 153, blue: 242),   // Bright Magenta
-            SwiftTerm.Color(red: 140, green: 242, blue: 242),   // Bright Cyan
-            SwiftTerm.Color(red: 255, green: 255, blue: 255),   // Bright White
+            SwiftTerm.Color(red: 108, green: 112, blue: 134),   // Bright Black (Overlay0)
+            SwiftTerm.Color(red: 243, green: 139, blue: 168),   // Bright Red
+            SwiftTerm.Color(red: 166, green: 227, blue: 161),   // Bright Green
+            SwiftTerm.Color(red: 249, green: 226, blue: 175),   // Bright Yellow
+            SwiftTerm.Color(red: 137, green: 180, blue: 250),   // Bright Blue
+            SwiftTerm.Color(red: 245, green: 194, blue: 231),   // Bright Magenta
+            SwiftTerm.Color(red: 148, green: 226, blue: 213),   // Bright Cyan
+            SwiftTerm.Color(red: 205, green: 214, blue: 244),   // Bright White (Text)
         ]
         terminal.installColors(colors)
 
