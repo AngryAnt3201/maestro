@@ -45,15 +45,15 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         terminal.processDelegate = context.coordinator
         terminal.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
 
-        // Configure Catppuccin Mocha color scheme
-        // Base: RGB(30, 30, 46), Text: RGB(205, 214, 244)
-        terminal.nativeBackgroundColor = NSColor(red: 30/255.0, green: 30/255.0, blue: 46/255.0, alpha: 1.0)
+        // Configure terminal colors
+        // Use system color for background to match GitTreeView
+        terminal.nativeBackgroundColor = NSColor.controlBackgroundColor
         terminal.nativeForegroundColor = NSColor(red: 205/255.0, green: 214/255.0, blue: 244/255.0, alpha: 1.0)
 
         // Install Catppuccin Mocha ANSI color palette (16 colors)
         let colors: [SwiftTerm.Color] = [
             // Standard colors (0-7)
-            SwiftTerm.Color(red: 69, green: 71, blue: 90),      // Black (Surface1)
+            SwiftTerm.Color(red: 40, green: 42, blue: 54),      // Black (darker for visibility)
             SwiftTerm.Color(red: 243, green: 139, blue: 168),   // Red
             SwiftTerm.Color(red: 166, green: 227, blue: 161),   // Green
             SwiftTerm.Color(red: 249, green: 226, blue: 175),   // Yellow
@@ -630,8 +630,8 @@ struct TerminalSessionView: View {
             } else {
                 // Pending state placeholder - centered with fitted backdrop
                 ZStack {
-                    // Terminal-like background (Catppuccin Mocha Base)
-                    Color(NSColor(red: 30/255.0, green: 30/255.0, blue: 46/255.0, alpha: 1.0))
+                    // Terminal-like background (matches system theme)
+                    Color(NSColor.controlBackgroundColor)
 
                     // Content with fitted backdrop
                     VStack(spacing: 12) {
