@@ -17,6 +17,54 @@ class MaestroTerminalView: LocalProcessTerminalView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         return true  // Accept clicks even when window is inactive
     }
+
+    // Intercept key equivalents so SwiftUI doesn't swallow Cmd+C/V
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.modifierFlags.contains(.command) else {
+            return super.performKeyEquivalent(with: event)
+        }
+
+        switch event.charactersIgnoringModifiers {
+        case "c":
+            copy(self)
+            return true
+        case "v":
+            paste(self)
+            return true
+        case "a":
+            selectAll(self)
+            return true
+        default:
+            return super.performKeyEquivalent(with: event)
+        }
+    }
+
+    // Right-click context menu for native experience
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu()
+
+        let copyItem = NSMenuItem(title: "Copy", action: #selector(copy(_:)), keyEquivalent: "c")
+        copyItem.keyEquivalentModifierMask = .command
+        menu.addItem(copyItem)
+
+        let pasteItem = NSMenuItem(title: "Paste", action: #selector(paste(_:)), keyEquivalent: "v")
+        pasteItem.keyEquivalentModifierMask = .command
+        menu.addItem(pasteItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let selectAllItem = NSMenuItem(title: "Select All", action: #selector(selectAll(_:)), keyEquivalent: "a")
+        selectAllItem.keyEquivalentModifierMask = .command
+        menu.addItem(selectAllItem)
+
+        menu.addItem(NSMenuItem(title: "Clear", action: #selector(clearTerminal(_:)), keyEquivalent: "k"))
+
+        return menu
+    }
+
+    @objc func clearTerminal(_ sender: Any?) {
+        send(txt: "clear\r")
+    }
 }
 
 // MARK: - Terminal Controller
@@ -107,6 +155,10 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             if let window = terminal.window {
                 window.makeFirstResponder(terminal)
+                // Critical: Make window key so keyboard/mouse events work properly
+                if !window.isKeyWindow {
+                    window.makeKeyAndOrderFront(nil)
+                }
             } else {
                 // Window not yet available, retry with exponential backoff
                 self.makeFirstResponderWithRetry(
