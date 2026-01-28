@@ -621,11 +621,29 @@ class SkillManager: ObservableObject {
     }
 
     /// Get all skills that are enabled for a specific session
+    /// De-duplicates by command name, preferring local plugin sources over marketplace sources
     func enabledSkills(for sessionId: Int) -> [SkillConfig] {
         let config = getSkillConfig(for: sessionId)
-        return installedSkills.filter { skill in
+        let enabledList = installedSkills.filter { skill in
             skill.isEnabled && config.enabledSkillIds.contains(skill.id)
         }
+
+        // De-duplicate by command name, preferring local plugin over marketplace
+        var skillsByName: [String: SkillConfig] = [:]
+        for skill in enabledList {
+            let name = skill.commandName
+            if let existing = skillsByName[name] {
+                // Prefer plugin source over marketplace
+                if case .plugin = skill.source, case .marketplace = existing.source {
+                    skillsByName[name] = skill
+                }
+                // Otherwise keep existing (first one wins if same source type)
+            } else {
+                skillsByName[name] = skill
+            }
+        }
+
+        return Array(skillsByName.values)
     }
 
     /// Initialize session config with no skills enabled (user must opt-in)
