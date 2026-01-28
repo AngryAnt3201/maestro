@@ -272,7 +272,10 @@ struct EmbeddedTerminalView: NSViewRepresentable {
             initializingTimer?.invalidate()
 
             DispatchQueue.main.async {
-                if exitCode == 0 {
+                // Plain terminals should stay idle when shell exits (not "done" since there's no task)
+                if self.mode == .plainTerminal {
+                    self.status = .idle
+                } else if exitCode == 0 {
                     self.status = .done
                 } else {
                     self.status = .error
@@ -498,20 +501,22 @@ struct TerminalSessionView: View {
                     .fontWeight(.medium)
                     .foregroundColor(mode.color)
 
-                // MCP server selector
-                MCPSelector(
-                    sessionId: session.id,
-                    mcpManager: MCPServerManager.shared,
-                    isDisabled: shouldLaunch
-                )
+                // MCP server selector (AI modes only)
+                if mode.isAIMode {
+                    MCPSelector(
+                        sessionId: session.id,
+                        mcpManager: MCPServerManager.shared,
+                        isDisabled: shouldLaunch
+                    )
 
-                // Skills & Commands selector
-                CapabilitySelector(
-                    sessionId: session.id,
-                    skillManager: SkillManager.shared,
-                    commandManager: CommandManager.shared,
-                    isDisabled: shouldLaunch
-                )
+                    // Skills & Commands selector
+                    CapabilitySelector(
+                        sessionId: session.id,
+                        skillManager: SkillManager.shared,
+                        commandManager: CommandManager.shared,
+                        isDisabled: shouldLaunch
+                    )
+                }
 
                 // Agent status (only when terminal launched)
                 if shouldLaunch, let state = agentState {
