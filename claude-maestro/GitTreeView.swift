@@ -24,41 +24,45 @@ struct GitTreeView: View {
     static let commitCircleSize: CGFloat = 10
 
     var body: some View {
-        HSplitView {
-            // Main graph area
-            VStack(spacing: 0) {
-                // Header
-                GitTreeHeader(
-                    gitManager: gitManager,
-                    commitCount: graphData.commits.count,
-                    isLoading: graphData.isLoading,
-                    onRefresh: { Task { await loadGraph() } }
-                )
+        // Main graph area
+        VStack(spacing: 0) {
+            // Header
+            GitTreeHeader(
+                gitManager: gitManager,
+                commitCount: graphData.commits.count,
+                isLoading: graphData.isLoading,
+                onRefresh: { Task { await loadGraph() } }
+            )
 
-                Divider()
+            Divider()
 
-                // Graph content
-                if graphData.isLoading {
-                    loadingView
-                } else if !gitManager.isGitRepo {
-                    notGitRepoView
-                } else if graphData.commits.isEmpty {
-                    emptyView
-                } else {
-                    graphScrollView
-                }
+            // Graph content
+            if graphData.isLoading {
+                loadingView
+            } else if !gitManager.isGitRepo {
+                notGitRepoView
+            } else if graphData.commits.isEmpty {
+                emptyView
+            } else {
+                graphScrollView
             }
-            .frame(minWidth: 300)
-
-            // Detail panel (when commit selected)
+        }
+        .frame(minWidth: 300)
+        .overlay(alignment: .trailing) {
             if let commit = selectedCommit {
                 CommitDetailPanel(
                     commit: commit,
                     gitManager: gitManager,
-                    onClose: { selectedCommit = nil },
+                    onClose: { withAnimation(.easeInOut(duration: 0.2)) { selectedCommit = nil } },
                     onRefresh: { Task { await loadGraph() } }
                 )
-                .frame(minWidth: 250, idealWidth: 280, maxWidth: 350)
+                .frame(width: 280)
+                .background(Color(NSColor.controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .shadow(color: .black.opacity(0.2), radius: 8, x: -2, y: 0)
+                .padding(.trailing, 8)
+                .padding(.vertical, 8)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
         .background(Color(NSColor.controlBackgroundColor))
@@ -165,7 +169,7 @@ struct GitTreeView: View {
                         .frame(height: Self.rowHeight)
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.15)) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
                                 selectedCommit = node.commit
                             }
                         }

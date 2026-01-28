@@ -1109,7 +1109,7 @@ struct MainContentView: View {
                         launchAppInSession(app: app, sessionId: sessionId)
                     }
                 )
-                .frame(minWidth: 280, idealWidth: 320, maxWidth: 400)
+                .frame(minWidth: 220, idealWidth: 260, maxWidth: 320)
             }
         }
         .sheet(isPresented: $showGitSettings) {
