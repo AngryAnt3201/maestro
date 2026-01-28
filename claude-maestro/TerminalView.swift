@@ -39,25 +39,43 @@ class MaestroTerminalView: LocalProcessTerminalView {
         }
     }
 
+    // Ensure the terminal view receives mouse events by making it the hit test target
+    // This is needed for SwiftUI/AppKit bridging to work properly
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // Check if point is within our bounds
+        let result = super.hitTest(point)
+        // If the hit test returns us or a subview, ensure we become first responder
+        // so that subsequent mouse events are handled correctly
+        if result != nil {
+            window?.makeFirstResponder(self)
+        }
+        return result
+    }
+
     // Right-click context menu for native experience
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
 
         let copyItem = NSMenuItem(title: "Copy", action: #selector(copy(_:)), keyEquivalent: "c")
+        copyItem.target = self  // Explicitly set target
         copyItem.keyEquivalentModifierMask = .command
         menu.addItem(copyItem)
 
         let pasteItem = NSMenuItem(title: "Paste", action: #selector(paste(_:)), keyEquivalent: "v")
+        pasteItem.target = self  // Explicitly set target
         pasteItem.keyEquivalentModifierMask = .command
         menu.addItem(pasteItem)
 
         menu.addItem(NSMenuItem.separator())
 
         let selectAllItem = NSMenuItem(title: "Select All", action: #selector(selectAll(_:)), keyEquivalent: "a")
+        selectAllItem.target = self  // Explicitly set target
         selectAllItem.keyEquivalentModifierMask = .command
         menu.addItem(selectAllItem)
 
-        menu.addItem(NSMenuItem(title: "Clear", action: #selector(clearTerminal(_:)), keyEquivalent: "k"))
+        let clearItem = NSMenuItem(title: "Clear", action: #selector(clearTerminal(_:)), keyEquivalent: "k")
+        clearItem.target = self  // Explicitly set target
+        menu.addItem(clearItem)
 
         return menu
     }
@@ -155,10 +173,8 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             if let window = terminal.window {
                 window.makeFirstResponder(terminal)
-                // Critical: Make window key so keyboard/mouse events work properly
-                if !window.isKeyWindow {
-                    window.makeKeyAndOrderFront(nil)
-                }
+                // Don't force makeKeyAndOrderFront - let SwiftUI manage window state
+                // This prevents stealing focus and interfering with mouse event delivery
             } else {
                 // Window not yet available, retry with exponential backoff
                 self.makeFirstResponderWithRetry(
