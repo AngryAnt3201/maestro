@@ -294,9 +294,9 @@ struct AgentProcessesSection: View {
     @ObservedObject var activityMonitor: ProcessActivityMonitor
     @Binding var isExpanded: Bool
 
-    // Filter to only show launched terminal sessions
+    // Filter to only show launched AI agent sessions (exclude plain terminals)
     private var launchedSessions: [SessionInfo] {
-        manager.sessions.filter { $0.isTerminalLaunched && $0.isVisible }
+        manager.sessions.filter { $0.isTerminalLaunched && $0.isVisible && $0.mode.isAIMode }
     }
 
     var body: some View {

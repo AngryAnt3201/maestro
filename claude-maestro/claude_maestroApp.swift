@@ -15,6 +15,9 @@ struct claude_maestroApp: App {
     init() {
         // One-time setup: Configure Codex and Gemini CLI to read CLAUDE.md
         ClaudeDocManager.setupCLIContextFiles()
+
+        // Clean up orphaned/corrupted Codex MCP config sections from previous sessions
+        ClaudeDocManager.cleanupOrphanedCodexSections()
     }
 
     var body: some Scene {

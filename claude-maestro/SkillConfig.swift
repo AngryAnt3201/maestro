@@ -140,6 +140,18 @@ enum SkillSource: Codable, Hashable {
             return "doc"
         }
     }
+
+    /// Plugin name for bundling purposes (nil for personal/project/local skills)
+    var pluginName: String? {
+        switch self {
+        case .personal, .project, .local:
+            return nil
+        case .plugin(let name):
+            return name
+        case .marketplace(_, let plugin):
+            return plugin
+        }
+    }
 }
 
 /// Per-session configuration for which skills are enabled

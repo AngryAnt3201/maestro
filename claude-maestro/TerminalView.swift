@@ -9,6 +9,82 @@ import SwiftUI
 import AppKit
 import SwiftTerm
 
+// MARK: - Custom Terminal View
+
+/// Custom terminal view that accepts first mouse click for immediate interaction
+/// This enables text selection and copy even when the window is not focused
+class MaestroTerminalView: LocalProcessTerminalView {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true  // Accept clicks even when window is inactive
+    }
+
+    // Intercept key equivalents so SwiftUI doesn't swallow Cmd+C/V
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.modifierFlags.contains(.command) else {
+            return super.performKeyEquivalent(with: event)
+        }
+
+        switch event.charactersIgnoringModifiers {
+        case "c":
+            copy(self)
+            return true
+        case "v":
+            paste(self)
+            return true
+        case "a":
+            selectAll(self)
+            return true
+        default:
+            return super.performKeyEquivalent(with: event)
+        }
+    }
+
+    // Ensure the terminal view receives mouse events by making it the hit test target
+    // This is needed for SwiftUI/AppKit bridging to work properly
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // Check if point is within our bounds
+        let result = super.hitTest(point)
+        // If the hit test returns us or a subview, ensure we become first responder
+        // so that subsequent mouse events are handled correctly
+        if result != nil {
+            window?.makeFirstResponder(self)
+        }
+        return result
+    }
+
+    // Right-click context menu for native experience
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu()
+
+        let copyItem = NSMenuItem(title: "Copy", action: #selector(copy(_:)), keyEquivalent: "c")
+        copyItem.target = self  // Explicitly set target
+        copyItem.keyEquivalentModifierMask = .command
+        menu.addItem(copyItem)
+
+        let pasteItem = NSMenuItem(title: "Paste", action: #selector(paste(_:)), keyEquivalent: "v")
+        pasteItem.target = self  // Explicitly set target
+        pasteItem.keyEquivalentModifierMask = .command
+        menu.addItem(pasteItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let selectAllItem = NSMenuItem(title: "Select All", action: #selector(selectAll(_:)), keyEquivalent: "a")
+        selectAllItem.target = self  // Explicitly set target
+        selectAllItem.keyEquivalentModifierMask = .command
+        menu.addItem(selectAllItem)
+
+        let clearItem = NSMenuItem(title: "Clear", action: #selector(clearTerminal(_:)), keyEquivalent: "k")
+        clearItem.target = self  // Explicitly set target
+        menu.addItem(clearItem)
+
+        return menu
+    }
+
+    @objc func clearTerminal(_ sender: Any?) {
+        send(txt: "clear\r")
+    }
+}
+
 // MARK: - Terminal Controller
 
 class TerminalController {
@@ -40,35 +116,36 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     var onProcessStarted: ((pid_t) -> Void)?  // Called with shell PID for process registration
     var controller: TerminalController?
 
-    func makeNSView(context: Context) -> LocalProcessTerminalView {
-        let terminal = LocalProcessTerminalView(frame: .zero)
+    func makeNSView(context: Context) -> MaestroTerminalView {
+        let terminal = MaestroTerminalView(frame: .zero)
         terminal.processDelegate = context.coordinator
         terminal.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
 
-        // Configure dark terminal color scheme
-        terminal.nativeBackgroundColor = NSColor(red: 0.1, green: 0.1, blue: 0.12, alpha: 1.0)
-        terminal.nativeForegroundColor = NSColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 1.0)
+        // Configure terminal colors
+        // Use system color for background to match GitTreeView
+        terminal.nativeBackgroundColor = NSColor.controlBackgroundColor
+        terminal.nativeForegroundColor = NSColor(red: 205/255.0, green: 214/255.0, blue: 244/255.0, alpha: 1.0)
 
-        // Install a rich ANSI color palette (16 colors)
+        // Install Catppuccin Mocha ANSI color palette (16 colors)
         let colors: [SwiftTerm.Color] = [
             // Standard colors (0-7)
-            SwiftTerm.Color(red: 38, green: 38, blue: 43),      // Black
-            SwiftTerm.Color(red: 242, green: 89, blue: 89),     // Red
-            SwiftTerm.Color(red: 89, green: 217, blue: 115),    // Green
-            SwiftTerm.Color(red: 242, green: 204, blue: 89),    // Yellow
-            SwiftTerm.Color(red: 115, green: 153, blue: 242),   // Blue
-            SwiftTerm.Color(red: 217, green: 127, blue: 217),   // Magenta
-            SwiftTerm.Color(red: 115, green: 217, blue: 217),   // Cyan
-            SwiftTerm.Color(red: 217, green: 217, blue: 217),   // White
+            SwiftTerm.Color(red: 40, green: 42, blue: 54),      // Black (darker for visibility)
+            SwiftTerm.Color(red: 243, green: 139, blue: 168),   // Red
+            SwiftTerm.Color(red: 166, green: 227, blue: 161),   // Green
+            SwiftTerm.Color(red: 249, green: 226, blue: 175),   // Yellow
+            SwiftTerm.Color(red: 137, green: 180, blue: 250),   // Blue
+            SwiftTerm.Color(red: 245, green: 194, blue: 231),   // Magenta (Pink)
+            SwiftTerm.Color(red: 148, green: 226, blue: 213),   // Cyan (Teal)
+            SwiftTerm.Color(red: 186, green: 194, blue: 222),   // White (Subtext1)
             // Bright colors (8-15)
-            SwiftTerm.Color(red: 115, green: 115, blue: 128),   // Bright Black
-            SwiftTerm.Color(red: 255, green: 115, blue: 115),   // Bright Red
-            SwiftTerm.Color(red: 115, green: 242, blue: 140),   // Bright Green
-            SwiftTerm.Color(red: 255, green: 230, blue: 115),   // Bright Yellow
-            SwiftTerm.Color(red: 140, green: 179, blue: 255),   // Bright Blue
-            SwiftTerm.Color(red: 242, green: 153, blue: 242),   // Bright Magenta
-            SwiftTerm.Color(red: 140, green: 242, blue: 242),   // Bright Cyan
-            SwiftTerm.Color(red: 255, green: 255, blue: 255),   // Bright White
+            SwiftTerm.Color(red: 108, green: 112, blue: 134),   // Bright Black (Overlay0)
+            SwiftTerm.Color(red: 243, green: 139, blue: 168),   // Bright Red
+            SwiftTerm.Color(red: 166, green: 227, blue: 161),   // Bright Green
+            SwiftTerm.Color(red: 249, green: 226, blue: 175),   // Bright Yellow
+            SwiftTerm.Color(red: 137, green: 180, blue: 250),   // Bright Blue
+            SwiftTerm.Color(red: 245, green: 194, blue: 231),   // Bright Magenta
+            SwiftTerm.Color(red: 148, green: 226, blue: 213),   // Bright Cyan
+            SwiftTerm.Color(red: 205, green: 214, blue: 244),   // Bright White (Text)
         ]
         terminal.installColors(colors)
 
@@ -77,11 +154,35 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         return terminal
     }
 
-    func updateNSView(_ terminal: LocalProcessTerminalView, context: Context) {
+    func updateNSView(_ terminal: MaestroTerminalView, context: Context) {
         if shouldLaunch && !context.coordinator.hasLaunched {
             context.coordinator.hasLaunched = true
             launchTerminal(in: terminal)
             onLaunched()
+
+            // Make terminal first responder to receive keyboard input
+            // Use retry mechanism since window may not be attached immediately
+            makeFirstResponderWithRetry(terminal: terminal, attempts: 5)
+        }
+    }
+
+    /// Attempts to make the terminal first responder, retrying if window is not available
+    private func makeFirstResponderWithRetry(terminal: MaestroTerminalView, attempts: Int, delay: TimeInterval = 0.1) {
+        guard attempts > 0 else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            if let window = terminal.window {
+                window.makeFirstResponder(terminal)
+                // Don't force makeKeyAndOrderFront - let SwiftUI manage window state
+                // This prevents stealing focus and interfering with mouse event delivery
+            } else {
+                // Window not yet available, retry with exponential backoff
+                self.makeFirstResponderWithRetry(
+                    terminal: terminal,
+                    attempts: attempts - 1,
+                    delay: delay * 1.5
+                )
+            }
         }
     }
 
@@ -96,34 +197,8 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         )
     }
 
-    private func launchTerminal(in terminal: LocalProcessTerminalView) {
+    private func launchTerminal(in terminal: MaestroTerminalView) {
         let shell = Foundation.ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-
-        // Source user's shell profile to get full environment (PATH, NVM, etc.)
-        // This is necessary because macOS apps launched from Finder have a limited environment
-        var command = """
-            if [ -f ~/.zprofile ]; then source ~/.zprofile 2>/dev/null; fi; \
-            if [ -f ~/.zshrc ]; then source ~/.zshrc 2>/dev/null; fi; \
-            if [ -f ~/.bash_profile ]; then source ~/.bash_profile 2>/dev/null; fi; \
-            if [ -f ~/.bashrc ]; then source ~/.bashrc 2>/dev/null; fi; \
-            cd '\(workingDirectory)'
-            """
-
-        // Note: Branch checkout is handled by worktree isolation
-        // Each session with an assigned branch gets its own worktree directory
-
-        // Auto-launch CLI tool if in AI mode, otherwise just open shell
-        if let cliCommand = mode.command {
-            // Launch the CLI tool directly (it will take over the terminal)
-            command += " && \(cliCommand)"
-            // Mark CLI as launched
-            DispatchQueue.main.async {
-                self.onCLILaunched()
-            }
-        } else {
-            // Plain terminal - just exec shell
-            command += " && exec $SHELL"
-        }
 
         // Generate session configs (CLAUDE.md + CLI-specific MCP config)
         // Get associated app config for custom instructions
@@ -139,12 +214,47 @@ struct EmbeddedTerminalView: NSViewRepresentable {
             appConfig: appConfig
         )
 
-        terminal.startProcess(
-            executable: shell,
-            args: ["-l", "-i", "-c", command],
-            environment: nil,  // Let shell inherit and source profiles for full environment
-            execName: nil
-        )
+        // Note: Branch checkout is handled by worktree isolation
+        // Each session with an assigned branch gets its own worktree directory
+
+        if mode == .plainTerminal {
+            // Plain terminal - launch interactive login shell directly
+            // Using -l (login) and -i (interactive) ensures the shell stays open
+            // and sources profile files automatically
+            terminal.startProcess(
+                executable: shell,
+                args: ["-l", "-i"],
+                environment: nil,
+                execName: nil
+            )
+            // Send cd command after shell starts to change to working directory
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                terminal.send(txt: "cd '\(self.workingDirectory)'\r")
+            }
+        } else {
+            // AI CLI mode - use -c to run setup commands and launch CLI
+            // Source user's shell profile to get full environment (PATH, NVM, etc.)
+            // This is necessary because macOS apps launched from Finder have a limited environment
+            let command = """
+                if [ -f ~/.zprofile ]; then source ~/.zprofile 2>/dev/null; fi; \
+                if [ -f ~/.zshrc ]; then source ~/.zshrc 2>/dev/null; fi; \
+                if [ -f ~/.bash_profile ]; then source ~/.bash_profile 2>/dev/null; fi; \
+                if [ -f ~/.bashrc ]; then source ~/.bashrc 2>/dev/null; fi; \
+                cd '\(workingDirectory)' && \(mode.command ?? "echo 'No CLI configured'")
+                """
+
+            // Mark CLI as launched
+            DispatchQueue.main.async {
+                self.onCLILaunched()
+            }
+
+            terminal.startProcess(
+                executable: shell,
+                args: ["-l", "-i", "-c", command],
+                environment: nil,  // Let shell inherit and source profiles for full environment
+                execName: nil
+            )
+        }
 
         // Capture the shell PID for native process management
         // We need to wait a moment for the shell to spawn, then find it
@@ -181,7 +291,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         @Binding var status: SessionStatus
         var hasLaunched = false
         private var outputBuffer = ""
-        weak var terminal: LocalProcessTerminalView?
+        weak var terminal: MaestroTerminalView?
 
         // Activity-based state tracking
         private var lastOutputTime: Date?
@@ -250,7 +360,10 @@ struct EmbeddedTerminalView: NSViewRepresentable {
             initializingTimer?.invalidate()
 
             DispatchQueue.main.async {
-                if exitCode == 0 {
+                // Plain terminals should stay idle when shell exits (not "done" since there's no task)
+                if self.mode == .plainTerminal {
+                    self.status = .idle
+                } else if exitCode == 0 {
                     self.status = .done
                 } else {
                     self.status = .error
@@ -454,6 +567,8 @@ struct TerminalSessionView: View {
     @State private var terminalController = TerminalController()
     @StateObject private var quickActionManager = QuickActionManager.shared
     @State private var hasRegisteredController = false
+    @State private var showMissingToolAlert = false
+    @State private var missingToolName: String = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -474,20 +589,22 @@ struct TerminalSessionView: View {
                     .fontWeight(.medium)
                     .foregroundColor(mode.color)
 
-                // MCP server selector
-                MCPSelector(
-                    sessionId: session.id,
-                    mcpManager: MCPServerManager.shared,
-                    isDisabled: shouldLaunch
-                )
+                // MCP server selector (AI modes only)
+                if mode.isAIMode {
+                    MCPSelector(
+                        sessionId: session.id,
+                        mcpManager: MCPServerManager.shared,
+                        isDisabled: shouldLaunch
+                    )
 
-                // Skills & Commands selector
-                CapabilitySelector(
-                    sessionId: session.id,
-                    skillManager: SkillManager.shared,
-                    commandManager: CommandManager.shared,
-                    isDisabled: shouldLaunch
-                )
+                    // Skills & Commands selector
+                    CapabilitySelector(
+                        sessionId: session.id,
+                        skillManager: SkillManager.shared,
+                        commandManager: CommandManager.shared,
+                        isDisabled: shouldLaunch
+                    )
+                }
 
                 // Agent status (only when terminal launched)
                 if shouldLaunch, let state = agentState {
@@ -524,7 +641,15 @@ struct TerminalSessionView: View {
 
                 // Launch Terminal button (before terminal launched)
                 if !shouldLaunch {
-                    Button(action: onLaunchTerminal) {
+                    Button(action: {
+                        // Check if CLI tool is available before launching
+                        if mode.isAIMode && !mode.isToolAvailable() {
+                            missingToolName = mode.command ?? "unknown"
+                            showMissingToolAlert = true
+                        } else {
+                            onLaunchTerminal()
+                        }
+                    }) {
                         HStack(spacing: 2) {
                             Image(systemName: "play.fill")
                             Text("Launch")
@@ -583,8 +708,8 @@ struct TerminalSessionView: View {
             } else {
                 // Pending state placeholder - centered with fitted backdrop
                 ZStack {
-                    // Terminal-like background
-                    Color(NSColor(red: 0.1, green: 0.1, blue: 0.12, alpha: 1.0))
+                    // Terminal-like background (matches system theme)
+                    Color(NSColor.controlBackgroundColor)
 
                     // Content with fitted backdrop
                     VStack(spacing: 12) {
@@ -687,6 +812,19 @@ struct TerminalSessionView: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(shouldLaunch ? status.color : Color.gray.opacity(0.5), lineWidth: 2)
         )
+        .alert("CLI Tool Not Found", isPresented: $showMissingToolAlert) {
+            Button("Copy Install Command") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(mode.installationHint, forType: .string)
+            }
+            Button("Launch Plain Terminal") {
+                mode = .plainTerminal
+                onLaunchTerminal()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("'\(missingToolName)' command not found.\n\nInstall with:\n\(mode.installationHint)")
+        }
     }
 
     private func openInBrowser(_ urlString: String) {

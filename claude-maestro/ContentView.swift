@@ -57,6 +57,56 @@ enum TerminalMode: String, CaseIterable, Codable {
     var isAIMode: Bool {
         return self != .plainTerminal
     }
+
+    /// Check if the CLI tool is available in PATH
+    func isToolAvailable() -> Bool {
+        guard let cmd = command else { return true }
+        let shell = Foundation.ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: shell)
+        // Run shell as login (-l) and interactive (-i) to source all profile files
+        // The -i flag ensures .zshrc is read, where NVM/Homebrew PATH additions typically live
+        process.arguments = ["-l", "-i", "-c", "which \(cmd)"]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        // Use timeout to prevent hanging if shell initialization is slow
+        let semaphore = DispatchSemaphore(value: 0)
+        var exitStatus: Int32 = 1
+
+        do {
+            try process.run()
+
+            // Run waitUntilExit on background queue with timeout
+            DispatchQueue.global().async {
+                process.waitUntilExit()
+                exitStatus = process.terminationStatus
+                semaphore.signal()
+            }
+
+            // Wait up to 5 seconds for the process to complete
+            let result = semaphore.wait(timeout: .now() + 5.0)
+
+            if result == .timedOut {
+                process.terminate()
+                // On timeout, assume tool might be available (better UX than false negative)
+                return true
+            }
+
+            return exitStatus == 0
+        } catch {
+            return false
+        }
+    }
+
+    var installationHint: String {
+        switch self {
+        case .claudeCode: return "npm install -g @anthropic-ai/claude-code"
+        case .geminiCli: return "npm install -g @google/gemini-cli"
+        case .openAiCodex: return "npm install -g @openai/codex"
+        case .plainTerminal: return ""
+        }
+    }
 }
 
 // MARK: - Grid Configuration

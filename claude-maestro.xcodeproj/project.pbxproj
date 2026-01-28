@@ -11,7 +11,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		CB2098F02F0CBC2600779863 /* claude-maestro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "claude-maestro.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB2098F02F0CBC2600779863 /* claude-maestro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "claude-maestro.app"; path = Maestro.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -268,7 +268,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.01;
 				PRODUCT_BUNDLE_IDENTIFIER = "personal.claude-maestro";
 				PRODUCT_NAME = Maestro;
 				REGISTER_APP_GROUPS = YES;
@@ -297,7 +297,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.01;
 				PRODUCT_BUNDLE_IDENTIFIER = "personal.claude-maestro";
 				PRODUCT_NAME = Maestro;
 				REGISTER_APP_GROUPS = YES;
