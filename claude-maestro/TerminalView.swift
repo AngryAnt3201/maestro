@@ -9,6 +9,16 @@ import SwiftUI
 import AppKit
 import SwiftTerm
 
+// MARK: - Custom Terminal View
+
+/// Custom terminal view that accepts first mouse click for immediate interaction
+/// This enables text selection and copy even when the window is not focused
+class MaestroTerminalView: LocalProcessTerminalView {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true  // Accept clicks even when window is inactive
+    }
+}
+
 // MARK: - Terminal Controller
 
 class TerminalController {
@@ -40,8 +50,8 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     var onProcessStarted: ((pid_t) -> Void)?  // Called with shell PID for process registration
     var controller: TerminalController?
 
-    func makeNSView(context: Context) -> LocalProcessTerminalView {
-        let terminal = LocalProcessTerminalView(frame: .zero)
+    func makeNSView(context: Context) -> MaestroTerminalView {
+        let terminal = MaestroTerminalView(frame: .zero)
         terminal.processDelegate = context.coordinator
         terminal.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
 
@@ -78,7 +88,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         return terminal
     }
 
-    func updateNSView(_ terminal: LocalProcessTerminalView, context: Context) {
+    func updateNSView(_ terminal: MaestroTerminalView, context: Context) {
         if shouldLaunch && !context.coordinator.hasLaunched {
             context.coordinator.hasLaunched = true
             launchTerminal(in: terminal)
@@ -91,7 +101,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     }
 
     /// Attempts to make the terminal first responder, retrying if window is not available
-    private func makeFirstResponderWithRetry(terminal: LocalProcessTerminalView, attempts: Int, delay: TimeInterval = 0.1) {
+    private func makeFirstResponderWithRetry(terminal: MaestroTerminalView, attempts: Int, delay: TimeInterval = 0.1) {
         guard attempts > 0 else { return }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
@@ -119,7 +129,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         )
     }
 
-    private func launchTerminal(in terminal: LocalProcessTerminalView) {
+    private func launchTerminal(in terminal: MaestroTerminalView) {
         let shell = Foundation.ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
 
         // Generate session configs (CLAUDE.md + CLI-specific MCP config)
@@ -213,7 +223,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         @Binding var status: SessionStatus
         var hasLaunched = false
         private var outputBuffer = ""
-        weak var terminal: LocalProcessTerminalView?
+        weak var terminal: MaestroTerminalView?
 
         // Activity-based state tracking
         private var lastOutputTime: Date?
