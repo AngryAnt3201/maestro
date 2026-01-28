@@ -72,14 +72,15 @@ struct CommitRowView: View {
                 // Active session indicator
                 if let session = activeSession {
                     HStack(spacing: 2) {
-                        Image(systemName: "terminal")
+                        Image(systemName: "cpu")
                             .font(.caption2)
                         Text("#\(session)")
                             .font(.caption2)
                     }
+                    .foregroundColor(.purple)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
-                    .background(Color.blue.opacity(0.2))
+                    .background(Color.purple.opacity(0.2))
                     .cornerRadius(4)
                 }
 
