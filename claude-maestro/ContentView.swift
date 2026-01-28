@@ -57,6 +57,32 @@ enum TerminalMode: String, CaseIterable, Codable {
     var isAIMode: Bool {
         return self != .plainTerminal
     }
+
+    /// Check if the CLI tool is available in PATH
+    func isToolAvailable() -> Bool {
+        guard let cmd = command else { return true }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        process.arguments = [cmd]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+
+    var installationHint: String {
+        switch self {
+        case .claudeCode: return "npm install -g @anthropic-ai/claude-code"
+        case .geminiCli: return "npm install -g @google/gemini-cli"
+        case .openAiCodex: return "npm install -g @openai/codex"
+        case .plainTerminal: return ""
+        }
+    }
 }
 
 // MARK: - Grid Configuration

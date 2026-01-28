@@ -20,6 +20,7 @@ struct AppConfig: Codable, Identifiable, Hashable {
     var defaultMode: TerminalMode
     var defaultProjectPath: String?       // Optional preset project
     var maestroMCPEnabled: Bool
+    var customInstructions: String?       // Custom instructions for Claude
     var createdAt: Date
     var lastUsed: Date?
 
@@ -35,6 +36,7 @@ struct AppConfig: Codable, Identifiable, Hashable {
         defaultMode: TerminalMode = .claudeCode,
         defaultProjectPath: String? = nil,
         maestroMCPEnabled: Bool = true,
+        customInstructions: String? = nil,
         createdAt: Date = Date(),
         lastUsed: Date? = nil
     ) {
@@ -49,6 +51,7 @@ struct AppConfig: Codable, Identifiable, Hashable {
         self.defaultMode = defaultMode
         self.defaultProjectPath = defaultProjectPath
         self.maestroMCPEnabled = maestroMCPEnabled
+        self.customInstructions = customInstructions
         self.createdAt = createdAt
         self.lastUsed = lastUsed
     }

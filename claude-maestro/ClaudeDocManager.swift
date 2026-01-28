@@ -99,7 +99,8 @@ class ClaudeDocManager {
         port: Int?,
         mcpServerPath: String? = nil,
         mainRepoClaudeMD: String? = nil,
-        skillsSection: String? = nil
+        skillsSection: String? = nil,
+        customInstructions: String? = nil
     ) -> String {
         var content = """
         # Claude Code Session Context
@@ -197,6 +198,17 @@ class ClaudeDocManager {
         // Add skills section if provided
         if let skills = skillsSection, !skills.isEmpty {
             content += skills
+        }
+
+        // Add custom instructions from app config if provided
+        if let instructions = customInstructions, !instructions.isEmpty {
+            content += """
+
+
+        ## App Instructions
+
+        \(instructions)
+        """
         }
 
         content += """
@@ -835,33 +847,39 @@ class ClaudeDocManager {
     }
 
     /// Remove a session's MCP section from Codex config
+    /// Handles both main section [mcp_servers.maestro_session_N] and subsections like [mcp_servers.maestro_session_N.env]
     private static func removeCodexMCPSection(from content: String, sessionKey: String) -> String {
         var lines = content.components(separatedBy: "\n")
         var result: [String] = []
         var skipUntilNextSection = false
 
+        // Prefix that matches both main section and any subsections (e.g., .env)
+        let sectionPrefix = "[mcp_servers.\(sessionKey)"
+
         for line in lines {
-            // Check if this is the start of our session's section
-            if line.contains("[mcp_servers.\(sessionKey)]") ||
-               line.contains("# Claude Maestro Session") && line.contains(sessionKey) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            // Check if this is ANY section for our session (main or .env subsection)
+            if trimmed.hasPrefix(sectionPrefix) {
                 skipUntilNextSection = true
                 continue
             }
 
-            // Check if we've reached a new section
-            if skipUntilNextSection {
-                // Stop skipping when we hit a new section or comment that's not part of our block
-                if line.hasPrefix("[") && !line.contains(sessionKey) {
-                    skipUntilNextSection = false
-                } else if line.isEmpty {
-                    // Keep skipping empty lines within the section
-                    continue
-                } else if !line.hasPrefix("#") && !line.contains("=") && !line.isEmpty {
-                    // Non-config line that's not a comment
-                    skipUntilNextSection = false
-                } else {
-                    continue
-                }
+            // Skip comment lines for this session
+            if trimmed.hasPrefix("#") && trimmed.contains("Maestro Session") &&
+               trimmed.contains(sessionKey.replacingOccurrences(of: "maestro_session_", with: "")) {
+                continue
+            }
+
+            // Check if we've reached a different section (one that doesn't belong to our session)
+            if skipUntilNextSection && trimmed.hasPrefix("[") {
+                // New section that isn't ours - stop skipping
+                skipUntilNextSection = false
+            }
+
+            // Skip key=value lines and empty lines while in skip mode
+            if skipUntilNextSection && (trimmed.contains("=") || trimmed.isEmpty) {
+                continue
             }
 
             if !skipUntilNextSection {
@@ -881,7 +899,8 @@ class ClaudeDocManager {
         branch: String?,
         sessionId: Int,
         port: Int?,
-        mode: TerminalMode
+        mode: TerminalMode,
+        appConfig: AppConfig? = nil
     ) {
         // Always write CLAUDE.md - all CLIs can be configured to read it
         let effectiveRunCommand = runCommand ?? detectRunCommand(for: directory)
@@ -922,7 +941,8 @@ class ClaudeDocManager {
             port: port,
             mcpServerPath: mcpServerPath,
             mainRepoClaudeMD: mainRepoClaudeMD,
-            skillsSection: skillsSection
+            skillsSection: skillsSection,
+            customInstructions: appConfig?.customInstructions
         )
 
         let filePath = URL(fileURLWithPath: directory).appendingPathComponent("CLAUDE.md")

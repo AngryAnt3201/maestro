@@ -82,6 +82,12 @@ struct EmbeddedTerminalView: NSViewRepresentable {
             context.coordinator.hasLaunched = true
             launchTerminal(in: terminal)
             onLaunched()
+
+            // Make terminal first responder to receive keyboard input
+            // This fixes the issue where typing doesn't work immediately after launch
+            DispatchQueue.main.async {
+                terminal.window?.makeFirstResponder(terminal)
+            }
         }
     }
 
@@ -454,6 +460,8 @@ struct TerminalSessionView: View {
     @State private var terminalController = TerminalController()
     @StateObject private var quickActionManager = QuickActionManager.shared
     @State private var hasRegisteredController = false
+    @State private var showMissingToolAlert = false
+    @State private var missingToolName: String = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -524,7 +532,15 @@ struct TerminalSessionView: View {
 
                 // Launch Terminal button (before terminal launched)
                 if !shouldLaunch {
-                    Button(action: onLaunchTerminal) {
+                    Button(action: {
+                        // Check if CLI tool is available before launching
+                        if mode.isAIMode && !mode.isToolAvailable() {
+                            missingToolName = mode.command ?? "unknown"
+                            showMissingToolAlert = true
+                        } else {
+                            onLaunchTerminal()
+                        }
+                    }) {
                         HStack(spacing: 2) {
                             Image(systemName: "play.fill")
                             Text("Launch")
@@ -687,6 +703,19 @@ struct TerminalSessionView: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(shouldLaunch ? status.color : Color.gray.opacity(0.5), lineWidth: 2)
         )
+        .alert("CLI Tool Not Found", isPresented: $showMissingToolAlert) {
+            Button("Copy Install Command") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(mode.installationHint, forType: .string)
+            }
+            Button("Launch Plain Terminal") {
+                mode = .plainTerminal
+                onLaunchTerminal()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("'\(missingToolName)' command not found.\n\nInstall with:\n\(mode.installationHint)")
+        }
     }
 
     private func openInBrowser(_ urlString: String) {
