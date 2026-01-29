@@ -2,7 +2,7 @@
 //  TerminalView.swift
 //  claude-maestro
 //
-//  Created by Jack Wakem on 6/1/2026.
+//  Created by Jack on 6/1/2026.
 //
 
 import SwiftUI

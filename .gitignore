@@ -1,3 +1,10 @@
 # Swift Package Manager
 MaestroMCPServer/.build/
 .swiftpm/
+
+# Xcode user-specific data
+xcuserdata/
+*.xcuserstate
+
+# Local Claude session context
+claude.md

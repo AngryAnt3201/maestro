@@ -2,7 +2,7 @@
 //  ClaudeDocManager.swift
 //  claude-maestro
 //
-//  Created by Jack Wakem on 14/1/2026.
+//  Created by Jack on 14/1/2026.
 //
 
 import Foundation
