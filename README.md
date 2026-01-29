@@ -1,5 +1,8 @@
 # Claude Maestro
 
+<!-- Add your banner: save as assets/banner.png -->
+![Claude Maestro Banner](assets/banner.png)
+
 **Orchestrate multiple AI coding assistants in parallel**
 
 A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) sessions simultaneously, each in its own isolated git worktree.
@@ -7,16 +10,29 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
 ![macOS](https://img.shields.io/badge/macOS-14%2B-blue)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
-
 [![X (Twitter)](https://img.shields.io/badge/X-@maestro5240871-000000?style=flat&logo=x&logoColor=white)](https://x.com/maestro5240871)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/3tQyFUYPVP)
 
-<!-- Add your screenshot: save as assets/screenshot.png -->
-![Claude Maestro](assets/screenshot.png)
+⭐ **Star us on GitHub — your support motivates us a lot!** 🙏😊
 
 ---
 
-## Why Maestro?
+## 📖 Table of Contents
+
+- [🎯 Why Maestro?](#-why-maestro)
+- [✨ Features](#-features)
+- [🏗️ Architecture](#️-architecture)
+- [📦 Installation](#-installation)
+- [🚀 Usage](#-usage)
+- [⚙️ Configuration](#️-configuration)
+- [🔧 Troubleshooting](#-troubleshooting)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
+- [🙏 Acknowledgments](#-acknowledgments)
+
+---
+
+## 🎯 Why Maestro?
 
 **The Problem:** AI coding assistants work on one task at a time. While Claude works on Feature A, you wait. Then you start Feature B. Then you wait again. Context switching is expensive, and your development velocity is bottlenecked by serial execution.
 
@@ -36,7 +52,7 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
 
 ---
 
-## Features
+## ✨ Features
 
 ### Multi-Terminal Session Grid
 - Dynamic grid layout (1x1 to 3x4) that adapts to your session count
@@ -86,7 +102,7 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -128,7 +144,7 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
 
 ---
 
-## Installation
+## 📦 Installation
 
 ### Requirements
 
@@ -174,7 +190,7 @@ npm install -g @openai/codex
 
 ---
 
-## Usage
+## 🚀 Usage
 
 ### Quick Start
 
@@ -219,7 +235,7 @@ Each session can have quick action buttons:
 
 ---
 
-## Configuration
+## ⚙️ Configuration
 
 ### Session Persistence
 
@@ -227,7 +243,7 @@ Session configurations (modes, branches, count) are automatically persisted to U
 
 ---
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### Claude Command Not Found
 
@@ -253,7 +269,7 @@ git worktree prune
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
 ### Development Setup
 
@@ -286,13 +302,13 @@ claude-maestro/
 
 ---
 
-## License
+## 📄 License
 
 MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
 - [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) - Terminal emulator for Swift
 - [Model Context Protocol](https://modelcontextprotocol.io/) - MCP SDK
