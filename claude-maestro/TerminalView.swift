@@ -119,7 +119,9 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     func makeNSView(context: Context) -> MaestroTerminalView {
         let terminal = MaestroTerminalView(frame: .zero)
         terminal.processDelegate = context.coordinator
-        terminal.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+
+        // Configure terminal font with Nerd Font support for oh-my-zsh icons
+        terminal.font = Self.getTerminalFont()
 
         // Configure terminal colors
         // Use system color for background to match GitTreeView
@@ -195,6 +197,36 @@ struct EmbeddedTerminalView: NSViewRepresentable {
             onServerReady: onServerReady,
             onOutputReceived: onOutputReceived
         )
+    }
+
+    /// Get the terminal font, preferring Nerd Fonts for oh-my-zsh icon support
+    /// Priority: User preference > Installed Nerd Fonts > System monospace font
+    private static func getTerminalFont() -> NSFont {
+        let fontSize: CGFloat = 13
+
+        // Check user preference
+        if let savedFontName = UserDefaults.standard.string(forKey: "terminal-font-name"),
+           let customFont = NSFont(name: savedFontName, size: fontSize) {
+            return customFont
+        }
+
+        // Try common Nerd Fonts in order of popularity
+        let nerdFonts = [
+            "MesloLGS-NF-Regular",      // MesloLGS Nerd Font (popular with oh-my-zsh)
+            "FiraCode-Retina",           // FiraCode Nerd Font
+            "JetBrainsMono-Regular",     // JetBrains Mono Nerd Font
+            "CaskaydiaCove-Regular",     // Cascadia Code Nerd Font
+            "Hack-Regular"               // Hack Nerd Font
+        ]
+
+        for fontName in nerdFonts {
+            if let font = NSFont(name: fontName, size: fontSize) {
+                return font
+            }
+        }
+
+        // Fallback to system monospace font
+        return NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
     }
 
     private func launchTerminal(in terminal: MaestroTerminalView) {
