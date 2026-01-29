@@ -8,6 +8,9 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+<!-- Add your screenshot: save as assets/screenshot.png -->
+![Claude Maestro](assets/screenshot.png)
+
 ---
 
 ## Why Maestro?
@@ -44,10 +47,10 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
 - Visual branch assignment in the sidebar
 
 ### MCP Server Integration
-- Built-in MCP server for process management
-- Port allocation in the 3000-3099 range
-- Tools for starting, stopping, and monitoring dev servers
-- Project type detection (Node.js, Rust, Swift, Python, Go)
+- Built-in MCP server for agent status reporting
+- AI sessions report their state (idle, working, needs input, finished, error)
+- Real-time status updates displayed in the session grid
+- Uses the `maestro_status` tool for state communication
 
 ### Visual Git Graph
 - GitKraken-style commit visualization
@@ -70,6 +73,13 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
 - **Gemini CLI** - Google's Gemini AI
 - **OpenAI Codex** - OpenAI's coding assistant
 - **Plain Terminal** - Standard shell without AI
+
+### Plugin Marketplace
+- Browse and install plugins from marketplace sources
+- Plugin types: Skills, Commands, and MCP servers
+- Per-session plugin configuration
+- Automatic symlink management for commands and skills
+- Extend Maestro's capabilities with community plugins
 
 ---
 
@@ -96,10 +106,11 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
 ┌─────────────────────────────────────────────────────────────────┐
 │                  MaestroMCPServer (Swift)                       │
 │                                                                 │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
-│  │  PortManager    │  │  ProcessManager │  │  StatusManager  │ │
-│  │  (3000-3099)    │  │  (spawn/kill)   │  │ (agent status)  │ │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                     StatusManager                           ││
+│  │  maestro_status tool - agents report their current state    ││
+│  │  (idle, working, needs_input, finished, error)              ││
+│  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -109,7 +120,7 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
 |-----------|------------|
 | Desktop App | Swift 5.9, SwiftUI, AppKit |
 | Terminal Emulator | SwiftTerm |
-| MCP Server | Swift, Swift MCP SDK |
+| MCP Server | Swift MCP SDK (agent status reporting) |
 | Git Operations | Native git CLI |
 
 ---
@@ -182,21 +193,6 @@ When you assign a branch to a session:
 3. All file changes are isolated to that worktree
 4. Worktrees are cleaned up when sessions close
 
-### MCP Tools
-
-The built-in MCP server provides these tools to AI sessions:
-
-| Tool | Description |
-|------|-------------|
-| `start_dev_server` | Start a dev server with auto-port allocation |
-| `stop_dev_server` | Stop a running dev server |
-| `restart_dev_server` | Restart a dev server |
-| `get_server_status` | Check server status (running, stopped, port, URL) |
-| `get_server_logs` | View recent server output |
-| `list_available_ports` | See available ports in 3000-3099 range |
-| `detect_project_type` | Auto-detect project type and suggest run command |
-| `list_system_processes` | List all processes on dev ports |
-
 ### Template Presets
 
 Save your session configurations:
@@ -216,22 +212,6 @@ Each session can have quick action buttons:
 
 ## Configuration
 
-### MCP Server Configuration
-
-The MCP server is configured via `.mcp.json` in your project root:
-
-```json
-{
-  "mcpServers": {
-    "maestro": {
-      "command": "node",
-      "args": ["/path/to/maestro-mcp-server/dist/bundle.js"],
-      "env": {}
-    }
-  }
-}
-```
-
 ### Session Persistence
 
 Session configurations (modes, branches, count) are automatically persisted to UserDefaults and restored on app launch.
@@ -239,12 +219,6 @@ Session configurations (modes, branches, count) are automatically persisted to U
 ---
 
 ## Troubleshooting
-
-### MCP Server Not Connecting
-
-1. Ensure the app has been built at least once in Xcode
-2. Check that `MaestroMCPServer` binary exists in `~/Library/Application Support/Claude Maestro/`
-3. The MCP server is a native Swift binary that's built and copied automatically
 
 ### Claude Command Not Found
 
@@ -317,4 +291,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-Built with care by Jack Wakem
+Built with Love by Jack
