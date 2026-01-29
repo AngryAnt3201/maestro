@@ -182,7 +182,7 @@ The Swift MCP server (`MaestroMCPServer/`) is built automatically as part of the
 npm install -g @anthropic-ai/claude-code
 
 # Gemini CLI
-npm install -g @anthropic-ai/gemini-cli
+npm install -g @google/gemini-cli
 
 # OpenAI Codex
 npm install -g @openai/codex
