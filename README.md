@@ -150,6 +150,12 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
 
 The Swift MCP server (`MaestroMCPServer/`) is built automatically as part of the Xcode build process.
 
+4. **Configure MCP (optional):**
+   ```bash
+   cp .mcp.json.example .mcp.json
+   ```
+   Edit `.mcp.json` and update the `command` path to point to your built MaestroMCPServer binary (typically found at `~/Library/Application Support/Claude Maestro/MaestroMCPServer` after first run).
+
 ### Optional: Install AI CLIs
 
 ```bash

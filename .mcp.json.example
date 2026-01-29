@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "maestro": {
+      "type": "stdio",
+      "command": "/path/to/MaestroMCPServer",
+      "args": [],
+      "env": {
+        "MAESTRO_SESSION_ID": "1",
+        "MAESTRO_PORT_RANGE_START": "3000",
+        "MAESTRO_PORT_RANGE_END": "3099"
+      }
+    }
+  }
+}

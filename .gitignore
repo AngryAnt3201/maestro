@@ -6,5 +6,11 @@ MaestroMCPServer/.build/
 xcuserdata/
 *.xcuserstate
 
+# Xcode build directory
+build/
+
 # Local Claude session context
 claude.md
+
+# Local MCP configuration (contains machine-specific paths)
+.mcp.json
