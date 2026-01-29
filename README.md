@@ -8,6 +8,9 @@ A native macOS application that lets you run 1-12 Claude Code (or other AI CLI) 
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+[![X (Twitter)](https://img.shields.io/badge/X-@maestro5240871-000000?style=flat&logo=x&logoColor=white)](https://x.com/maestro5240871)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/3tQyFUYPVP)
+
 <!-- Add your screenshot: save as assets/screenshot.png -->
 ![Claude Maestro](assets/screenshot.png)
 
