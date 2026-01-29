@@ -228,18 +228,6 @@ class MCPServerManager: ObservableObject {
         return (path, [])
     }
 
-    // MARK: - App Configuration
-
-    /// Apply an app configuration to a session
-    /// This sets the session's MCP config to match the app's enabled servers
-    func applyAppConfig(_ app: AppConfig, to sessionId: Int) {
-        let config = SessionMCPConfig(
-            enabledServerIds: app.enabledMCPServerIds,
-            maestroEnabled: app.maestroMCPEnabled
-        )
-        sessionMCPConfigs[sessionId] = config
-        persistSessionConfigs()
-    }
 }
 
 /// Errors related to MCP server management

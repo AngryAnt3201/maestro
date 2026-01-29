@@ -813,18 +813,4 @@ class SkillManager: ObservableObject {
         }
     }
 
-    // MARK: - App Configuration
-
-    /// Apply an app configuration to a session
-    /// This sets the session's skill config to match the app's enabled skills
-    func applyAppConfig(_ app: AppConfig, to sessionId: Int) {
-        let config = SessionSkillConfig(enabledSkillIds: app.enabledSkillIds)
-        sessionSkillConfigs[sessionId] = config
-        persistSessionConfigs()
-
-        // Re-sync worktree skills if we know the worktree path
-        if let worktreePath = sessionWorktreePaths[sessionId] {
-            syncWorktreeSkills(worktreePath: worktreePath, for: sessionId)
-        }
-    }
 }

@@ -201,8 +201,6 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         let shell = Foundation.ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
 
         // Generate session configs (CLAUDE.md + CLI-specific MCP config)
-        // Get associated app config for custom instructions
-        let appConfig = AppManager.shared.getAssociatedApp(for: sessionId)
         ClaudeDocManager.writeSessionConfigs(
             to: workingDirectory,
             projectPath: workingDirectory,
@@ -210,8 +208,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
             branch: assignedBranch,
             sessionId: sessionId,
             port: nil,
-            mode: mode,
-            appConfig: appConfig
+            mode: mode
         )
 
         // Note: Branch checkout is handled by worktree isolation

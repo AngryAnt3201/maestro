@@ -903,8 +903,7 @@ class ClaudeDocManager {
         branch: String?,
         sessionId: Int,
         port: Int?,
-        mode: TerminalMode,
-        appConfig: AppConfig? = nil
+        mode: TerminalMode
     ) {
         // Always write CLAUDE.md - all CLIs can be configured to read it
         let effectiveRunCommand = runCommand ?? detectRunCommand(for: directory)
@@ -946,7 +945,7 @@ class ClaudeDocManager {
             mcpServerPath: mcpServerPath,
             mainRepoClaudeMD: mainRepoClaudeMD,
             skillsSection: skillsSection,
-            customInstructions: appConfig?.customInstructions
+            customInstructions: nil
         )
 
         let filePath = URL(fileURLWithPath: directory).appendingPathComponent("CLAUDE.md")

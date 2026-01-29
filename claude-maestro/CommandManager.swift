@@ -627,18 +627,4 @@ class CommandManager: ObservableObject {
         }
     }
 
-    // MARK: - App Configuration
-
-    /// Apply an app configuration to a session
-    /// This sets the session's command config to match the app's enabled commands
-    func applyAppConfig(_ app: AppConfig, to sessionId: Int) {
-        let config = SessionCommandConfig(enabledCommandIds: app.enabledCommandIds)
-        sessionCommandConfigs[sessionId] = config
-        persistSessionConfigs()
-
-        // Re-sync worktree commands if we know the worktree path
-        if let worktreePath = sessionWorktreePaths[sessionId] {
-            syncWorktreeCommands(worktreePath: worktreePath, for: sessionId)
-        }
-    }
 }

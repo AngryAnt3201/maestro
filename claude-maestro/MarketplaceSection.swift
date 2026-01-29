@@ -120,7 +120,7 @@ struct MarketplaceSection: View {
         }
         .padding(.horizontal, 8)
         .sheet(isPresented: $showBrowser) {
-            MarketplaceBrowserViewV2()
+            MarketplaceBrowserView()
         }
         .sheet(item: $showPluginDetail) { plugin in
             PluginDetailSheet(plugin: plugin)
