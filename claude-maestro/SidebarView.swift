@@ -26,6 +26,7 @@ enum SidebarTab: String, CaseIterable {
 
 struct SidebarView: View {
     @ObservedObject var manager: SessionManager
+    @ObservedObject var appearanceManager: AppearanceManager
     @State private var selectedTab: SidebarTab = .configuration
 
     var body: some View {
@@ -67,7 +68,7 @@ struct SidebarView: View {
             // Tab Content
             switch selectedTab {
             case .configuration:
-                ConfigurationSidebarContent(manager: manager)
+                ConfigurationSidebarContent(manager: manager, appearanceManager: appearanceManager)
             case .processes:
                 ProcessSidebarView(manager: manager)
             }
@@ -83,6 +84,7 @@ struct SidebarView: View {
 
 struct ConfigurationSidebarContent: View {
     @ObservedObject var manager: SessionManager
+    @ObservedObject var appearanceManager: AppearanceManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -261,6 +263,12 @@ struct ConfigurationSidebarContent: View {
 
                     // Quick Actions Section
                     QuickActionsSection()
+
+                    Divider()
+                        .padding(.horizontal, 8)
+
+                    // Theme Switcher Section
+                    ThemeSwitcherSection(appearanceManager: appearanceManager)
                 }
                 .padding(.bottom, 8)
             }
@@ -1062,6 +1070,29 @@ struct ClaudeMDSection: View {
     }
 }
 
+// MARK: - Theme Switcher Section
+
+struct ThemeSwitcherSection: View {
+    @ObservedObject var appearanceManager: AppearanceManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Appearance")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 0) {
+                ThemeSwitcherButton(appearanceManager: appearanceManager)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(8)
+            .background(Color(NSColor.windowBackgroundColor))
+            .cornerRadius(8)
+        }
+        .padding(.horizontal, 8)
+    }
+}
+
 #Preview {
-    SidebarView(manager: SessionManager())
+    SidebarView(manager: SessionManager(), appearanceManager: AppearanceManager())
 }

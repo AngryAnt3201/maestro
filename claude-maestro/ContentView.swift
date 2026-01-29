@@ -1013,23 +1013,26 @@ class SessionManager: ObservableObject {
 
 struct ContentView: View {
     @StateObject private var manager = SessionManager()
+    @StateObject private var appearanceManager = AppearanceManager()
     @State private var statusMessage: String = "Select a directory to launch Claude Code instances"
     @State private var showBranchSidebar: Bool = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(manager: manager)
+            SidebarView(manager: manager, appearanceManager: appearanceManager)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 240, max: 300)
         } detail: {
             MainContentView(
                 manager: manager,
+                appearanceManager: appearanceManager,
                 statusMessage: $statusMessage,
                 showBranchSidebar: $showBranchSidebar,
                 columnVisibility: $columnVisibility
             )
         }
         .navigationSplitViewStyle(.balanced)
+        .preferredColorScheme(appearanceManager.currentMode.colorScheme)
     }
 }
 
@@ -1037,6 +1040,7 @@ struct ContentView: View {
 
 struct MainContentView: View {
     @ObservedObject var manager: SessionManager
+    @ObservedObject var appearanceManager: AppearanceManager
     @Binding var statusMessage: String
     @Binding var showBranchSidebar: Bool
     @Binding var columnVisibility: NavigationSplitViewVisibility
