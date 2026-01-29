@@ -251,6 +251,7 @@ struct EmbeddedTerminalView: NSViewRepresentable {
                     if [ -f ~/.zshrc ]; then source ~/.zshrc 2>/dev/null; fi
                     if [ -f ~/.bash_profile ]; then source ~/.bash_profile 2>/dev/null; fi
                     if [ -f ~/.bashrc ]; then source ~/.bashrc 2>/dev/null; fi
+                    clear
                     cd '\(self.workingDirectory)'
                     \(self.mode.command ?? "echo 'No CLI configured'")
                     """
