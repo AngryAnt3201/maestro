@@ -200,33 +200,75 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     }
 
     /// Get the terminal font, preferring Nerd Fonts for oh-my-zsh icon support
-    /// Priority: User preference > Installed Nerd Fonts > System monospace font
+    /// Priority: User preference > Any installed Nerd Font > System monospace font
     private static func getTerminalFont() -> NSFont {
         let fontSize: CGFloat = 13
 
-        // Check user preference
+        // Check user preference first
         if let savedFontName = UserDefaults.standard.string(forKey: "terminal-font-name"),
            let customFont = NSFont(name: savedFontName, size: fontSize) {
             return customFont
         }
 
-        // Try common Nerd Fonts in order of popularity
-        let nerdFonts = [
-            "MesloLGS-NF-Regular",      // MesloLGS Nerd Font (popular with oh-my-zsh)
-            "FiraCode-Retina",           // FiraCode Nerd Font
-            "JetBrainsMono-Regular",     // JetBrains Mono Nerd Font
-            "CaskaydiaCove-Regular",     // Cascadia Code Nerd Font
-            "Hack-Regular"               // Hack Nerd Font
-        ]
-
-        for fontName in nerdFonts {
-            if let font = NSFont(name: fontName, size: fontSize) {
-                return font
-            }
+        // Dynamically find any installed Nerd Font
+        if let nerdFont = findInstalledNerdFont(size: fontSize) {
+            return nerdFont
         }
 
         // Fallback to system monospace font
         return NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+    }
+
+    /// Dynamically searches for any installed Nerd Font
+    /// Prefers monospace variants and popular fonts (Meslo, FiraCode, JetBrains)
+    private static func findInstalledNerdFont(size: CGFloat) -> NSFont? {
+        let fontManager = NSFontManager.shared
+        let allFonts = fontManager.availableFontFamilies
+
+        // Filter for Nerd Font families (contain "Nerd Font" or end with "NF")
+        let nerdFontFamilies = allFonts.filter { family in
+            family.contains("Nerd Font") || family.hasSuffix(" NF")
+        }
+
+        // Preferred font families in order (popular terminal fonts first)
+        let preferredPrefixes = ["Meslo", "FiraCode", "Fira Code", "JetBrains", "Cascadia", "Hack", "Source Code", "Inconsolata"]
+
+        // Sort: preferred fonts first, then prefer Mono variants
+        let sortedFamilies = nerdFontFamilies.sorted { a, b in
+            let aPreferredIndex = preferredPrefixes.firstIndex { a.hasPrefix($0) } ?? Int.max
+            let bPreferredIndex = preferredPrefixes.firstIndex { b.hasPrefix($0) } ?? Int.max
+            if aPreferredIndex != bPreferredIndex {
+                return aPreferredIndex < bPreferredIndex
+            }
+            // Prefer Mono variants for terminal use
+            let aMono = a.contains("Mono")
+            let bMono = b.contains("Mono")
+            if aMono != bMono { return aMono }
+            return a < b
+        }
+
+        // Try to get a Regular weight font from the first available family
+        for family in sortedFamilies {
+            if let members = fontManager.availableMembers(ofFontFamily: family) {
+                // Look for Regular weight first
+                for member in members {
+                    if let fontName = member[0] as? String,
+                       let weight = member[2] as? Int,
+                       weight >= 4 && weight <= 6 {  // Regular weight range
+                        if let font = NSFont(name: fontName, size: size) {
+                            return font
+                        }
+                    }
+                }
+                // Fallback to first available member
+                if let fontName = members.first?[0] as? String,
+                   let font = NSFont(name: fontName, size: size) {
+                    return font
+                }
+            }
+        }
+
+        return nil
     }
 
     private func launchTerminal(in terminal: MaestroTerminalView) {
