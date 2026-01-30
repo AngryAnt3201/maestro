@@ -60,6 +60,7 @@
 				CB2098EC2F0CBC2600779863 /* Sources */,
 				CB2098ED2F0CBC2600779863 /* Frameworks */,
 				CB2098EE2F0CBC2600779863 /* Resources */,
+				CB2099202F0E000000779863 /* Build MaestroMCPServer */,
 			);
 			buildRules = (
 			);
@@ -123,6 +124,27 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		CB2099202F0E000000779863 /* Build MaestroMCPServer */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build MaestroMCPServer";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "# Build MaestroMCPServer and bundle it inside the app\nset -e\n\nMCP_SERVER_DIR=\"${SRCROOT}/MaestroMCPServer\"\nRESOURCES_DIR=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources\"\n\necho \"Building MaestroMCPServer...\"\ncd \"${MCP_SERVER_DIR}\"\n/usr/bin/swift build -c release\n\necho \"Creating Resources directory...\"\nmkdir -p \"${RESOURCES_DIR}\"\n\necho \"Copying MaestroMCPServer binary to app bundle...\"\ncp \"${MCP_SERVER_DIR}/.build/release/MaestroMCPServer\" \"${RESOURCES_DIR}/\"\nchmod +x \"${RESOURCES_DIR}/MaestroMCPServer\"\n\necho \"MaestroMCPServer bundled successfully!\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		CB2098EC2F0CBC2600779863 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -171,7 +193,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -234,7 +256,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;

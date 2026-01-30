@@ -162,18 +162,24 @@ class MCPServerManager: ObservableObject {
 
     /// Get path to native Swift MCP server binary
     private func getNativeMCPServerPath() -> String? {
-        // First, check in the app bundle (for release builds)
-        if let bundlePath = Bundle.main.executableURL?.deletingLastPathComponent()
-            .appendingPathComponent("MaestroMCPServer").path,
+        // First, check Application Support (stable path, copied from bundle on first launch)
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        if let appSupportPath = appSupport?.appendingPathComponent("Claude Maestro/MaestroMCPServer").path,
+           FileManager.default.isExecutableFile(atPath: appSupportPath) {
+            return appSupportPath
+        }
+
+        // Check in app bundle Resources folder (fallback for first launch before copy completes)
+        if let bundlePath = Bundle.main.url(forResource: "MaestroMCPServer", withExtension: nil)?.path,
            FileManager.default.isExecutableFile(atPath: bundlePath) {
             return bundlePath
         }
 
-        // Check in Application Support (for development)
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-        if let devPath = appSupport?.appendingPathComponent("Claude Maestro/MaestroMCPServer").path,
-           FileManager.default.isExecutableFile(atPath: devPath) {
-            return devPath
+        // Check in app bundle MacOS folder (legacy location)
+        if let bundlePath = Bundle.main.executableURL?.deletingLastPathComponent()
+            .appendingPathComponent("MaestroMCPServer").path,
+           FileManager.default.isExecutableFile(atPath: bundlePath) {
+            return bundlePath
         }
 
         // Check in DerivedData/Build/Products for development builds
