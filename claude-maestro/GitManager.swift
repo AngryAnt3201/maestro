@@ -567,33 +567,66 @@ class GitManager: ObservableObject {
     }
 
     private func runGitCommand(_ args: [String]) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            let pipe = Pipe()
-            let errorPipe = Pipe()
+        let repoPath = self.repoPath
+        let commandDesc = args.joined(separator: " ")
 
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            process.arguments = args
-            process.currentDirectoryURL = URL(fileURLWithPath: repoPath)
-            process.standardOutput = pipe
-            process.standardError = errorPipe
-
-            do {
-                try process.run()
-                process.waitUntilExit()
-
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: data, encoding: .utf8) ?? ""
-
-                if process.terminationStatus != 0 {
-                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                    let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
-                    continuation.resume(throwing: GitError.commandFailed(errorOutput))
+        // Debug logging
+        func debugLog(_ msg: String) {
+            let logPath = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("maestro-debug.log")
+            let timestamp = ISO8601DateFormatter().string(from: Date())
+            let line = "[\(timestamp)] \(msg)\n"
+            if let data = line.data(using: .utf8) {
+                if FileManager.default.fileExists(atPath: logPath.path) {
+                    if let handle = try? FileHandle(forWritingTo: logPath) {
+                        handle.seekToEndOfFile()
+                        handle.write(data)
+                        try? handle.close()
+                    }
                 } else {
-                    continuation.resume(returning: output.trimmingCharacters(in: .whitespacesAndNewlines))
+                    try? data.write(to: logPath)
                 }
-            } catch {
-                continuation.resume(throwing: GitError.commandFailed(error.localizedDescription))
+            }
+        }
+
+        debugLog("Starting: git \(commandDesc) (main: \(Thread.isMainThread))")
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                debugLog("Running on background: git \(commandDesc) (main: \(Thread.isMainThread))")
+                let process = Process()
+                let pipe = Pipe()
+                let errorPipe = Pipe()
+
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+                process.arguments = args
+                process.currentDirectoryURL = URL(fileURLWithPath: repoPath)
+                process.standardOutput = pipe
+                process.standardError = errorPipe
+
+                do {
+                    try process.run()
+
+                    // IMPORTANT: Read stdout BEFORE waitUntilExit to avoid pipe buffer deadlock
+                    // If the process outputs more than the pipe buffer size (~64KB), it will block
+                    // waiting for a reader. Reading first prevents this deadlock.
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+
+                    process.waitUntilExit()
+
+                    let output = String(data: data, encoding: .utf8) ?? ""
+
+                    if process.terminationStatus != 0 {
+                        let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
+                        debugLog("Failed: git \(commandDesc) - \(errorOutput)")
+                        continuation.resume(throwing: GitError.commandFailed(errorOutput))
+                    } else {
+                        debugLog("Completed: git \(commandDesc)")
+                        continuation.resume(returning: output.trimmingCharacters(in: .whitespacesAndNewlines))
+                    }
+                } catch {
+                    debugLog("Failed: git \(commandDesc) - \(error)")
+                    continuation.resume(throwing: GitError.commandFailed(error.localizedDescription))
+                }
             }
         }
     }

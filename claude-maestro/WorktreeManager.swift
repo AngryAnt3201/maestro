@@ -255,24 +255,28 @@ class WorktreeManager: ObservableObject {
 
     /// Check if worktree has uncommitted changes
     func hasUncommittedChanges(at path: String) async -> Bool {
-        let process = Process()
-        let pipe = Pipe()
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process()
+                let pipe = Pipe()
 
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["status", "--porcelain"]
-        process.currentDirectoryURL = URL(fileURLWithPath: path)
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+                process.arguments = ["status", "--porcelain"]
+                process.currentDirectoryURL = URL(fileURLWithPath: path)
+                process.standardOutput = pipe
+                process.standardError = FileHandle.nullDevice
 
-        do {
-            try process.run()
-            process.waitUntilExit()
+                do {
+                    try process.run()
+                    process.waitUntilExit()
 
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
-            return !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        } catch {
-            return false
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    let output = String(data: data, encoding: .utf8) ?? ""
+                    continuation.resume(returning: !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                } catch {
+                    continuation.resume(returning: false)
+                }
+            }
         }
     }
 
