@@ -743,10 +743,18 @@ struct TerminalSessionView: View {
             // Status bar with controls
             HStack(spacing: 6) {
                 // Status indicator
-                Image(systemName: status.icon)
-                    .foregroundColor(status.color)
-                    .symbolEffect(.pulse, isActive: status == .working)
-                    .font(.caption)
+                Group {
+                    if #available(macOS 14.0, *) {
+                        Image(systemName: status.icon)
+                            .foregroundColor(status.color)
+                            .symbolEffect(.pulse, isActive: status == .working)
+                            .font(.caption)
+                    } else {
+                        Image(systemName: status.icon)
+                            .foregroundColor(status.color)
+                            .font(.caption)
+                    }
+                }
 
                 // Direct mode picker (replaces cycling toggle)
                 CompactModePicker(selectedMode: $mode, isDisabled: shouldLaunch)

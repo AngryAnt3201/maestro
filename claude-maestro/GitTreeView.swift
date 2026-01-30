@@ -69,10 +69,10 @@ struct GitTreeView: View {
         .task {
             await loadGraph()
         }
-        .onChange(of: gitManager.currentBranch) { _, _ in
+        .onChange(of: gitManager.currentBranch) { _ in
             Task { await loadGraph() }
         }
-        .onChange(of: gitManager.repoPath) { _, _ in
+        .onChange(of: gitManager.repoPath) { _ in
             graphData.clear()
             Task { await loadGraph() }
         }

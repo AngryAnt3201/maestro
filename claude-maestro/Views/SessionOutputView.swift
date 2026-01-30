@@ -188,7 +188,7 @@ struct SessionOutputView: View {
                 .padding(.vertical, 4)
             }
             .frame(height: 120)
-            .onChange(of: logs.count) { _, _ in
+            .onChange(of: logs.count) { _ in
                 if autoScroll, let lastEntry = filteredLogs.last {
                     withAnimation(.easeOut(duration: 0.1)) {
                         proxy.scrollTo(lastEntry.id, anchor: .bottom)

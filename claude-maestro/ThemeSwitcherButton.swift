@@ -76,8 +76,9 @@ struct ThemeSwitcherButton: View {
     }
 }
 
-#Preview {
-    @Previewable @StateObject var manager = AppearanceManager()
-    ThemeSwitcherButton(appearanceManager: manager)
-        .padding()
+struct ThemeSwitcherButton_Previews: PreviewProvider {
+    static var previews: some View {
+        ThemeSwitcherButton(appearanceManager: AppearanceManager())
+            .padding()
+    }
 }
