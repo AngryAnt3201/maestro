@@ -128,23 +128,9 @@ class ClaudeDocManager {
 
             ## MCP Server Integration
 
-            This session is connected to Claude Maestro's process management server.
+            This session is connected to Claude Maestro's status reporting server.
 
-            ### Available MCP Tools
-
-            Use these tools to manage your development server:
-
-            - `start_dev_server` - Start the dev server for this project
-              - Required: session_id=\(sessionId), command (e.g., "npm run dev"), working_directory
-              - Optional: port (will be auto-assigned from 3000-3099 range)
-            - `stop_dev_server` - Stop the running dev server (session_id=\(sessionId))
-            - `restart_dev_server` - Restart the dev server (session_id=\(sessionId))
-            - `get_server_status` - Check if your server is running
-            - `get_server_logs` - View recent server output
-            - `list_available_ports` - See available ports
-            - `detect_project_type` - Auto-detect project type and run command
-
-            ### Status Reporting (via maestro-status MCP)
+            ### Status Reporting
 
             Report your status to Maestro using the `maestro_status` tool:
             - `maestro_status` - Report your current state to the Maestro UI
@@ -164,17 +150,6 @@ class ClaudeDocManager {
             \(cmd)
             ```
             """
-
-            if mcpServerPath != nil {
-                content += """
-
-
-            Or use the MCP tool:
-            ```
-            Use the start_dev_server tool with session_id=\(sessionId), command="\(cmd)", working_directory="\(projectPath)"
-            ```
-            """
-            }
         } else {
             content += """
 
@@ -185,14 +160,6 @@ class ClaudeDocManager {
             - `python main.py` - Python projects
             - `go run .` - Go projects
             """
-
-            if mcpServerPath != nil {
-                content += """
-
-
-            Use the `detect_project_type` MCP tool to auto-detect the run command.
-            """
-            }
         }
 
         // Add skills section if provided

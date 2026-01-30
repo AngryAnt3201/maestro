@@ -62,10 +62,6 @@ class QuickActionManager: ObservableObject {
                    - .env.example exists but no .env? Warn user
                    - Required env vars referenced but not set?
 
-                **MCP Integration:**
-                - If `start_dev_server` MCP tool is available, prefer it for long-running servers
-                - This enables proper process management and log streaming
-
                 **Execution:**
                 1. Report detected project type and chosen command
                 2. Start the application
