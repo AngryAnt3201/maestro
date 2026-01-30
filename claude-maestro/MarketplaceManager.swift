@@ -696,7 +696,11 @@ class MarketplaceManager: ObservableObject {
     }
 
     /// Install a plugin from marketplace
-    func installPlugin(_ plugin: MarketplacePlugin, scope: InstallScope) async throws -> InstalledPlugin {
+    /// - Parameters:
+    ///   - plugin: The marketplace plugin to install
+    ///   - scope: Installation scope (user, project, or local)
+    ///   - projectPath: Required for project/local scopes - the path to the project directory
+    func installPlugin(_ plugin: MarketplacePlugin, scope: InstallScope, projectPath: String? = nil) async throws -> InstalledPlugin {
         // Determine installation path based on scope
         let installPath: String
         switch scope {
@@ -704,10 +708,19 @@ class MarketplaceManager: ObservableObject {
             installPath = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent(".claude/plugins/\(plugin.id)").path
         case .project:
-            // Would need current project path
-            throw MarketplaceError.installationError("Project scope requires a project path")
+            guard let projectPath = projectPath, !projectPath.isEmpty else {
+                throw MarketplaceError.installationError("Project scope requires a project path")
+            }
+            // Project scope: install to .claude/plugins/ in the project directory (committed to git)
+            installPath = URL(fileURLWithPath: projectPath)
+                .appendingPathComponent(".claude/plugins/\(plugin.id)").path
         case .local:
-            throw MarketplaceError.installationError("Local scope requires a project path")
+            guard let projectPath = projectPath, !projectPath.isEmpty else {
+                throw MarketplaceError.installationError("Local scope requires a project path")
+            }
+            // Local scope: install to .claude.local/plugins/ in the project directory (gitignored)
+            installPath = URL(fileURLWithPath: projectPath)
+                .appendingPathComponent(".claude.local/plugins/\(plugin.id)").path
         }
 
         // Determine the source path for symlinking

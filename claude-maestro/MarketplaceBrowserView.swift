@@ -94,10 +94,10 @@ struct MarketplaceBrowserView: View {
             if let plugin = selectedPlugin {
                 PluginInstallSheetV2(
                     plugin: plugin,
-                    onInstall: { scope in
+                    onInstall: { scope, projectPath in
                         Task {
                             do {
-                                _ = try await marketplaceManager.installPlugin(plugin, scope: scope)
+                                _ = try await marketplaceManager.installPlugin(plugin, scope: scope, projectPath: projectPath)
                                 showInstallSheet = false
                             } catch {
                                 installError = error.localizedDescription
@@ -1206,11 +1206,31 @@ struct NoiseTextureView: View {
 
 struct PluginInstallSheetV2: View {
     let plugin: MarketplacePlugin
-    let onInstall: (InstallScope) -> Void
+    let onInstall: (InstallScope, String?) -> Void
     let onCancel: () -> Void
 
+    @StateObject private var skillManager = SkillManager.shared
     @State private var selectedScope: InstallScope = .user
+    @State private var projectPath: String = ""
     @Environment(\.colorScheme) private var colorScheme
+
+    /// Whether the current scope requires a project path
+    private var requiresProjectPath: Bool {
+        selectedScope == .project || selectedScope == .local
+    }
+
+    /// Whether the install button should be enabled
+    private var canInstall: Bool {
+        if requiresProjectPath {
+            return !projectPath.isEmpty
+        }
+        return true
+    }
+
+    /// Whether we have a detected project path from the app
+    private var hasDetectedProject: Bool {
+        skillManager.currentProjectPath != nil && !skillManager.currentProjectPath!.isEmpty
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1270,8 +1290,92 @@ struct PluginInstallSheetV2: View {
                         )
                     }
                 }
+
+                // Project path selector (shown when Project or Local scope is selected)
+                if requiresProjectPath {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Project Directory")
+                                .font(.system(size: 13, weight: .semibold))
+
+                            if hasDetectedProject && projectPath == skillManager.currentProjectPath {
+                                Text("(auto-detected)")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.green)
+                            }
+                        }
+                        .padding(.top, 8)
+
+                        HStack(spacing: 8) {
+                            HStack(spacing: 8) {
+                                Image(systemName: hasDetectedProject && projectPath == skillManager.currentProjectPath ? "checkmark.circle.fill" : "folder.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(hasDetectedProject && projectPath == skillManager.currentProjectPath ? .green : .secondary)
+
+                                if projectPath.isEmpty {
+                                    Text("No directory selected")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Text(projectPath)
+                                        .font(.system(size: 12))
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+
+                                Spacer()
+                            }
+                            .padding(10)
+                            .frame(maxWidth: .infinity)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(NSColor.textBackgroundColor))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .strokeBorder(
+                                                hasDetectedProject && projectPath == skillManager.currentProjectPath
+                                                    ? Color.green.opacity(0.3)
+                                                    : Color.primary.opacity(0.1),
+                                                lineWidth: 1
+                                            )
+                                    )
+                            )
+
+                            Button {
+                                selectProjectDirectory()
+                            } label: {
+                                Image(systemName: "folder.badge.plus")
+                                    .font(.system(size: 14))
+                            }
+                            .buttonStyle(.bordered)
+                            .help("Select a different directory")
+                        }
+
+                        if projectPath.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 10))
+                                Text("Please select the project directory")
+                                    .font(.system(size: 11))
+                            }
+                            .foregroundColor(.orange)
+                        } else {
+                            HStack(spacing: 4) {
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 10))
+                                Text(selectedScope == .project
+                                    ? "Plugin will be installed to .claude/plugins/ (shared with collaborators)"
+                                    : "Plugin will be installed to .claude.local/plugins/ (local only)")
+                                    .font(.system(size: 11))
+                            }
+                            .foregroundColor(.secondary)
+                        }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
             .padding(20)
+            .animation(.spring(response: 0.3), value: requiresProjectPath)
 
             Divider()
 
@@ -1284,17 +1388,38 @@ struct PluginInstallSheetV2: View {
                 Spacer()
 
                 Button {
-                    onInstall(selectedScope)
+                    onInstall(selectedScope, requiresProjectPath ? projectPath : nil)
                 } label: {
                     Label("Install Plugin", systemImage: "arrow.down.circle.fill")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(plugin.primaryType.color)
                 .keyboardShortcut(.return)
+                .disabled(!canInstall)
             }
             .padding(20)
         }
         .frame(width: 380)
+        .onAppear {
+            // Pre-fill with the current project path if available
+            if let currentPath = skillManager.currentProjectPath, !currentPath.isEmpty {
+                projectPath = currentPath
+            }
+        }
+    }
+
+    /// Opens a directory picker for selecting the project path
+    private func selectProjectDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.message = "Select project directory for plugin installation"
+        panel.prompt = "Select"
+
+        if panel.runModal() == .OK {
+            projectPath = panel.url?.path ?? ""
+        }
     }
 }
 
