@@ -19,8 +19,14 @@ class MaestroTerminalView: LocalProcessTerminalView {
     }
 
     // Intercept key equivalents so SwiftUI doesn't swallow Cmd+C/V
+    // Only handle if THIS terminal is the first responder (fixes multi-split paste issue)
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.modifierFlags.contains(.command) else {
+            return super.performKeyEquivalent(with: event)
+        }
+
+        // Only handle if this terminal is the first responder
+        guard window?.firstResponder == self else {
             return super.performKeyEquivalent(with: event)
         }
 
