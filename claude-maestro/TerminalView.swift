@@ -22,60 +22,66 @@ struct TerminalColorScheme {
     let ansiColors: [SwiftTerm.Color]
 
     // MARK: - Catppuccin Mocha (Dark Theme)
+    // Note: Using deviceRed/calibratedRed ensures proper color space conversion on all macOS versions
+    // This fixes black text issues on macOS Tahoe (26.x) where generic RGB colors may not convert correctly
     static let mocha = TerminalColorScheme(
-        foreground: NSColor(red: 205/255.0, green: 214/255.0, blue: 244/255.0, alpha: 1.0),  // Text
-        background: NSColor(red: 30/255.0, green: 30/255.0, blue: 46/255.0, alpha: 1.0),     // Base
-        cursorColor: NSColor(red: 245/255.0, green: 194/255.0, blue: 231/255.0, alpha: 1.0), // Pink
-        cursorTextColor: NSColor(red: 30/255.0, green: 30/255.0, blue: 46/255.0, alpha: 1.0), // Base (for contrast)
-        selectionColor: NSColor(red: 88/255.0, green: 91/255.0, blue: 112/255.0, alpha: 0.5), // Surface2 semi-transparent
+        foreground: NSColor(deviceRed: 205/255.0, green: 214/255.0, blue: 244/255.0, alpha: 1.0),  // Text
+        background: NSColor(deviceRed: 30/255.0, green: 30/255.0, blue: 46/255.0, alpha: 1.0),     // Base
+        cursorColor: NSColor(deviceRed: 245/255.0, green: 194/255.0, blue: 231/255.0, alpha: 1.0), // Pink
+        cursorTextColor: NSColor(deviceRed: 30/255.0, green: 30/255.0, blue: 46/255.0, alpha: 1.0), // Base (for contrast)
+        selectionColor: NSColor(deviceRed: 88/255.0, green: 91/255.0, blue: 112/255.0, alpha: 0.5), // Surface2 semi-transparent
+        // Note: SwiftTerm.Color uses 16-bit values (0-65535), not 8-bit (0-255)
+        // Multiply 8-bit values by 257 to convert: 255 * 257 = 65535
         ansiColors: [
             // Standard colors (0-7)
-            SwiftTerm.Color(red: 40, green: 42, blue: 54),      // Black (darker for visibility)
-            SwiftTerm.Color(red: 243, green: 139, blue: 168),   // Red
-            SwiftTerm.Color(red: 166, green: 227, blue: 161),   // Green
-            SwiftTerm.Color(red: 249, green: 226, blue: 175),   // Yellow
-            SwiftTerm.Color(red: 137, green: 180, blue: 250),   // Blue
-            SwiftTerm.Color(red: 245, green: 194, blue: 231),   // Magenta (Pink)
-            SwiftTerm.Color(red: 148, green: 226, blue: 213),   // Cyan (Teal)
-            SwiftTerm.Color(red: 186, green: 194, blue: 222),   // White (Subtext1)
+            SwiftTerm.Color(red: 40 * 257, green: 42 * 257, blue: 54 * 257),      // Black (darker for visibility)
+            SwiftTerm.Color(red: 243 * 257, green: 139 * 257, blue: 168 * 257),   // Red
+            SwiftTerm.Color(red: 166 * 257, green: 227 * 257, blue: 161 * 257),   // Green
+            SwiftTerm.Color(red: 249 * 257, green: 226 * 257, blue: 175 * 257),   // Yellow
+            SwiftTerm.Color(red: 137 * 257, green: 180 * 257, blue: 250 * 257),   // Blue
+            SwiftTerm.Color(red: 245 * 257, green: 194 * 257, blue: 231 * 257),   // Magenta (Pink)
+            SwiftTerm.Color(red: 148 * 257, green: 226 * 257, blue: 213 * 257),   // Cyan (Teal)
+            SwiftTerm.Color(red: 186 * 257, green: 194 * 257, blue: 222 * 257),   // White (Subtext1)
             // Bright colors (8-15)
-            SwiftTerm.Color(red: 108, green: 112, blue: 134),   // Bright Black (Overlay0)
-            SwiftTerm.Color(red: 243, green: 139, blue: 168),   // Bright Red
-            SwiftTerm.Color(red: 166, green: 227, blue: 161),   // Bright Green
-            SwiftTerm.Color(red: 249, green: 226, blue: 175),   // Bright Yellow
-            SwiftTerm.Color(red: 137, green: 180, blue: 250),   // Bright Blue
-            SwiftTerm.Color(red: 245, green: 194, blue: 231),   // Bright Magenta
-            SwiftTerm.Color(red: 148, green: 226, blue: 213),   // Bright Cyan
-            SwiftTerm.Color(red: 205, green: 214, blue: 244),   // Bright White (Text)
+            SwiftTerm.Color(red: 108 * 257, green: 112 * 257, blue: 134 * 257),   // Bright Black (Overlay0)
+            SwiftTerm.Color(red: 243 * 257, green: 139 * 257, blue: 168 * 257),   // Bright Red
+            SwiftTerm.Color(red: 166 * 257, green: 227 * 257, blue: 161 * 257),   // Bright Green
+            SwiftTerm.Color(red: 249 * 257, green: 226 * 257, blue: 175 * 257),   // Bright Yellow
+            SwiftTerm.Color(red: 137 * 257, green: 180 * 257, blue: 250 * 257),   // Bright Blue
+            SwiftTerm.Color(red: 245 * 257, green: 194 * 257, blue: 231 * 257),   // Bright Magenta
+            SwiftTerm.Color(red: 148 * 257, green: 226 * 257, blue: 213 * 257),   // Bright Cyan
+            SwiftTerm.Color(red: 205 * 257, green: 214 * 257, blue: 244 * 257),   // Bright White (Text)
         ]
     )
 
     // MARK: - Catppuccin Latte (Light Theme)
     static let latte = TerminalColorScheme(
-        foreground: NSColor(red: 76/255.0, green: 79/255.0, blue: 105/255.0, alpha: 1.0),    // Text
-        background: NSColor(red: 239/255.0, green: 241/255.0, blue: 245/255.0, alpha: 1.0),  // Base
-        cursorColor: NSColor(red: 136/255.0, green: 57/255.0, blue: 239/255.0, alpha: 1.0),  // Mauve
-        cursorTextColor: NSColor(red: 239/255.0, green: 241/255.0, blue: 245/255.0, alpha: 1.0), // Base (for contrast)
-        selectionColor: NSColor(red: 172/255.0, green: 176/255.0, blue: 190/255.0, alpha: 0.5),  // Surface2 semi-transparent
+        foreground: NSColor(deviceRed: 76/255.0, green: 79/255.0, blue: 105/255.0, alpha: 1.0),    // Text
+        background: NSColor(deviceRed: 239/255.0, green: 241/255.0, blue: 245/255.0, alpha: 1.0),  // Base
+        cursorColor: NSColor(deviceRed: 136/255.0, green: 57/255.0, blue: 239/255.0, alpha: 1.0),  // Mauve
+        cursorTextColor: NSColor(deviceRed: 239/255.0, green: 241/255.0, blue: 245/255.0, alpha: 1.0), // Base (for contrast)
+        selectionColor: NSColor(deviceRed: 172/255.0, green: 176/255.0, blue: 190/255.0, alpha: 0.5),  // Surface2 semi-transparent
+        // Note: SwiftTerm.Color uses 16-bit values (0-65535), not 8-bit (0-255)
+        // Multiply 8-bit values by 257 to convert: 255 * 257 = 65535
         ansiColors: [
             // Standard colors (0-7)
-            SwiftTerm.Color(red: 92, green: 95, blue: 119),     // Black (Subtext1)
-            SwiftTerm.Color(red: 210, green: 15, blue: 57),     // Red
-            SwiftTerm.Color(red: 64, green: 160, blue: 43),     // Green
-            SwiftTerm.Color(red: 223, green: 142, blue: 29),    // Yellow
-            SwiftTerm.Color(red: 30, green: 102, blue: 245),    // Blue
-            SwiftTerm.Color(red: 136, green: 57, blue: 239),    // Magenta (Mauve)
-            SwiftTerm.Color(red: 23, green: 146, blue: 153),    // Cyan (Teal)
-            SwiftTerm.Color(red: 188, green: 192, blue: 204),   // White (Surface1)
+            SwiftTerm.Color(red: 92 * 257, green: 95 * 257, blue: 119 * 257),     // Black (Subtext1)
+            SwiftTerm.Color(red: 210 * 257, green: 15 * 257, blue: 57 * 257),     // Red
+            SwiftTerm.Color(red: 64 * 257, green: 160 * 257, blue: 43 * 257),     // Green
+            SwiftTerm.Color(red: 223 * 257, green: 142 * 257, blue: 29 * 257),    // Yellow
+            SwiftTerm.Color(red: 30 * 257, green: 102 * 257, blue: 245 * 257),    // Blue
+            SwiftTerm.Color(red: 136 * 257, green: 57 * 257, blue: 239 * 257),    // Magenta (Mauve)
+            SwiftTerm.Color(red: 23 * 257, green: 146 * 257, blue: 153 * 257),    // Cyan (Teal)
+            SwiftTerm.Color(red: 188 * 257, green: 192 * 257, blue: 204 * 257),   // White (Surface1)
             // Bright colors (8-15)
-            SwiftTerm.Color(red: 140, green: 143, blue: 161),   // Bright Black (Overlay0)
-            SwiftTerm.Color(red: 210, green: 15, blue: 57),     // Bright Red
-            SwiftTerm.Color(red: 64, green: 160, blue: 43),     // Bright Green
-            SwiftTerm.Color(red: 223, green: 142, blue: 29),    // Bright Yellow
-            SwiftTerm.Color(red: 30, green: 102, blue: 245),    // Bright Blue
-            SwiftTerm.Color(red: 136, green: 57, blue: 239),    // Bright Magenta
-            SwiftTerm.Color(red: 23, green: 146, blue: 153),    // Bright Cyan
-            SwiftTerm.Color(red: 76, green: 79, blue: 105),     // Bright White (Text)
+            SwiftTerm.Color(red: 140 * 257, green: 143 * 257, blue: 161 * 257),   // Bright Black (Overlay0)
+            SwiftTerm.Color(red: 210 * 257, green: 15 * 257, blue: 57 * 257),     // Bright Red
+            SwiftTerm.Color(red: 64 * 257, green: 160 * 257, blue: 43 * 257),     // Bright Green
+            SwiftTerm.Color(red: 223 * 257, green: 142 * 257, blue: 29 * 257),    // Bright Yellow
+            SwiftTerm.Color(red: 30 * 257, green: 102 * 257, blue: 245 * 257),    // Bright Blue
+            SwiftTerm.Color(red: 136 * 257, green: 57 * 257, blue: 239 * 257),    // Bright Magenta
+            SwiftTerm.Color(red: 23 * 257, green: 146 * 257, blue: 153 * 257),    // Bright Cyan
+            SwiftTerm.Color(red: 76 * 257, green: 79 * 257, blue: 105 * 257),     // Bright White (Text)
         ]
     )
 
@@ -190,12 +196,20 @@ class TerminalController {
 
 /// Applies a color scheme to a terminal view
 private func applyColorScheme(_ scheme: TerminalColorScheme, to terminal: MaestroTerminalView) {
+    // Install ANSI color palette first - this clears the color cache
+    terminal.installColors(scheme.ansiColors)
+
+    // Set default foreground/background colors
     terminal.nativeForegroundColor = scheme.foreground
     terminal.nativeBackgroundColor = scheme.background
+
+    // Set caret (cursor) colors
     terminal.caretColor = scheme.cursorColor
     terminal.caretTextColor = scheme.cursorTextColor
     terminal.selectedTextBackgroundColor = scheme.selectionColor
-    terminal.installColors(scheme.ansiColors)
+
+    // Force a display refresh to ensure all colors are applied
+    terminal.needsDisplay = true
 }
 
 // MARK: - Embedded Terminal View
