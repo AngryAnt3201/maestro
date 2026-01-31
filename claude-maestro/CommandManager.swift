@@ -466,6 +466,10 @@ class CommandManager: ObservableObject {
     /// Storage for worktree paths per session (for re-syncing when commands are toggled)
     private var sessionWorktreePaths: [Int: String] = [:]
 
+    /// Tracking file name for Maestro-managed commands
+    /// This allows us to only remove items we previously created, preserving user's committed commands
+    private static let managedItemsFile = ".maestro-managed.json"
+
     /// Sync commands to a worktree's .claude/commands/ directory based on session config
     /// This creates symlinks or processed copies (for commands with ${CLAUDE_PLUGIN_ROOT}) to only the commands enabled for this session
     func syncWorktreeCommands(worktreePath: String, for sessionId: Int) {
@@ -511,9 +515,18 @@ class CommandManager: ObservableObject {
             result[commandFileName] = command
         }
 
-        // Remove items that shouldn't exist anymore
+        // Load previously managed items to know what we can safely remove
+        let managedItemsPath = "\(worktreeCommandsPath)/\(Self.managedItemsFile)"
+        var previouslyManaged: Set<String> = []
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: managedItemsPath)),
+           let items = try? JSONDecoder().decode(Set<String>.self, from: data) {
+            previouslyManaged = items
+        }
+
+        // Remove items that shouldn't exist anymore - ONLY if we previously managed them
+        // This preserves user's committed commands that Maestro didn't create
         for (name, _) in existingItems {
-            if desiredCommands[name] == nil {
+            if desiredCommands[name] == nil && previouslyManaged.contains(name) {
                 let itemPath = "\(worktreeCommandsPath)/\(name)"
                 try? fm.removeItem(atPath: itemPath)
             }
@@ -577,26 +590,37 @@ class CommandManager: ObservableObject {
                 }
             }
         }
+
+        // Track what commands we're managing now so we know what we can remove later
+        let nowManaged = Set(desiredCommands.keys)
+        if let data = try? JSONEncoder().encode(nowManaged) {
+            try? data.write(to: URL(fileURLWithPath: managedItemsPath))
+        }
     }
 
-    /// Clean up worktree commands directory (remove all symlinks and processed copies)
+    /// Clean up worktree commands directory (remove only Maestro-managed symlinks and copies)
     func cleanupWorktreeCommands(worktreePath: String) {
         let fm = FileManager.default
         let worktreeCommandsPath = "\(worktreePath)/.claude/commands"
 
         guard fm.fileExists(atPath: worktreeCommandsPath) else { return }
 
-        if let contents = try? fm.contentsOfDirectory(atPath: worktreeCommandsPath) {
-            for item in contents {
-                // Only process .md files (our synced commands)
-                guard item.hasSuffix(".md") else { continue }
-
-                let itemPath = "\(worktreeCommandsPath)/\(item)"
-                // Remove both symlinks and regular files (processed copies)
-                // We only touch .md files to avoid removing unrelated files
-                try? fm.removeItem(atPath: itemPath)
-            }
+        // Load managed items to know what we can safely remove
+        let managedItemsPath = "\(worktreeCommandsPath)/\(Self.managedItemsFile)"
+        var managedItems: Set<String> = []
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: managedItemsPath)),
+           let items = try? JSONDecoder().decode(Set<String>.self, from: data) {
+            managedItems = items
         }
+
+        // Remove only items that Maestro previously created
+        for item in managedItems {
+            let itemPath = "\(worktreeCommandsPath)/\(item)"
+            try? fm.removeItem(atPath: itemPath)
+        }
+
+        // Remove the tracking file itself
+        try? fm.removeItem(atPath: managedItemsPath)
     }
 
     // MARK: - Persistence
