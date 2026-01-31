@@ -137,13 +137,6 @@ class MaestroTerminalView: LocalProcessTerminalView {
         }
     }
 
-    // Set first responder on mouse click (not hit test) to enable copy/paste
-    // hitTest fires continuously during drags which broke text selection (issue #52, #53)
-    override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
-        super.mouseDown(with: event)
-    }
-
     // Ensure the terminal view receives mouse events by making it the hit test target
     // This is needed for SwiftUI/AppKit bridging to work properly
     override func hitTest(_ point: NSPoint) -> NSView? {
