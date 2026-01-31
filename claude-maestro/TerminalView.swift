@@ -750,121 +750,42 @@ struct TerminalSessionView: View {
     @State private var showMissingToolAlert = false
     @State private var missingToolName: String = ""
 
+    /// Threshold width below which header collapses to compact mode
+    private let compactHeaderThreshold: CGFloat = 400
+
     var body: some View {
         VStack(spacing: 0) {
-            // Status bar with controls
-            HStack(spacing: 6) {
-                // Status indicator
-                Group {
-                    if #available(macOS 14.0, *) {
-                        Image(systemName: status.icon)
-                            .foregroundColor(status.color)
-                            .symbolEffect(.pulse, isActive: status == .working)
-                            .font(.caption)
-                    } else {
-                        Image(systemName: status.icon)
-                            .foregroundColor(status.color)
-                            .font(.caption)
-                    }
-                }
+            // Responsive status bar with controls
+            GeometryReader { headerGeometry in
+                let isCompact = headerGeometry.size.width < compactHeaderThreshold
 
-                // Direct mode picker (replaces cycling toggle)
-                CompactModePicker(selectedMode: $mode, isDisabled: shouldLaunch)
-
-                // Session label
-                Text("\(mode.rawValue) #\(session.id)")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(mode.color)
-
-                // MCP server selector (AI modes only)
-                if mode.isAIMode {
-                    MCPSelector(
-                        sessionId: session.id,
-                        mcpManager: MCPServerManager.shared,
-                        isDisabled: shouldLaunch
-                    )
-
-                    // Skills & Commands selector
-                    CapabilitySelector(
-                        sessionId: session.id,
-                        skillManager: SkillManager.shared,
-                        commandManager: CommandManager.shared,
-                        isDisabled: shouldLaunch
-                    )
-                }
-
-                // Agent status (only when terminal launched)
-                if shouldLaunch, let state = agentState {
-                    HStack(spacing: 4) {
-                        StatusPill(state: state.state)
-                        Text(state.message)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                }
-
-                Spacer()
-
-                // Branch selector (only when terminal not launched)
-                if gitManager.isGitRepo && !shouldLaunch {
-                    BranchSelector(
-                        gitManager: gitManager,
-                        selectedBranch: $assignedBranch
-                    )
-                }
-
-                // Branch label (after terminal launched)
-                if gitManager.isGitRepo && shouldLaunch {
-                    HStack(spacing: 2) {
-                        Image(systemName: "arrow.triangle.branch")
-                            .font(.caption2)
-                        Text(assignedBranch ?? "Current")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(.secondary)
-                }
-
-                // Launch Terminal button (before terminal launched)
-                if !shouldLaunch {
-                    Button(action: {
-                        // Check if CLI tool is available before launching
-                        if mode.isAIMode && !mode.isToolAvailable() {
-                            missingToolName = mode.command ?? "unknown"
-                            showMissingToolAlert = true
+                HStack(spacing: 6) {
+                    // Status indicator (always visible)
+                    Group {
+                        if #available(macOS 14.0, *) {
+                            Image(systemName: status.icon)
+                                .foregroundColor(status.color)
+                                .symbolEffect(.pulse, isActive: status == .working)
+                                .font(.caption)
                         } else {
-                            onLaunchTerminal()
+                            Image(systemName: status.icon)
+                                .foregroundColor(status.color)
+                                .font(.caption)
                         }
-                    }) {
-                        HStack(spacing: 2) {
-                            Image(systemName: "play.fill")
-                            Text("Launch")
-                        }
-                        .font(.caption2)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(mode.color)
-                }
 
-                // Status label
-                Text(status.label)
-                    .font(.caption2)
-                    .foregroundColor(status.color)
-
-                // Close button
-                Button(action: onClose) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .font(.caption)
+                    if isCompact {
+                        // Compact mode: hamburger menu with options
+                        compactHeaderContent
+                    } else {
+                        // Full mode: all controls visible
+                        fullHeaderContent
+                    }
                 }
-                .buttonStyle(.plain)
-                .help("Close terminal")
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .frame(height: 28)
             .background(status.color.opacity(0.15))
 
             // Terminal content area
@@ -1020,5 +941,182 @@ struct TerminalSessionView: View {
         if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    // MARK: - Header Content Views
+
+    /// Full header content shown at normal widths
+    @ViewBuilder
+    private var fullHeaderContent: some View {
+        // Direct mode picker
+        CompactModePicker(selectedMode: $mode, isDisabled: shouldLaunch)
+
+        // Session label
+        Text("\(mode.rawValue) #\(session.id)")
+            .font(.caption)
+            .fontWeight(.medium)
+            .foregroundColor(mode.color)
+
+        // MCP server selector (AI modes only)
+        if mode.isAIMode {
+            MCPSelector(
+                sessionId: session.id,
+                mcpManager: MCPServerManager.shared,
+                isDisabled: shouldLaunch
+            )
+
+            // Skills & Commands selector
+            CapabilitySelector(
+                sessionId: session.id,
+                skillManager: SkillManager.shared,
+                commandManager: CommandManager.shared,
+                isDisabled: shouldLaunch
+            )
+        }
+
+        // Agent status (only when terminal launched)
+        if shouldLaunch, let state = agentState {
+            HStack(spacing: 4) {
+                StatusPill(state: state.state)
+                Text(state.message)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+
+        Spacer()
+
+        // Branch selector (only when terminal not launched)
+        if gitManager.isGitRepo && !shouldLaunch {
+            BranchSelector(
+                gitManager: gitManager,
+                selectedBranch: $assignedBranch
+            )
+        }
+
+        // Branch label (after terminal launched)
+        if gitManager.isGitRepo && shouldLaunch {
+            HStack(spacing: 2) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.caption2)
+                Text(assignedBranch ?? "Current")
+                    .font(.caption2)
+            }
+            .foregroundColor(.secondary)
+        }
+
+        // Launch Terminal button (before terminal launched)
+        if !shouldLaunch {
+            Button(action: {
+                if mode.isAIMode && !mode.isToolAvailable() {
+                    missingToolName = mode.command ?? "unknown"
+                    showMissingToolAlert = true
+                } else {
+                    onLaunchTerminal()
+                }
+            }) {
+                HStack(spacing: 2) {
+                    Image(systemName: "play.fill")
+                    Text("Launch")
+                }
+                .font(.caption2)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(mode.color)
+        }
+
+        // Status label
+        Text(status.label)
+            .font(.caption2)
+            .foregroundColor(status.color)
+
+        // Close button
+        Button(action: onClose) {
+            Image(systemName: "xmark.circle.fill")
+                .foregroundColor(.secondary)
+                .font(.caption)
+        }
+        .buttonStyle(.plain)
+        .help("Close terminal")
+    }
+
+    /// Compact header content shown at narrow widths with hamburger menu
+    @ViewBuilder
+    private var compactHeaderContent: some View {
+        // Mode icon
+        Image(systemName: mode.icon)
+            .font(.caption)
+            .foregroundColor(mode.color)
+
+        // Session number
+        Text("#\(session.id)")
+            .font(.caption)
+            .fontWeight(.medium)
+            .foregroundColor(mode.color)
+
+        Spacer()
+
+        // Launch button (before terminal launched)
+        if !shouldLaunch {
+            Button(action: {
+                if mode.isAIMode && !mode.isToolAvailable() {
+                    missingToolName = mode.command ?? "unknown"
+                    showMissingToolAlert = true
+                } else {
+                    onLaunchTerminal()
+                }
+            }) {
+                Image(systemName: "play.fill")
+                    .font(.caption2)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(mode.color)
+        }
+
+        // Hamburger menu with options
+        Menu {
+            // Mode options
+            Text("Mode").font(.headline)
+            ForEach(TerminalMode.allCases, id: \.self) { modeOption in
+                Button {
+                    mode = modeOption
+                } label: {
+                    Label(modeOption.rawValue, systemImage: modeOption.icon)
+                }
+                .disabled(shouldLaunch)
+            }
+
+            Divider()
+
+            // Branch info
+            if gitManager.isGitRepo {
+                Label(assignedBranch ?? "Current Branch", systemImage: "arrow.triangle.branch")
+            }
+
+            Divider()
+
+            // Close
+            Button(action: onClose) {
+                Label("Close", systemImage: "xmark.circle")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+
+        // Close button
+        Button(action: onClose) {
+            Image(systemName: "xmark.circle.fill")
+                .foregroundColor(.secondary)
+                .font(.caption)
+        }
+        .buttonStyle(.plain)
     }
 }

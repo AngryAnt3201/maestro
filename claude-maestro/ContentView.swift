@@ -172,6 +172,17 @@ enum SessionStatus: String, CaseIterable, Codable {
         case .error: return "Error"
         }
     }
+
+    var shortLabel: String {
+        switch self {
+        case .initializing: return "..."
+        case .idle: return ""
+        case .working: return "⚡"
+        case .waiting: return "!"
+        case .done: return "✓"
+        case .error: return "✗"
+        }
+    }
 }
 
 // MARK: - Session Info
@@ -1238,7 +1249,12 @@ extension Array {
 struct DynamicTerminalGridView: View {
     @ObservedObject var manager: SessionManager
     @ObservedObject var appearanceManager: AppearanceManager
+    @StateObject private var panelSizeManager = PanelSizeManager()
     @State private var isHoveringAdd = false
+    @State private var isHoveringReset = false
+
+    /// Minimum panel size in points
+    private let minPanelSize: CGFloat = 280
 
     var body: some View {
         let visibleSessions = manager.visibleSessions
@@ -1246,76 +1262,252 @@ struct DynamicTerminalGridView: View {
         let sessionRows = visibleSessions.chunked(into: config.columns)
 
         ZStack(alignment: .bottomTrailing) {
-            VStack(spacing: 8) {
-                ForEach(Array(sessionRows.enumerated()), id: \.offset) { _, rowSessions in
-                    HStack(spacing: 8) {
-                        // Iterate by session ID for stable view identity
-                        ForEach(rowSessions, id: \.id) { session in
-                            TerminalSessionView(
-                                session: session,
-                                workingDirectory: session.workingDirectory ?? manager.projectPath,
-                                shouldLaunch: manager.session(byId: session.id)?.shouldLaunchTerminal ?? false,
-                                status: Binding(
-                                    get: { manager.session(byId: session.id)?.status ?? .idle },
-                                    set: { newValue in manager.updateSession(id: session.id) { $0.status = newValue } }
-                                ),
-                                mode: Binding(
-                                    get: { manager.session(byId: session.id)?.mode ?? .claudeCode },
-                                    set: { newValue in manager.updateSession(id: session.id) { $0.mode = newValue } }
-                                ),
-                                assignedBranch: Binding(
-                                    get: { manager.session(byId: session.id)?.assignedBranch },
-                                    set: { manager.assignBranch($0, to: session.id) }
-                                ),
-                                gitManager: manager.gitManager,
-                                isTerminalLaunched: manager.session(byId: session.id)?.isTerminalLaunched ?? false,
-                                isClaudeRunning: manager.session(byId: session.id)?.isClaudeRunning ?? false,
-                                appearanceMode: appearanceManager.currentMode,
-                                onLaunchClaude: { manager.launchClaudeInSession(session.id) },
-                                onClose: { manager.closeSession(session.id) },
-                                onTerminalLaunched: { manager.markTerminalLaunched(session.id) },
-                                onLaunchTerminal: { manager.triggerTerminalLaunch(session.id) },
-                                // Run App feature props
-                                assignedPort: manager.session(byId: session.id)?.assignedPort,
-                                isAppRunning: manager.session(byId: session.id)?.isAppRunning ?? false,
-                                serverURL: manager.session(byId: session.id)?.serverURL,
-                                onRunApp: { manager.runApp(for: session.id) },
-                                onCommitAndPush: { manager.commitAndPush(for: session.id) },
-                                onServerReady: { url in manager.setServerURL(url, for: session.id) },
-                                onControllerReady: { controller in manager.terminalControllers[session.id] = controller },
-                                onCustomAction: { prompt in manager.executeCustomAction(prompt: prompt, for: session.id) },
-                                onProcessStarted: { pid in manager.registerTerminalProcess(sessionId: session.id, pid: pid) },
-                                agentState: manager.stateMonitor.agentState(forSessionId: session.id)
-                            )
-                            .id(session.id)  // Explicit session ID for view identity
-                        }
-                        // Spacers for incomplete rows to maintain equal sizing
-                        ForEach(0..<(config.columns - rowSessions.count), id: \.self) { _ in
-                            Color.clear
-                        }
-                    }
-                }
+            GeometryReader { geometry in
+                resizableGridContent(
+                    sessionRows: sessionRows,
+                    config: config,
+                    geometry: geometry
+                )
             }
+            .coordinateSpace(name: "resizableContainer")
             .padding(.horizontal, 8)
 
-            // Floating add button
-            Button(action: { manager.addNewSession() }) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 44))
-                    .foregroundStyle(.white, .blue)
-                    .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
-                    .scaleEffect(isHoveringAdd ? 1.1 : 1.0)
-            }
-            .buttonStyle(.plain)
-            .padding(20)
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isHoveringAdd = hovering
+            // Floating buttons
+            HStack(spacing: 12) {
+                // Reset layout button
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        panelSizeManager.reset()
+                    }
+                }) {
+                    Image(systemName: "rectangle.split.2x2")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(Color.gray.opacity(0.8)))
+                        .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                        .scaleEffect(isHoveringReset ? 1.1 : 1.0)
                 }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isHoveringReset = hovering
+                    }
+                }
+                .help("Reset panel layout")
+
+                // Add session button
+                Button(action: { manager.addNewSession() }) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 44))
+                        .foregroundStyle(.white, .blue)
+                        .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                        .scaleEffect(isHoveringAdd ? 1.1 : 1.0)
+                }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isHoveringAdd = hovering
+                    }
+                }
+                .help("Add new terminal")
             }
-            .help("Add new terminal")
+            .padding(20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: visibleSessions.count) { _ in
+            // Notify panel size manager when grid configuration changes
+            let newConfig = GridConfiguration.optimal(for: visibleSessions.count)
+            panelSizeManager.ensureCapacity(forRows: newConfig.rows)
+        }
+    }
+
+    // MARK: - Resizable Grid Layout
+
+    @ViewBuilder
+    private func resizableGridContent(
+        sessionRows: [[SessionInfo]],
+        config: GridConfiguration,
+        geometry: GeometryProxy
+    ) -> some View {
+        let totalHeight = geometry.size.height
+        let totalWidth = geometry.size.width
+
+        switch sessionRows.count {
+        case 0:
+            EmptyView()
+
+        case 1:
+            // Single row - only vertical dividers if multiple columns
+            singleRowLayout(
+                sessions: sessionRows[0],
+                rowIndex: 0,
+                config: config,
+                width: totalWidth,
+                height: totalHeight
+            )
+
+        default:
+            // Multiple rows - horizontal divider(s) + vertical dividers per row
+            multiRowLayout(
+                sessionRows: sessionRows,
+                config: config,
+                width: totalWidth,
+                height: totalHeight
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func singleRowLayout(
+        sessions: [SessionInfo],
+        rowIndex: Int,
+        config: GridConfiguration,
+        width: CGFloat,
+        height: CGFloat
+    ) -> some View {
+        switch sessions.count {
+        case 0:
+            EmptyView()
+
+        case 1:
+            // Single panel - no dividers needed
+            terminalView(for: sessions[0])
+                .frame(width: width, height: height)
+
+        case 2:
+            // Two columns with one vertical divider
+            let split = panelSizeManager.verticalSplit(forRow: rowIndex)
+            let leftWidth = max(minPanelSize, width * split.wrappedValue)
+            let rightWidth = max(minPanelSize, width - leftWidth - 8)  // 8pt for divider
+
+            HStack(spacing: 0) {
+                terminalView(for: sessions[0])
+                    .frame(width: leftWidth, height: height)
+
+                ResizableDivider(
+                    orientation: .vertical,
+                    position: split,
+                    containerSize: width
+                )
+
+                terminalView(for: sessions[1])
+                    .frame(width: rightWidth, height: height)
+            }
+
+        default:
+            // Three or more columns - equal distribution for simplicity
+            // (multi-column resizing can be added later)
+            HStack(spacing: 8) {
+                ForEach(sessions, id: \.id) { session in
+                    terminalView(for: session)
+                }
+                // Spacers for incomplete rows
+                ForEach(0..<(config.columns - sessions.count), id: \.self) { _ in
+                    Color.clear
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func multiRowLayout(
+        sessionRows: [[SessionInfo]],
+        config: GridConfiguration,
+        width: CGFloat,
+        height: CGFloat
+    ) -> some View {
+        // Calculate row heights based on horizontal split
+        let dividerHeight: CGFloat = 8
+        let availableHeight = height - (CGFloat(sessionRows.count - 1) * dividerHeight)
+
+        VStack(spacing: 0) {
+            ForEach(Array(sessionRows.enumerated()), id: \.offset) { rowIndex, rowSessions in
+                let rowHeight = calculateRowHeight(
+                    rowIndex: rowIndex,
+                    totalRows: sessionRows.count,
+                    availableHeight: availableHeight
+                )
+
+                singleRowLayout(
+                    sessions: rowSessions,
+                    rowIndex: rowIndex,
+                    config: config,
+                    width: width,
+                    height: rowHeight
+                )
+                .frame(height: rowHeight)
+
+                // Add horizontal divider between rows (not after last row)
+                if rowIndex < sessionRows.count - 1 {
+                    ResizableDivider(
+                        orientation: .horizontal,
+                        position: $panelSizeManager.horizontalSplit,
+                        containerSize: height
+                    )
+                }
+            }
+        }
+    }
+
+    private func calculateRowHeight(
+        rowIndex: Int,
+        totalRows: Int,
+        availableHeight: CGFloat
+    ) -> CGFloat {
+        guard totalRows == 2 else {
+            // For 3+ rows, distribute evenly (could be enhanced later)
+            return availableHeight / CGFloat(totalRows)
+        }
+
+        // For 2 rows, use horizontal split
+        if rowIndex == 0 {
+            return max(minPanelSize, availableHeight * panelSizeManager.horizontalSplit)
+        } else {
+            return max(minPanelSize, availableHeight * (1.0 - panelSizeManager.horizontalSplit))
+        }
+    }
+
+    // MARK: - Terminal View Builder
+
+    @ViewBuilder
+    private func terminalView(for session: SessionInfo) -> some View {
+        TerminalSessionView(
+            session: session,
+            workingDirectory: session.workingDirectory ?? manager.projectPath,
+            shouldLaunch: manager.session(byId: session.id)?.shouldLaunchTerminal ?? false,
+            status: Binding(
+                get: { manager.session(byId: session.id)?.status ?? .idle },
+                set: { newValue in manager.updateSession(id: session.id) { $0.status = newValue } }
+            ),
+            mode: Binding(
+                get: { manager.session(byId: session.id)?.mode ?? .claudeCode },
+                set: { newValue in manager.updateSession(id: session.id) { $0.mode = newValue } }
+            ),
+            assignedBranch: Binding(
+                get: { manager.session(byId: session.id)?.assignedBranch },
+                set: { manager.assignBranch($0, to: session.id) }
+            ),
+            gitManager: manager.gitManager,
+            isTerminalLaunched: manager.session(byId: session.id)?.isTerminalLaunched ?? false,
+            isClaudeRunning: manager.session(byId: session.id)?.isClaudeRunning ?? false,
+            appearanceMode: appearanceManager.currentMode,
+            onLaunchClaude: { manager.launchClaudeInSession(session.id) },
+            onClose: { manager.closeSession(session.id) },
+            onTerminalLaunched: { manager.markTerminalLaunched(session.id) },
+            onLaunchTerminal: { manager.triggerTerminalLaunch(session.id) },
+            assignedPort: manager.session(byId: session.id)?.assignedPort,
+            isAppRunning: manager.session(byId: session.id)?.isAppRunning ?? false,
+            serverURL: manager.session(byId: session.id)?.serverURL,
+            onRunApp: { manager.runApp(for: session.id) },
+            onCommitAndPush: { manager.commitAndPush(for: session.id) },
+            onServerReady: { url in manager.setServerURL(url, for: session.id) },
+            onControllerReady: { controller in manager.terminalControllers[session.id] = controller },
+            onCustomAction: { prompt in manager.executeCustomAction(prompt: prompt, for: session.id) },
+            onProcessStarted: { pid in manager.registerTerminalProcess(sessionId: session.id, pid: pid) },
+            agentState: manager.stateMonitor.agentState(forSessionId: session.id)
+        )
+        .id(session.id)
     }
 }
 
