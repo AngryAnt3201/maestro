@@ -71,6 +71,9 @@ pub fn run() {
             commands::session::remove_session,
             commands::session::get_sessions_for_project,
             commands::session::remove_sessions_for_project,
+            // Worktree commands
+            commands::worktree::prepare_session_worktree,
+            commands::worktree::cleanup_session_worktree,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Maestro");

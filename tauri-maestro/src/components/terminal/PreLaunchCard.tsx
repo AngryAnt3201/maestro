@@ -20,6 +20,8 @@ export interface SessionSlot {
   mode: AiMode;
   branch: string | null;
   sessionId: number | null;
+  /** Path to the worktree if one was created for this session. */
+  worktreePath: string | null;
 }
 
 interface PreLaunchCardProps {

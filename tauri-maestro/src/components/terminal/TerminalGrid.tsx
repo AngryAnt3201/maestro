@@ -2,6 +2,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 
 import { getBranchesWithWorktreeStatus, type BranchWithWorktreeStatus } from "@/lib/git";
 import { killSession, spawnShell } from "@/lib/terminal";
+import { cleanupSessionWorktree, prepareSessionWorktree } from "@/lib/worktreeManager";
 import type { AiMode } from "@/stores/useSessionStore";
 import { useWorkspaceStore } from "@/stores/useWorkspaceStore";
 import { PreLaunchCard, type SessionSlot } from "./PreLaunchCard";
@@ -37,6 +38,7 @@ function createEmptySlot(): SessionSlot {
     mode: "Claude",
     branch: null,
     sessionId: null,
+    worktreePath: null,
   };
 }
 
@@ -150,19 +152,30 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
   /**
    * Launches a single slot by spawning a shell with the configured settings.
+   * If a branch is selected, prepares a worktree for that branch first.
    */
   const launchSlot = useCallback(async (slotId: string) => {
     const slot = slotsRef.current.find((s) => s.id === slotId);
     if (!slot || slot.sessionId !== null) return;
 
     try {
-      // TODO: Use slot.branch to create/checkout worktree if needed
-      // For now, spawn in the project path
-      const sessionId = await spawnShell(projectPath);
+      // Determine the working directory
+      // If a branch is selected, prepare a worktree first
+      let workingDirectory = projectPath;
+      let worktreePath: string | null = null;
+
+      if (projectPath && slot.branch) {
+        const result = await prepareSessionWorktree(projectPath, slot.branch);
+        workingDirectory = result.working_directory;
+        worktreePath = result.worktree_path;
+      }
+
+      // Spawn the shell in the correct directory (worktree or project path)
+      const sessionId = await spawnShell(workingDirectory);
 
       setSlots((prev) =>
         prev.map((s) =>
-          s.id === slotId ? { ...s, sessionId } : s
+          s.id === slotId ? { ...s, sessionId, worktreePath } : s
         )
       );
 
@@ -188,14 +201,25 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
   /**
    * Handles killing/closing a session, updating the slot state.
+   * Also cleans up any associated worktree.
    */
   const handleKill = useCallback((sessionId: number) => {
+    // Find the slot to get worktree path before removing
+    const slot = slotsRef.current.find((s) => s.sessionId === sessionId);
+    const worktreePath = slot?.worktreePath;
+
     setSlots((prev) => prev.filter((s) => s.sessionId !== sessionId));
+
     // Unregister session from the project
     if (tabId) {
       removeSessionFromProject(tabId, sessionId);
     }
-  }, [tabId, removeSessionFromProject]);
+
+    // Clean up worktree if one was created (fire-and-forget)
+    if (projectPath && worktreePath) {
+      cleanupSessionWorktree(projectPath, worktreePath).catch(console.error);
+    }
+  }, [tabId, projectPath, removeSessionFromProject]);
 
   /**
    * Removes a pre-launch slot (before it's launched).
