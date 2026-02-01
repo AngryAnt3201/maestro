@@ -217,3 +217,45 @@ export async function getSessionPluginsCount(
 ): Promise<number> {
   return invoke<number>("get_session_plugins_count", { projectPath, sessionId });
 }
+
+/**
+ * Saves the default enabled skills for a project.
+ * These persist across app restarts.
+ */
+export async function saveProjectSkillDefaults(
+  projectPath: string,
+  enabledSkills: string[]
+): Promise<void> {
+  return invoke("save_project_skill_defaults", { projectPath, enabledSkills });
+}
+
+/**
+ * Loads the default enabled skills for a project.
+ * Returns null if no defaults have been saved.
+ */
+export async function loadProjectSkillDefaults(
+  projectPath: string
+): Promise<string[] | null> {
+  return invoke<string[] | null>("load_project_skill_defaults", { projectPath });
+}
+
+/**
+ * Saves the default enabled plugins for a project.
+ * These persist across app restarts.
+ */
+export async function saveProjectPluginDefaults(
+  projectPath: string,
+  enabledPlugins: string[]
+): Promise<void> {
+  return invoke("save_project_plugin_defaults", { projectPath, enabledPlugins });
+}
+
+/**
+ * Loads the default enabled plugins for a project.
+ * Returns null if no defaults have been saved.
+ */
+export async function loadProjectPluginDefaults(
+  projectPath: string
+): Promise<string[] | null> {
+  return invoke<string[] | null>("load_project_plugin_defaults", { projectPath });
+}

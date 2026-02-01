@@ -602,4 +602,13 @@ impl Git {
         self.run(&["config", scope, "init.defaultBranch", branch]).await?;
         Ok(())
     }
+
+    /// Detaches HEAD at the current commit.
+    ///
+    /// Used when we need to free up a branch for worktree creation
+    /// but have no other branch to switch to.
+    pub async fn detach_head(&self) -> Result<(), GitError> {
+        self.run(&["checkout", "--detach"]).await?;
+        Ok(())
+    }
 }

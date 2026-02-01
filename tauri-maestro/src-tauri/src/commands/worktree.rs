@@ -89,24 +89,36 @@ pub async fn prepare_session_worktree(
             branch
         );
 
-        // Get the default branch to switch to
-        let default_branch = get_fallback_branch(&git, &branch).await;
-
-        match git.checkout_branch(&default_branch).await {
-            Ok(()) => {
-                log::info!("Switched main repo to {}", default_branch);
+        // Get a fallback branch to switch to, or detach HEAD if none available
+        match get_fallback_branch(&git, &branch).await {
+            Some(fallback) => {
+                match git.checkout_branch(&fallback).await {
+                    Ok(()) => {
+                        log::info!("Switched main repo to {}", fallback);
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to switch main repo to {}: {}", fallback, e);
+                        warning = Some(format!(
+                            "Could not switch main repo from {}: {}",
+                            branch, e
+                        ));
+                        // Continue anyway - worktree creation might still work
+                    }
+                }
             }
-            Err(e) => {
-                log::warn!(
-                    "Failed to switch main repo to {}: {}",
-                    default_branch,
-                    e
-                );
-                warning = Some(format!(
-                    "Could not switch main repo from {}: {}",
-                    branch, e
-                ));
-                // Continue anyway - worktree creation might still work
+            None => {
+                // No other branches exist - detach HEAD to free the branch
+                log::info!("No fallback branch available, detaching HEAD");
+                match git.detach_head().await {
+                    Ok(()) => {
+                        log::info!("Detached HEAD in main repo");
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to detach HEAD: {}", e);
+                        warning = Some(format!("Could not detach HEAD: {}", e));
+                        // Continue anyway - worktree creation might still work
+                    }
+                }
             }
         }
     }
@@ -191,11 +203,12 @@ pub async fn cleanup_session_worktree(
 /// Gets a fallback branch to switch to when the target branch is checked out.
 ///
 /// Tries init.defaultBranch config, then looks for main/master.
-async fn get_fallback_branch(git: &Git, avoid_branch: &str) -> String {
+/// Returns None if no suitable fallback branch exists (e.g., single-branch repo).
+async fn get_fallback_branch(git: &Git, avoid_branch: &str) -> Option<String> {
     // Try configured default branch
     if let Ok(Some(default)) = git.get_default_branch().await {
         if default != avoid_branch {
-            return default;
+            return Some(default);
         }
     }
 
@@ -205,20 +218,20 @@ async fn get_fallback_branch(git: &Git, avoid_branch: &str) -> String {
             if candidate != avoid_branch
                 && branches.iter().any(|b| !b.is_remote && b.name == candidate)
             {
-                return candidate.to_string();
+                return Some(candidate.to_string());
             }
         }
 
         // Pick any local branch that's not the one we're avoiding
         for b in branches {
             if !b.is_remote && b.name != avoid_branch {
-                return b.name;
+                return Some(b.name);
             }
         }
     }
 
-    // Last resort - use main (git will error if it doesn't exist, but that's okay)
-    "main".to_string()
+    // No fallback available
+    None
 }
 
 /// Checks if a branch exists locally.

@@ -84,6 +84,8 @@ pub fn run() {
             commands::mcp::get_session_mcp_servers,
             commands::mcp::set_session_mcp_servers,
             commands::mcp::get_session_mcp_count,
+            commands::mcp::save_project_mcp_defaults,
+            commands::mcp::load_project_mcp_defaults,
             // Plugin commands
             commands::plugin::get_project_plugins,
             commands::plugin::refresh_project_plugins,
@@ -93,6 +95,10 @@ pub fn run() {
             commands::plugin::set_session_plugins,
             commands::plugin::get_session_skills_count,
             commands::plugin::get_session_plugins_count,
+            commands::plugin::save_project_skill_defaults,
+            commands::plugin::load_project_skill_defaults,
+            commands::plugin::save_project_plugin_defaults,
+            commands::plugin::load_project_plugin_defaults,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Maestro");

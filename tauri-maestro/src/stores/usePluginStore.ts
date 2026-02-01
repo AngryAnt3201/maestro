@@ -12,6 +12,10 @@ import {
   refreshProjectPlugins,
   setSessionSkills as setSessionSkillsApi,
   setSessionPlugins as setSessionPluginsApi,
+  saveProjectSkillDefaults,
+  loadProjectSkillDefaults,
+  saveProjectPluginDefaults,
+  loadProjectPluginDefaults,
   type PluginConfig,
   type SkillConfig,
 } from "@/lib/plugins";
@@ -33,6 +37,12 @@ interface PluginState {
 
   /** Enabled plugin IDs per session (keyed by "projectPath:sessionId"). */
   sessionEnabledPlugins: Record<string, string[]>;
+
+  /** Persisted default skill IDs per project (loaded from store). */
+  projectDefaultSkills: Record<string, string[] | null>;
+
+  /** Persisted default plugin IDs per project (loaded from store). */
+  projectDefaultPlugins: Record<string, string[] | null>;
 
   /** Loading state per project. */
   isLoading: Record<string, boolean>;
@@ -132,6 +142,8 @@ export const usePluginStore = create<PluginState>()((set, get) => ({
   projectPlugins: {},
   sessionEnabledSkills: {},
   sessionEnabledPlugins: {},
+  projectDefaultSkills: {},
+  projectDefaultPlugins: {},
   isLoading: {},
   errors: {},
 
@@ -142,10 +154,18 @@ export const usePluginStore = create<PluginState>()((set, get) => ({
     }));
 
     try {
-      const result = await getProjectPlugins(projectPath);
+      // Fetch plugins and load persisted defaults in parallel
+      const [result, skillDefaults, pluginDefaults] = await Promise.all([
+        getProjectPlugins(projectPath),
+        loadProjectSkillDefaults(projectPath),
+        loadProjectPluginDefaults(projectPath),
+      ]);
+
       set((state) => ({
         projectSkills: { ...state.projectSkills, [projectPath]: result.skills },
         projectPlugins: { ...state.projectPlugins, [projectPath]: result.plugins },
+        projectDefaultSkills: { ...state.projectDefaultSkills, [projectPath]: skillDefaults },
+        projectDefaultPlugins: { ...state.projectDefaultPlugins, [projectPath]: pluginDefaults },
         isLoading: { ...state.isLoading, [projectPath]: false },
       }));
     } catch (err) {
@@ -185,12 +205,18 @@ export const usePluginStore = create<PluginState>()((set, get) => ({
     const key = sessionKey(projectPath, sessionId);
     const state = get();
 
-    // If explicitly set, return that
+    // If explicitly set for this session, return that
     if (state.sessionEnabledSkills[key] !== undefined) {
       return state.sessionEnabledSkills[key];
     }
 
-    // Default: all skills enabled
+    // Use persisted project defaults if available
+    const defaults = state.projectDefaultSkills[projectPath];
+    if (defaults !== undefined && defaults !== null) {
+      return defaults;
+    }
+
+    // Final fallback: all skills enabled
     const skills = state.projectSkills[projectPath] ?? [];
     return skills.map((s) => s.id);
   },
@@ -202,14 +228,18 @@ export const usePluginStore = create<PluginState>()((set, get) => ({
   ) => {
     const key = sessionKey(projectPath, sessionId);
 
-    // Update local state optimistically
+    // Update local state optimistically (both session and project defaults)
     set((state) => ({
       sessionEnabledSkills: { ...state.sessionEnabledSkills, [key]: enabled },
+      projectDefaultSkills: { ...state.projectDefaultSkills, [projectPath]: enabled },
     }));
 
-    // Persist to backend
+    // Persist to backend (session state and project defaults)
     try {
-      await setSessionSkillsApi(projectPath, sessionId, enabled);
+      await Promise.all([
+        setSessionSkillsApi(projectPath, sessionId, enabled),
+        saveProjectSkillDefaults(projectPath, enabled),
+      ]);
     } catch (err) {
       console.error("Failed to save session skills:", err);
     }
@@ -234,12 +264,18 @@ export const usePluginStore = create<PluginState>()((set, get) => ({
     const key = sessionKey(projectPath, sessionId);
     const state = get();
 
-    // If explicitly set, return that
+    // If explicitly set for this session, return that
     if (state.sessionEnabledPlugins[key] !== undefined) {
       return state.sessionEnabledPlugins[key];
     }
 
-    // Default: plugins with enabled_by_default
+    // Use persisted project defaults if available
+    const defaults = state.projectDefaultPlugins[projectPath];
+    if (defaults !== undefined && defaults !== null) {
+      return defaults;
+    }
+
+    // Final fallback: plugins with enabled_by_default
     const plugins = state.projectPlugins[projectPath] ?? [];
     return plugins.filter((p) => p.enabled_by_default).map((p) => p.id);
   },
@@ -251,14 +287,18 @@ export const usePluginStore = create<PluginState>()((set, get) => ({
   ) => {
     const key = sessionKey(projectPath, sessionId);
 
-    // Update local state optimistically
+    // Update local state optimistically (both session and project defaults)
     set((state) => ({
       sessionEnabledPlugins: { ...state.sessionEnabledPlugins, [key]: enabled },
+      projectDefaultPlugins: { ...state.projectDefaultPlugins, [projectPath]: enabled },
     }));
 
-    // Persist to backend
+    // Persist to backend (session state and project defaults)
     try {
-      await setSessionPluginsApi(projectPath, sessionId, enabled);
+      await Promise.all([
+        setSessionPluginsApi(projectPath, sessionId, enabled),
+        saveProjectPluginDefaults(projectPath, enabled),
+      ]);
     } catch (err) {
       console.error("Failed to save session plugins:", err);
     }
