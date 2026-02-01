@@ -111,6 +111,9 @@ class MaestroTerminalView: LocalProcessTerminalView {
     /// KVO observation for tracking when this terminal becomes first responder
     private var firstResponderObservation: NSKeyValueObservation?
 
+    /// Local event monitor for Shift+Enter -> newline
+    private var shiftEnterMonitor: Any?
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         return true  // Accept clicks even when window is inactive
     }
@@ -124,6 +127,32 @@ class MaestroTerminalView: LocalProcessTerminalView {
             DispatchQueue.main.async {
                 self.onBecameFirstResponder?()
             }
+        }
+
+        // Set up Shift+Enter monitor when attached to a window, tear down when removed
+        if let monitor = shiftEnterMonitor {
+            NSEvent.removeMonitor(monitor)
+            shiftEnterMonitor = nil
+        }
+        if window != nil {
+            shiftEnterMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self = self,
+                      self.window?.firstResponder === self,
+                      event.keyCode == 36,  // Return/Enter key
+                      event.modifierFlags.contains(.shift),
+                      !event.modifierFlags.contains(.command) else {
+                    return event
+                }
+                // Send LF (byte 10) — same as Control+J — to insert a newline
+                self.send(data: ArraySlice<UInt8>([10]))
+                return nil  // Consume the event
+            }
+        }
+    }
+
+    deinit {
+        if let monitor = shiftEnterMonitor {
+            NSEvent.removeMonitor(monitor)
         }
     }
 
@@ -1041,6 +1070,13 @@ struct TerminalSessionView: View {
                 .stroke(isFocused ? Color.accentColor : (shouldLaunch ? status.color : Color.gray.opacity(0.5)),
                         lineWidth: isFocused ? 3 : 2)
         )
+        .contentShape(Rectangle())
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                onBecameFirstResponder?()
+            }
+        )
+        .background(FirstMouseAcceptingView())
         .alert("CLI Tool Not Found", isPresented: $showMissingToolAlert) {
             Button("Copy Install Command") {
                 NSPasteboard.general.clearContents()
@@ -1060,5 +1096,32 @@ struct TerminalSessionView: View {
         if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
         }
+    }
+}
+
+// MARK: - First Mouse Accepting View
+
+/// An invisible NSView that accepts first mouse clicks, allowing SwiftUI buttons
+/// in the terminal session chrome (status bar, footer) to respond on the first click
+/// even when the pane isn't focused — eliminating the "click twice" problem.
+private struct FirstMouseAcceptingView: NSViewRepresentable {
+    func makeNSView(context: Context) -> _FirstMouseView {
+        let view = _FirstMouseView()
+        view.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        view.setContentHuggingPriority(.defaultLow, for: .vertical)
+        return view
+    }
+
+    func updateNSView(_ nsView: _FirstMouseView, context: Context) {}
+}
+
+private class _FirstMouseView: NSView {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true
+    }
+
+    // Pass all hits through to sibling/child views — this view is just a policy layer
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        return nil
     }
 }
