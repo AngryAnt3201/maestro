@@ -1,7 +1,17 @@
 import Foundation
 import MCP
 
-let stateDir = "/tmp/maestro/agents"
+let baseStateDir = "/tmp/maestro/agents"
+
+/// Compute the project-scoped state directory
+/// If MAESTRO_PROJECT_HASH is set, uses a subdirectory for project isolation
+let stateDir: String = {
+    if let projectHash = ProcessInfo.processInfo.environment["MAESTRO_PROJECT_HASH"],
+       !projectHash.isEmpty {
+        return (baseStateDir as NSString).appendingPathComponent(projectHash)
+    }
+    return baseStateDir
+}()
 
 /// Write agent state to a JSON file for MaestroStateMonitor to pick up
 func writeAgentState(agentId: String, state: String, message: String, prompt: String? = nil) {

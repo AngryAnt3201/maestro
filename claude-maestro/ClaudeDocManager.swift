@@ -6,8 +6,26 @@
 //
 
 import Foundation
+import CryptoKit
+import AppKit
 
 class ClaudeDocManager {
+
+    // MARK: - CLAUDE.md Section Markers
+
+    /// Markers to identify Maestro's auto-generated section in CLAUDE.md
+    /// This allows us to update our section without destroying user content
+    private static let maestroSectionStart = "<!-- MAESTRO SESSION CONFIG START -->"
+    private static let maestroSectionEnd = "<!-- MAESTRO SESSION CONFIG END -->"
+
+    /// Generate a stable hash for a project path (mirrors MaestroStateMonitor.generateProjectHash)
+    /// Uses first 12 characters of SHA256 for uniqueness with reasonable length
+    static func generateProjectHash(_ projectPath: String) -> String {
+        let data = Data(projectPath.utf8)
+        let hash = SHA256.hash(data: data)
+        let hashString = hash.compactMap { String(format: "%02x", $0) }.joined()
+        return String(hashString.prefix(12))
+    }
 
     /// Detect run command based on common project configuration files
     static func detectRunCommand(for projectPath: String) -> String? {
@@ -232,15 +250,20 @@ class ClaudeDocManager {
 
         // Add Maestro MCP if available (native Swift binary)
         if let maestroPath = maestroServerPath {
+            var env: [String: String] = [
+                "MAESTRO_SESSION_ID": "\(sessionId)",
+                "MAESTRO_PORT_RANGE_START": "\(portRangeStart)",
+                "MAESTRO_PORT_RANGE_END": "\(portRangeEnd)"
+            ]
+            // Add project hash for multi-project isolation
+            if let path = projectPath, !path.isEmpty {
+                env["MAESTRO_PROJECT_HASH"] = generateProjectHash(path)
+            }
             mcpServers["maestro"] = [
                 "type": "stdio",
                 "command": maestroPath,
                 "args": [] as [String],
-                "env": [
-                    "MAESTRO_SESSION_ID": "\(sessionId)",
-                    "MAESTRO_PORT_RANGE_START": "\(portRangeStart)",
-                    "MAESTRO_PORT_RANGE_END": "\(portRangeEnd)"
-                ]
+                "env": env
             ] as [String: Any]
         }
 
@@ -282,6 +305,7 @@ class ClaudeDocManager {
     }
 
     /// Write .mcp.json with session-specific enabled servers
+    /// Merges with existing .mcp.json to preserve user-added servers
     @MainActor
     static func writeMCPConfigForSession(
         to directory: String,
@@ -300,19 +324,61 @@ class ClaudeDocManager {
         // Get enabled plugins and collect their MCP server configs
         let pluginMCPServers = collectPluginMCPServers(for: sessionId)
 
-        let content = generateMCPConfig(
-            sessionId: sessionId,
-            maestroServerPath: maestroPath,
-            customServers: enabledServers,
-            pluginMCPServers: pluginMCPServers,
-            projectPath: projectPath
-        )
-
         let filePath = URL(fileURLWithPath: directory)
             .appendingPathComponent(".mcp.json")
+        let fm = FileManager.default
 
+        // Read existing .mcp.json to preserve user-added servers
+        var existingServers: [String: Any] = [:]
+        if fm.fileExists(atPath: filePath.path),
+           let data = try? Data(contentsOf: filePath),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let servers = json["mcpServers"] as? [String: Any] {
+            existingServers = servers
+        }
+
+        // Build Maestro-managed servers
+        var maestroServers: [String: Any] = [:]
+
+        // Add Maestro MCP if available
+        if let maestroPath = maestroPath {
+            var env: [String: String] = [
+                "MAESTRO_SESSION_ID": "\(sessionId)",
+                "MAESTRO_PORT_RANGE_START": "3000",
+                "MAESTRO_PORT_RANGE_END": "3099"
+            ]
+            if let path = projectPath, !path.isEmpty {
+                env["MAESTRO_PROJECT_HASH"] = generateProjectHash(path)
+            }
+            maestroServers["maestro"] = [
+                "type": "stdio",
+                "command": maestroPath,
+                "args": [] as [String],
+                "env": env
+            ] as [String: Any]
+        }
+
+        // Add custom servers from session config
+        for server in enabledServers {
+            maestroServers[server.mcpKey] = server.toMCPJSON()
+        }
+
+        // Add plugin MCP servers
+        for (key, value) in pluginMCPServers {
+            maestroServers[key] = value
+        }
+
+        // Merge: existing servers + Maestro servers (Maestro overwrites on conflict)
+        var mergedServers = existingServers
+        for (key, value) in maestroServers {
+            mergedServers[key] = value
+        }
+
+        // Write merged config
+        let config: [String: Any] = ["mcpServers": mergedServers]
         do {
-            try content.write(to: filePath, atomically: true, encoding: .utf8)
+            let jsonData = try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys])
+            try jsonData.write(to: filePath)
         } catch {
             print("Failed to generate .mcp.json: \(error)")
         }
@@ -458,8 +524,46 @@ class ClaudeDocManager {
         case remove
     }
 
+    // MARK: - CLI Integration Consent
+
+    private static let cliIntegrationPromptShownKey = "CLIIntegrationPromptShown"
+
+    /// Prompt user for consent before modifying third-party CLI config files (issue #51)
+    /// Only shows once per install. If user consents, configures Codex and Gemini CLI.
+    static func promptForCLIIntegration() {
+        let defaults = UserDefaults.standard
+
+        // Only show once
+        guard !defaults.bool(forKey: cliIntegrationPromptShownKey) else {
+            return
+        }
+        defaults.set(true, forKey: cliIntegrationPromptShownKey)
+
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "Configure CLI Tool Integration?"
+            alert.informativeText = """
+            Maestro can configure Codex CLI and Gemini CLI to read CLAUDE.md files for context. This will modify:
+
+            • ~/.codex/config.toml
+            • ~/.gemini/settings.json
+
+            You can skip this if you don't use these tools.
+            """
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "Configure")
+            alert.addButton(withTitle: "Skip")
+
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                setupCLIContextFiles()
+            }
+        }
+    }
+
     /// One-time setup: Configure Codex and Gemini CLI to read CLAUDE.md
-    static func setupCLIContextFiles() {
+    /// Called only after user consent via promptForCLIIntegration()
+    private static func setupCLIContextFiles() {
         setupCodexFallbackFilenames()
         setupGeminiContextFileName()
     }
@@ -557,14 +661,19 @@ class ClaudeDocManager {
 
         // Add Maestro MCP if available (native Swift binary)
         if let maestroPath = maestroServerPath {
+            var env: [String: String] = [
+                "MAESTRO_SESSION_ID": "\(sessionId)",
+                "MAESTRO_PORT_RANGE_START": "\(portRangeStart)",
+                "MAESTRO_PORT_RANGE_END": "\(portRangeEnd)"
+            ]
+            // Add project hash for multi-project isolation
+            if let path = projectPath, !path.isEmpty {
+                env["MAESTRO_PROJECT_HASH"] = generateProjectHash(path)
+            }
             mcpServers["maestro"] = [
                 "command": maestroPath,
                 "args": [] as [String],
-                "env": [
-                    "MAESTRO_SESSION_ID": "\(sessionId)",
-                    "MAESTRO_PORT_RANGE_START": "\(portRangeStart)",
-                    "MAESTRO_PORT_RANGE_END": "\(portRangeEnd)"
-                ]
+                "env": env
             ] as [String: Any]
         }
 
@@ -678,7 +787,7 @@ class ClaudeDocManager {
 
                 // Add Maestro MCP if available (native Swift binary)
                 if let maestroPath = maestroServerPath {
-                    let serverConfig = """
+                    var serverConfig = """
 
                     # Claude Maestro Session \(sessionId)
                     [mcp_servers.\(sessionKey)]
@@ -690,6 +799,10 @@ class ClaudeDocManager {
                     MAESTRO_PORT_RANGE_START = "\(portRangeStart)"
                     MAESTRO_PORT_RANGE_END = "\(portRangeEnd)"
                     """
+                    // Add project hash for multi-project isolation
+                    if let path = projectPath, !path.isEmpty {
+                        serverConfig += "\nMAESTRO_PROJECT_HASH = \"\(generateProjectHash(path))\""
+                    }
                     content += serverConfig
                 }
 
@@ -903,7 +1016,7 @@ class ClaudeDocManager {
         HookManager.shared.scanForHooks()
         HookManager.shared.syncWorktreeHooks(worktreePath: directory, for: sessionId)
 
-        let content = generateContent(
+        let maestroContent = generateContent(
             projectPath: projectPath,
             runCommand: effectiveRunCommand,
             branch: branch,
@@ -916,9 +1029,39 @@ class ClaudeDocManager {
         )
 
         let filePath = URL(fileURLWithPath: directory).appendingPathComponent("CLAUDE.md")
+        let fm = FileManager.default
+
+        // Read existing CLAUDE.md content if it exists
+        var existingContent = ""
+        if fm.fileExists(atPath: filePath.path) {
+            existingContent = (try? String(contentsOf: filePath, encoding: .utf8)) ?? ""
+        }
+
+        // Wrap Maestro content in markers for future identification
+        let maestroSection = """
+        \(maestroSectionStart)
+        \(maestroContent)
+        \(maestroSectionEnd)
+        """
+
+        // Merge: replace existing Maestro section or prepend to user content
+        let mergedContent: String
+        if let startRange = existingContent.range(of: maestroSectionStart),
+           let endRange = existingContent.range(of: maestroSectionEnd) {
+            // Replace existing Maestro section in-place, preserving user content before/after
+            let before = String(existingContent[..<startRange.lowerBound])
+            let after = String(existingContent[endRange.upperBound...])
+            mergedContent = before + maestroSection + after
+        } else if existingContent.isEmpty {
+            // New file - just use the Maestro section
+            mergedContent = maestroSection
+        } else {
+            // Existing file without markers - prepend Maestro section, preserve user content
+            mergedContent = maestroSection + "\n\n---\n\n" + existingContent
+        }
 
         do {
-            try content.write(to: filePath, atomically: true, encoding: .utf8)
+            try mergedContent.write(to: filePath, atomically: true, encoding: .utf8)
         } catch {
             print("Failed to generate CLAUDE.md: \(error)")
         }

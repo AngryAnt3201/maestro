@@ -13,8 +13,8 @@ struct claude_maestroApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     init() {
-        // One-time setup: Configure Codex and Gemini CLI to read CLAUDE.md
-        ClaudeDocManager.setupCLIContextFiles()
+        // Prompt user before modifying third-party CLI configs (issue #51)
+        ClaudeDocManager.promptForCLIIntegration()
 
         // Clean up orphaned/corrupted Codex MCP config sections from previous sessions
         ClaudeDocManager.cleanupOrphanedCodexSections()
@@ -22,7 +22,7 @@ struct claude_maestroApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MultiProjectContentView()
         }
     }
 }

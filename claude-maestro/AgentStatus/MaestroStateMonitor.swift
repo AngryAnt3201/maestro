@@ -1,16 +1,21 @@
 import Foundation
 import Combine
 import AppKit
+import CryptoKit
 
 /// Monitors agent state files written by the maestro-status MCP server.
 /// Polls /tmp/maestro/agents/ every 0.5 seconds and publishes agent states.
+/// Supports project-scoped directories for multi-project isolation.
 @MainActor
 class MaestroStateMonitor: ObservableObject {
     /// Current agent states keyed by agent ID
     @Published private(set) var agents: [String: AgentState] = [:]
 
-    /// Directory where agent state files are written
-    private let stateDir: String
+    /// Base directory where agent state files are written
+    private let baseStateDir: String
+
+    /// Project-specific subdirectory (nil for legacy single-project mode)
+    private var projectHash: String?
 
     /// Polling timer
     private var timer: Timer?
@@ -30,9 +35,53 @@ class MaestroStateMonitor: ObservableObject {
     /// Previous agent states for detecting transitions
     private var previousStates: [String: AgentStatusState] = [:]
 
+    /// Effective state directory (project-scoped or legacy)
+    var stateDir: String {
+        if let hash = projectHash {
+            return (baseStateDir as NSString).appendingPathComponent(hash)
+        }
+        return baseStateDir
+    }
+
     init(stateDir: String = "/tmp/maestro/agents", pollInterval: TimeInterval = 0.5) {
-        self.stateDir = stateDir
+        self.baseStateDir = stateDir
         self.pollInterval = pollInterval
+    }
+
+    /// Initialize with project-scoped directory
+    /// - Parameters:
+    ///   - projectPath: Path to the project (used to generate unique hash)
+    ///   - pollInterval: Polling interval in seconds
+    convenience init(projectPath: String, pollInterval: TimeInterval = 0.5) {
+        self.init(stateDir: "/tmp/maestro/agents", pollInterval: pollInterval)
+        self.projectHash = Self.generateProjectHash(projectPath)
+    }
+
+    /// Generate a stable hash for a project path
+    /// Uses first 12 characters of SHA256 for uniqueness with reasonable length
+    static func generateProjectHash(_ projectPath: String) -> String {
+        let data = Data(projectPath.utf8)
+        let hash = SHA256.hash(data: data)
+        let hashString = hash.compactMap { String(format: "%02x", $0) }.joined()
+        return String(hashString.prefix(12))
+    }
+
+    /// Set the project path for scoped state directory
+    func setProjectPath(_ projectPath: String) {
+        self.projectHash = Self.generateProjectHash(projectPath)
+        // Recreate state directory for new project
+        ensureStateDir()
+        // Clear old agents and poll new directory
+        agents.removeAll()
+        previousStates.removeAll()
+        pollStateFiles()
+    }
+
+    /// Clear project scoping (use legacy single directory)
+    func clearProjectScope() {
+        self.projectHash = nil
+        agents.removeAll()
+        previousStates.removeAll()
     }
 
     deinit {

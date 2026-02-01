@@ -719,6 +719,10 @@ class SkillManager: ObservableObject {
         }
 
         // Remove symlinks that shouldn't exist anymore
+        // NOTE: existingSymlinks only contains actual symlinks (lines 701-708 check for symlinks specifically)
+        // User's committed skill folders are NOT affected - they're regular directories, not symlinks,
+        // so they don't appear in existingSymlinks and won't be removed here.
+        // This ensures we only clean up items Maestro created (symlinks), preserving user content.
         for (name, _) in existingSymlinks {
             if desiredSymlinks[name] == nil {
                 let symlinkPath = "\(worktreeSkillsPath)/\(name)"

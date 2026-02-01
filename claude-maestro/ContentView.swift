@@ -426,6 +426,8 @@ class SessionManager: ObservableObject {
             projectPath = path
             // Load the main project's CLAUDE.md content
             claudeMDManager.loadContent(from: path)
+            // Set project path for state monitor to use project-scoped directories
+            stateMonitor.setProjectPath(path)
         }
         await gitManager.setRepository(path: path)
 
@@ -1011,6 +1013,8 @@ class SessionManager: ObservableObject {
 
 // MARK: - Content View
 
+/// Original ContentView that creates and owns its own SessionManager
+/// Used when the app is running in single-project mode
 struct ContentView: View {
     @StateObject private var manager = SessionManager()
     @StateObject private var appearanceManager = AppearanceManager()
@@ -1033,6 +1037,41 @@ struct ContentView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .preferredColorScheme(appearanceManager.currentMode.colorScheme)
+    }
+}
+
+/// Project-specific ContentView that accepts an external SessionManager
+/// Used in multi-project mode where each project owns its SessionManager
+struct ProjectContentView: View {
+    @ObservedObject var manager: SessionManager
+    @ObservedObject var appearanceManager: AppearanceManager
+    @State private var statusMessage: String = "Select a directory to launch Claude Code instances"
+    @State private var showBranchSidebar: Bool = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+
+    var body: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarView(manager: manager, appearanceManager: appearanceManager)
+                .navigationSplitViewColumnWidth(min: 240, ideal: 240, max: 300)
+        } detail: {
+            MainContentView(
+                manager: manager,
+                appearanceManager: appearanceManager,
+                statusMessage: $statusMessage,
+                showBranchSidebar: $showBranchSidebar,
+                columnVisibility: $columnVisibility
+            )
+        }
+        .navigationSplitViewStyle(.balanced)
+        .preferredColorScheme(appearanceManager.currentMode.colorScheme)
+        .onAppear {
+            // Update status message based on project state
+            if !manager.projectPath.isEmpty {
+                statusMessage = manager.gitManager.isGitRepo
+                    ? "Git repo detected - Ready to launch!"
+                    : "Ready to launch!"
+            }
+        }
     }
 }
 

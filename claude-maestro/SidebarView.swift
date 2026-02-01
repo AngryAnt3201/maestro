@@ -63,17 +63,20 @@ struct SidebarView: View {
 
                 Divider()
             }
-            .padding(.bottom, 12)
+            .padding(.bottom, 4)
 
             // Tab Content
-            switch selectedTab {
-            case .configuration:
-                ConfigurationSidebarContent(manager: manager, appearanceManager: appearanceManager)
-            case .processes:
-                ProcessSidebarView(manager: manager)
+            Group {
+                switch selectedTab {
+                case .configuration:
+                    ConfigurationSidebarContent(manager: manager, appearanceManager: appearanceManager)
+                case .processes:
+                    ProcessSidebarView(manager: manager)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .animation(nil, value: manager.isRunning)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             manager.loadPresets()
         }
@@ -112,6 +115,7 @@ struct ConfigurationSidebarContent: View {
                 }
             }
             .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Divider()
 
