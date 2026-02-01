@@ -24,7 +24,49 @@ struct claude_maestroApp: App {
         WindowGroup {
             MultiProjectContentView()
         }
+        .commands {
+            CommandMenu("Terminals") {
+                ForEach(1...9, id: \.self) { num in
+                    Button("Terminal \(num)") {
+                        NotificationCenter.default.post(
+                            name: .navigateToTerminal,
+                            object: nil,
+                            userInfo: ["index": num - 1]
+                        )
+                    }
+                    .keyboardShortcut(KeyEquivalent(Character(String(num))), modifiers: .command)
+                }
+                Button("Terminal 10") {
+                    NotificationCenter.default.post(
+                        name: .navigateToTerminal,
+                        object: nil,
+                        userInfo: ["index": 9]
+                    )
+                }
+                .keyboardShortcut("0", modifiers: .command)
+
+                Divider()
+
+                Button("Next Terminal") {
+                    NotificationCenter.default.post(name: .navigateNextTerminal, object: nil)
+                }
+                .keyboardShortcut("]", modifiers: .command)
+
+                Button("Previous Terminal") {
+                    NotificationCenter.default.post(name: .navigatePreviousTerminal, object: nil)
+                }
+                .keyboardShortcut("[", modifiers: .command)
+            }
+        }
     }
+}
+
+// MARK: - Terminal Navigation Notifications
+
+extension Notification.Name {
+    static let navigateToTerminal = Notification.Name("navigateToTerminal")
+    static let navigateNextTerminal = Notification.Name("navigateNextTerminal")
+    static let navigatePreviousTerminal = Notification.Name("navigatePreviousTerminal")
 }
 
 // MARK: - App Delegate for Lifecycle Events

@@ -101,8 +101,30 @@ struct TerminalColorScheme {
 /// Custom terminal view that accepts first mouse click for immediate interaction
 /// This enables text selection and copy even when the window is not focused
 class MaestroTerminalView: LocalProcessTerminalView {
+    /// Called when a navigation shortcut (Cmd+0-9, Cmd+[/]) is pressed.
+    /// Return true if handled.
+    var onNavigationShortcut: ((String) -> Bool)?
+
+    /// Called when this terminal becomes first responder (e.g. clicked)
+    var onBecameFirstResponder: (() -> Void)?
+
+    /// KVO observation for tracking when this terminal becomes first responder
+    private var firstResponderObservation: NSKeyValueObservation?
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         return true  // Accept clicks even when window is inactive
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Observe window's firstResponder to detect when this terminal gains focus
+        firstResponderObservation?.invalidate()
+        firstResponderObservation = window?.observe(\.firstResponder, options: [.new]) { [weak self] _, change in
+            guard let self = self, change.newValue as? NSView === self else { return }
+            DispatchQueue.main.async {
+                self.onBecameFirstResponder?()
+            }
+        }
     }
 
     // Intercept key equivalents so SwiftUI doesn't swallow Cmd+C/V
@@ -115,6 +137,14 @@ class MaestroTerminalView: LocalProcessTerminalView {
 
         guard event.modifierFlags.contains(.command) else {
             return super.performKeyEquivalent(with: event)
+        }
+
+        // Navigation shortcuts (Cmd+0-9, Cmd+[/]) — handle from ANY terminal, not just focused
+        if let char = event.charactersIgnoringModifiers,
+           ["0","1","2","3","4","5","6","7","8","9","[","]"].contains(char) {
+            if let handler = onNavigationShortcut, handler(char) {
+                return true
+            }
         }
 
         // Only handle if this terminal is the first responder
@@ -226,6 +256,8 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     var onServerReady: ((String) -> Void)?  // Called with detected server URL
     var onOutputReceived: ((String) -> Void)?  // Called with terminal output for output pane
     var onProcessStarted: ((pid_t) -> Void)?  // Called with shell PID for process registration
+    var onNavigationShortcut: ((String) -> Bool)?  // Keyboard navigation (Cmd+0-9, Cmd+[/])
+    var onBecameFirstResponder: (() -> Void)?  // Terminal gained focus
     var controller: TerminalController?
 
     func makeNSView(context: Context) -> MaestroTerminalView {
@@ -239,6 +271,8 @@ struct EmbeddedTerminalView: NSViewRepresentable {
         let scheme = TerminalColorScheme.scheme(for: appearanceMode)
         applyColorScheme(scheme, to: terminal)
 
+        terminal.onNavigationShortcut = onNavigationShortcut
+        terminal.onBecameFirstResponder = onBecameFirstResponder
         context.coordinator.terminal = terminal
         controller?.coordinator = context.coordinator
         return terminal
@@ -743,6 +777,9 @@ struct TerminalSessionView: View {
     var onProcessStarted: ((pid_t) -> Void)?  // Register PID for native process management
     var activityMonitor: ProcessActivityMonitor?  // For accurate state detection
     var agentState: AgentState?  // MCP-reported agent status
+    var onNavigationShortcut: ((String) -> Bool)?  // Keyboard navigation callback
+    var onBecameFirstResponder: (() -> Void)?  // Terminal focus callback
+    var isFocused: Bool = false  // Whether this terminal has keyboard focus
 
     @State private var terminalController = TerminalController()
     @StateObject private var quickActionManager = QuickActionManager.shared
@@ -892,6 +929,8 @@ struct TerminalSessionView: View {
                     onServerReady: onServerReady,
                     onOutputReceived: nil,
                     onProcessStarted: onProcessStarted,
+                    onNavigationShortcut: onNavigationShortcut,
+                    onBecameFirstResponder: onBecameFirstResponder,
                     controller: terminalController
                 )
             } else {
@@ -999,7 +1038,8 @@ struct TerminalSessionView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(shouldLaunch ? status.color : Color.gray.opacity(0.5), lineWidth: 2)
+                .stroke(isFocused ? Color.accentColor : (shouldLaunch ? status.color : Color.gray.opacity(0.5)),
+                        lineWidth: isFocused ? 3 : 2)
         )
         .alert("CLI Tool Not Found", isPresented: $showMissingToolAlert) {
             Button("Copy Install Command") {

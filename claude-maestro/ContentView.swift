@@ -333,6 +333,9 @@ class SessionManager: ObservableObject {
     // Agent state monitoring via MCP-reported status files
     @Published var stateMonitor = MaestroStateMonitor()
 
+    // Keyboard navigation
+    @Published var focusedSessionId: Int? = nil
+
     // Agent state subscription for syncing to session status
     private var agentStateSubscription: AnyCancellable?
 
@@ -874,6 +877,51 @@ class SessionManager: ObservableObject {
         }
     }
 
+    // MARK: - Keyboard Navigation
+
+    /// Focus the terminal at the given visible index (0-based)
+    func focusTerminal(atVisibleIndex index: Int) {
+        let visible = visibleSessions
+        guard index >= 0 && index < visible.count else { return }
+        let targetId = visible[index].id
+        focusedSessionId = targetId
+
+        // Make the terminal's NSView first responder if it's launched
+        if let controller = terminalControllers[targetId],
+           let terminal = controller.coordinator?.terminal,
+           let window = terminal.window {
+            window.makeFirstResponder(terminal)
+        }
+    }
+
+    /// Focus the next terminal in the visible list (with wraparound)
+    func focusNextTerminal() {
+        let visible = visibleSessions
+        guard !visible.isEmpty else { return }
+
+        if let currentId = focusedSessionId,
+           let currentIndex = visible.firstIndex(where: { $0.id == currentId }) {
+            let nextIndex = (currentIndex + 1) % visible.count
+            focusTerminal(atVisibleIndex: nextIndex)
+        } else {
+            focusTerminal(atVisibleIndex: 0)
+        }
+    }
+
+    /// Focus the previous terminal in the visible list (with wraparound)
+    func focusPreviousTerminal() {
+        let visible = visibleSessions
+        guard !visible.isEmpty else { return }
+
+        if let currentId = focusedSessionId,
+           let currentIndex = visible.firstIndex(where: { $0.id == currentId }) {
+            let prevIndex = (currentIndex - 1 + visible.count) % visible.count
+            focusTerminal(atVisibleIndex: prevIndex)
+        } else {
+            focusTerminal(atVisibleIndex: visible.count - 1)
+        }
+    }
+
     var visibleSessions: [SessionInfo] {
         sessions.filter { $0.isVisible }
     }
@@ -1285,7 +1333,19 @@ struct DynamicTerminalGridView: View {
                                 onControllerReady: { controller in manager.terminalControllers[session.id] = controller },
                                 onCustomAction: { prompt in manager.executeCustomAction(prompt: prompt, for: session.id) },
                                 onProcessStarted: { pid in manager.registerTerminalProcess(sessionId: session.id, pid: pid) },
-                                agentState: manager.stateMonitor.agentState(forSessionId: session.id)
+                                agentState: manager.stateMonitor.agentState(forSessionId: session.id),
+                                onNavigationShortcut: { char in
+                                    if let digit = Int(char) {
+                                        let index = digit == 0 ? 9 : digit - 1
+                                        manager.focusTerminal(atVisibleIndex: index)
+                                        return true
+                                    }
+                                    if char == "]" { manager.focusNextTerminal(); return true }
+                                    if char == "[" { manager.focusPreviousTerminal(); return true }
+                                    return false
+                                },
+                                onBecameFirstResponder: { manager.focusedSessionId = session.id },
+                                isFocused: manager.focusedSessionId == session.id
                             )
                             .id(session.id)  // Explicit session ID for view identity
                         }
@@ -1316,6 +1376,17 @@ struct DynamicTerminalGridView: View {
             .help("Add new terminal")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToTerminal)) { notification in
+            if let index = notification.userInfo?["index"] as? Int {
+                manager.focusTerminal(atVisibleIndex: index)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateNextTerminal)) { _ in
+            manager.focusNextTerminal()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigatePreviousTerminal)) { _ in
+            manager.focusPreviousTerminal()
+        }
     }
 }
 
