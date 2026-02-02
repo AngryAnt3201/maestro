@@ -474,6 +474,7 @@ function SessionsSection() {
             sessions.map((s) => (
               <div
                 key={s.id}
+                title={s.statusMessage || s.needsInputPrompt || STATUS_LABEL[s.status]}
                 className="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-maestro-text hover:bg-maestro-border/40"
               >
                 <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT_CLASS[s.status]}`} />

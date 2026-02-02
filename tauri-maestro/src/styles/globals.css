@@ -257,55 +257,53 @@
 .terminal-cell {
   border-radius: 12px;
   overflow: hidden;
-  border: 1px solid rgb(var(--maestro-border));
+  border: 3px solid rgb(var(--maestro-border));
   box-shadow:
     0 4px 12px rgba(0, 0, 0, 0.3),
     0 1px 3px rgba(0, 0, 0, 0.2);
-  /* Subtle top-edge glass highlight */
-  border-top: 1px solid rgba(255, 255, 255, 0.03);
   transition:
-    border-color 300ms ease,
-    box-shadow 300ms ease;
+    border-color 200ms ease,
+    box-shadow 200ms ease;
 }
 
 .terminal-cell-idle {
-  border-color: rgb(var(--maestro-border));
+  border-color: rgb(var(--maestro-muted) / 0.4);
 }
 
 .terminal-cell-starting {
   border-color: rgb(var(--maestro-orange));
   box-shadow:
-    0 0 6px rgba(245, 158, 11, 0.15),
-    0 0 14px rgba(245, 158, 11, 0.08);
+    0 0 12px rgba(245, 158, 11, 0.4),
+    0 0 24px rgba(245, 158, 11, 0.2);
   animation: starting-glow 2s ease-in-out infinite;
 }
 
 .terminal-cell-working {
-  border-color: rgb(var(--maestro-green) / 0.4);
+  border-color: rgb(var(--maestro-green));
   box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.3),
-    0 0 8px rgba(63, 185, 80, 0.1);
+    0 0 12px rgba(63, 185, 80, 0.4),
+    0 0 24px rgba(63, 185, 80, 0.2);
 }
 
 .terminal-cell-needs-input {
-  border-color: rgb(var(--maestro-yellow) / 0.4);
+  border-color: rgb(var(--maestro-yellow));
   box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.3),
-    0 0 8px rgba(234, 179, 8, 0.1);
+    0 0 12px rgba(234, 179, 8, 0.5),
+    0 0 24px rgba(234, 179, 8, 0.25);
 }
 
 .terminal-cell-done {
-  border-color: rgb(var(--maestro-accent) / 0.3);
+  border-color: rgb(var(--maestro-accent));
   box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.3),
-    0 0 6px rgba(88, 166, 255, 0.08);
+    0 0 10px rgba(88, 166, 255, 0.3),
+    0 0 20px rgba(88, 166, 255, 0.15);
 }
 
 .terminal-cell-error {
-  border-color: rgb(var(--maestro-red) / 0.4);
+  border-color: rgb(var(--maestro-red));
   box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.3),
-    0 0 8px rgba(248, 81, 73, 0.12);
+    0 0 12px rgba(248, 81, 73, 0.5),
+    0 0 24px rgba(248, 81, 73, 0.25);
 }
 
 /* ── Animations ── */
@@ -334,13 +332,13 @@
   0%,
   100% {
     box-shadow:
-      0 0 6px rgba(245, 158, 11, 0.15),
-      0 0 14px rgba(245, 158, 11, 0.08);
+      0 0 12px rgba(245, 158, 11, 0.4),
+      0 0 24px rgba(245, 158, 11, 0.2);
   }
   50% {
     box-shadow:
-      0 0 10px rgba(245, 158, 11, 0.25),
-      0 0 20px rgba(245, 158, 11, 0.12);
+      0 0 20px rgba(245, 158, 11, 0.6),
+      0 0 40px rgba(245, 158, 11, 0.3);
   }
 }
 
