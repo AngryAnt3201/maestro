@@ -4,6 +4,7 @@ import { Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 
+import { QuickActionsManager } from "@/components/quickactions/QuickActionsManager";
 import { getBackendInfo, killSession, onPtyOutput, resizePty, writeStdin, type BackendInfo } from "@/lib/terminal";
 import { DEFAULT_THEME, LIGHT_THEME, toXtermTheme } from "@/lib/terminalTheme";
 import { useMcpStore } from "@/stores/useMcpStore";
@@ -105,6 +106,9 @@ export function TerminalView({ sessionId, status = "idle", onKill }: TerminalVie
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
+  // Quick actions manager modal state
+  const [showQuickActionsManager, setShowQuickActionsManager] = useState(false);
+
   // Backend capabilities (for future enhanced features like terminal state queries)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_backendInfo, setBackendInfo] = useState<BackendInfo | null>(null);
@@ -158,6 +162,16 @@ export function TerminalView({ sessionId, status = "idle", onKill }: TerminalVie
       });
     },
     [onKill],
+  );
+
+  /**
+   * Handles quick action button clicks by writing the prompt to the terminal.
+   */
+  const handleQuickAction = useCallback(
+    (prompt: string) => {
+      writeStdin(sessionId, prompt + "\n").catch(console.error);
+    },
+    [sessionId],
   );
 
   useEffect(() => {
@@ -267,7 +281,15 @@ export function TerminalView({ sessionId, status = "idle", onKill }: TerminalVie
       <div ref={containerRef} className="flex-1 overflow-hidden" />
 
       {/* Quick action pills */}
-      <QuickActionPills />
+      <QuickActionPills
+        onAction={handleQuickAction}
+        onManageClick={() => setShowQuickActionsManager(true)}
+      />
+
+      {/* Quick actions manager modal */}
+      {showQuickActionsManager && (
+        <QuickActionsManager onClose={() => setShowQuickActionsManager(false)} />
+      )}
     </div>
   );
 }

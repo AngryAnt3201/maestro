@@ -34,6 +34,7 @@ import { useMcpStore } from "@/stores/useMcpStore";
 import { usePluginStore } from "@/stores/usePluginStore";
 import { useWorkspaceStore } from "@/stores/useWorkspaceStore";
 import { GitSettingsModal, RemoteStatusIndicator } from "@/components/git";
+import { QuickActionsManager } from "@/components/quickactions/QuickActionsManager";
 
 type SidebarTab = "config" | "processes";
 
@@ -939,6 +940,8 @@ function PluginsSection() {
 /* ── 8. Quick Actions ── */
 
 function QuickActionsSection() {
+  const [showManager, setShowManager] = useState(false);
+
   const actions = [
     { label: "Run App", icon: Play, color: "text-maestro-green" },
     { label: "Commit & Push", icon: Circle, color: "text-maestro-accent" },
@@ -947,34 +950,45 @@ function QuickActionsSection() {
   ];
 
   return (
-    <div className={cardClass}>
-      <SectionHeader
-        icon={Zap}
-        label="Quick Actions"
-        iconColor="text-maestro-orange"
-        breathe
-        right={
-          <div className="flex items-center gap-1">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-maestro-yellow" />
-            <button type="button" className="rounded p-0.5 hover:bg-maestro-border/40">
-              <Settings size={12} className="text-maestro-muted" />
+    <>
+      <div className={cardClass}>
+        <SectionHeader
+          icon={Zap}
+          label="Quick Actions"
+          iconColor="text-maestro-orange"
+          breathe
+          right={
+            <div className="flex items-center gap-1">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-maestro-yellow" />
+              <button
+                type="button"
+                className="rounded p-0.5 hover:bg-maestro-border/40"
+                onClick={() => setShowManager(true)}
+                title="Manage Quick Actions"
+              >
+                <Settings size={12} className="text-maestro-muted" />
+              </button>
+            </div>
+          }
+        />
+        <div className="space-y-0.5">
+          {actions.map((a) => (
+            <button
+              type="button"
+              key={a.label}
+              className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-maestro-text transition-colors hover:bg-maestro-border/40"
+            >
+              <a.icon size={14} className={a.color} />
+              <span>{a.label}</span>
             </button>
-          </div>
-        }
-      />
-      <div className="space-y-0.5">
-        {actions.map((a) => (
-          <button
-            type="button"
-            key={a.label}
-            className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-maestro-text transition-colors hover:bg-maestro-border/40"
-          >
-            <a.icon size={14} className={a.color} />
-            <span>{a.label}</span>
-          </button>
-        ))}
+          ))}
+        </div>
       </div>
-    </div>
+
+      {showManager && (
+        <QuickActionsManager onClose={() => setShowManager(false)} />
+      )}
+    </>
   );
 }
 
