@@ -4,6 +4,7 @@ pub mod mcp_manager;
 pub mod mcp_status_monitor;
 pub mod plugin_manager;
 pub mod process_manager;
+pub mod process_tree;
 pub mod session_manager;
 pub mod terminal_backend;
 pub mod worktree_manager;
@@ -24,6 +25,7 @@ pub use terminal_backend::{
 };
 pub use worktree_manager::WorktreeManager;
 pub use xterm_backend::XtermPassthroughBackend;
+pub use process_tree::{ProcessError, ProcessInfo, SessionProcessTree};
 
 #[cfg(feature = "vte-backend")]
 pub use vte_backend::VteBackend;

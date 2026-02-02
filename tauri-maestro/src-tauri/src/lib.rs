@@ -62,6 +62,9 @@ pub fn run() {
             commands::terminal::kill_session,
             commands::terminal::check_cli_available,
             commands::terminal::get_backend_info,
+            commands::terminal::get_session_process_tree,
+            commands::terminal::get_all_process_trees,
+            commands::terminal::kill_process,
             // Git commands
             commands::git::git_branches,
             commands::git::git_current_branch,

@@ -1,7 +1,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
-use crate::core::{BackendCapabilities, BackendType, ProcessManager, PtyError};
+use crate::core::{BackendCapabilities, BackendType, ProcessManager, PtyError, SessionProcessTree};
 
 /// Backend information returned to the frontend.
 #[derive(Debug, Clone, Serialize)]
@@ -134,6 +134,58 @@ pub async fn kill_session(
 ) -> Result<(), PtyError> {
     let pm = state.inner().clone();
     pm.kill_session(session_id).await
+}
+
+/// Returns the process tree for a specific session.
+///
+/// The tree includes the root shell process and all its descendants.
+/// Returns None if the session doesn't exist or its root process has exited.
+#[tauri::command]
+pub async fn get_session_process_tree(
+    state: State<'_, ProcessManager>,
+    session_id: u32,
+) -> Result<Option<SessionProcessTree>, String> {
+    let pm = state.inner().clone();
+    let root_pid = match pm.get_session_pid(session_id) {
+        Some(pid) => pid,
+        None => return Ok(None),
+    };
+
+    Ok(crate::core::process_tree::get_process_tree(session_id, root_pid))
+}
+
+/// Returns process trees for all active sessions.
+///
+/// More efficient than calling get_session_process_tree for each session
+/// since it only refreshes the process list once.
+#[tauri::command]
+pub async fn get_all_process_trees(
+    state: State<'_, ProcessManager>,
+) -> Result<Vec<SessionProcessTree>, String> {
+    let pm = state.inner().clone();
+    let sessions = pm.get_all_session_pids();
+    Ok(crate::core::process_tree::get_all_process_trees(&sessions))
+}
+
+/// Kills a specific process by PID.
+///
+/// Sends SIGTERM first, waits up to 2 seconds, then SIGKILL if still alive.
+/// Will refuse to kill root session processes (use kill_session for that).
+#[tauri::command]
+pub async fn kill_process(
+    state: State<'_, ProcessManager>,
+    pid: u32,
+) -> Result<(), String> {
+    let pm = state.inner().clone();
+    let session_root_pids: Vec<i32> = pm
+        .get_all_session_pids()
+        .into_iter()
+        .map(|(_, root_pid)| root_pid)
+        .collect();
+
+    crate::core::process_tree::kill_process(pid, &session_root_pids)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Checks if a command is available in the user's PATH.

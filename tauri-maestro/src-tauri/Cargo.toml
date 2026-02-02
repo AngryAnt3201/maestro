@@ -36,6 +36,7 @@ thiserror = "2"
 sha2 = "0.10"
 hex = "0.4"
 directories = "5"
+sysinfo = "0.32"
 # VT sequence parsing (used by Alacritty)
 vte = { version = "0.14", optional = true }
 
