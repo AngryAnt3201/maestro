@@ -3,9 +3,12 @@ node_modules/
 
 # Build output
 dist/
+.vite/
 
 # Rust build artifacts
+target/
 src-tauri/target/
+maestro-mcp-server/target/
 
 # Generated schemas (rebuilt by tauri build)
 src-tauri/gen/
