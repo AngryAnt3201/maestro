@@ -35,6 +35,7 @@ import { useWorkspaceStore } from "@/stores/useWorkspaceStore";
 import { useProcessTreeStore, type ProcessInfo, type SessionProcessTree } from "@/stores/useProcessTreeStore";
 import { GitSettingsModal, RemoteStatusIndicator } from "@/components/git";
 import { QuickActionsManager } from "@/components/quickactions/QuickActionsManager";
+import { MarketplaceBrowser } from "@/components/marketplace";
 
 type SidebarTab = "config" | "processes";
 
@@ -741,6 +742,7 @@ function getSkillSourceBadge(source: SkillSource): { text: string; className: st
 function PluginsSection() {
   const [expanded, setExpanded] = useState(false);
   const [expandedPlugins, setExpandedPlugins] = useState<Set<string>>(new Set());
+  const [showMarketplace, setShowMarketplace] = useState(false);
   const tabs = useWorkspaceStore((s) => s.tabs);
   const activeTab = tabs.find((t) => t.active);
   const projectPath = activeTab?.projectPath ?? "";
@@ -840,7 +842,12 @@ function PluginsSection() {
           >
             <RefreshCw size={12} className={`text-maestro-muted ${loading ? "animate-spin" : ""}`} />
           </button>
-          <button type="button" className="rounded p-0.5 hover:bg-maestro-border/40" title="Add plugin">
+          <button
+            type="button"
+            onClick={() => setShowMarketplace(true)}
+            className="rounded p-0.5 hover:bg-maestro-border/40"
+            title="Add plugin"
+          >
             <PlusCircle size={12} className="text-maestro-accent" />
           </button>
         </div>
@@ -945,6 +952,14 @@ function PluginsSection() {
             </>
           )}
         </div>
+      )}
+
+      {/* Marketplace Browser Modal */}
+      {showMarketplace && (
+        <MarketplaceBrowser
+          onClose={() => setShowMarketplace(false)}
+          currentProjectPath={projectPath}
+        />
       )}
     </div>
   );

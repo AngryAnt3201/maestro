@@ -1,4 +1,5 @@
 pub mod git;
+pub mod marketplace;
 pub mod mcp;
 pub mod plugin;
 pub mod session;

@@ -1,4 +1,7 @@
 pub mod error;
+pub mod marketplace_error;
+pub mod marketplace_manager;
+pub mod marketplace_models;
 pub mod mcp_config_writer;
 pub mod mcp_manager;
 pub mod mcp_status_monitor;
@@ -14,6 +17,7 @@ pub mod xterm_backend;
 pub mod vte_backend;
 
 pub use error::PtyError;
+pub use marketplace_manager::MarketplaceManager;
 pub use mcp_manager::McpManager;
 pub use mcp_status_monitor::McpStatusMonitor;
 pub use plugin_manager::PluginManager;

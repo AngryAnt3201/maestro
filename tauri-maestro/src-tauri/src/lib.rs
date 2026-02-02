@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use tauri::Manager;
 
+use core::marketplace_manager::MarketplaceManager;
 use core::mcp_manager::McpManager;
 use core::mcp_status_monitor::McpStatusMonitor;
 use core::plugin_manager::PluginManager;
@@ -24,6 +25,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .manage(MarketplaceManager::new())
         .manage(McpManager::new())
         .manage(Arc::new(McpStatusMonitor::new()))
         .manage(PluginManager::new())
@@ -123,6 +125,22 @@ pub fn run() {
             commands::plugin::load_project_skill_defaults,
             commands::plugin::save_project_plugin_defaults,
             commands::plugin::load_project_plugin_defaults,
+            // Marketplace commands
+            commands::marketplace::load_marketplace_data,
+            commands::marketplace::get_marketplace_sources,
+            commands::marketplace::add_marketplace_source,
+            commands::marketplace::remove_marketplace_source,
+            commands::marketplace::toggle_marketplace_source,
+            commands::marketplace::refresh_marketplace,
+            commands::marketplace::refresh_all_marketplaces,
+            commands::marketplace::get_available_plugins,
+            commands::marketplace::get_installed_plugins,
+            commands::marketplace::install_marketplace_plugin,
+            commands::marketplace::uninstall_plugin,
+            commands::marketplace::is_marketplace_plugin_installed,
+            commands::marketplace::get_session_marketplace_config,
+            commands::marketplace::set_marketplace_plugin_enabled,
+            commands::marketplace::clear_session_marketplace_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Maestro");
