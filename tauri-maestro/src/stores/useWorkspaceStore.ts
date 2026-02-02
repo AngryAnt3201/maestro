@@ -215,6 +215,19 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
       storage: createJSONStorage(() => tauriStorage),
       partialize: (state) => ({ tabs: state.tabs }),
       version: 2,
+      onRehydrateStorage: () => {
+        return (state) => {
+          if (state) {
+            // Clear stale sessionIds - sessions don't survive app restarts
+            // This prevents session ID collision between persisted tabs and new sessions
+            state.tabs = state.tabs.map((t) => ({
+              ...t,
+              sessionIds: [],
+              sessionsLaunched: false,
+            }));
+          }
+        };
+      },
       migrate: (persistedState, version) => {
         const state = persistedState as WorkspaceState;
         if (version < 2) {

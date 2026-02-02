@@ -43,7 +43,11 @@ export function useProjectStatus(tabId: string): {
       return { status: "idle" as ProjectStatus, sessionCount: 0, activeSessionCount: 0 };
     }
 
-    const projectSessions = sessions.filter((s) => tab.sessionIds.includes(s.id));
+    // Filter by both session ID and project_path to prevent cross-project session matching
+    // This guards against session ID collision when IDs reset after app restart
+    const projectSessions = sessions.filter(
+      (s) => tab.sessionIds.includes(s.id) && s.project_path === tab.projectPath
+    );
     const sessionCount = projectSessions.length;
 
     if (sessionCount === 0) {
