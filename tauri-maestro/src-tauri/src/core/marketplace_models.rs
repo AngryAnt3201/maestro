@@ -62,6 +62,8 @@ pub enum PluginCategory {
     Security,
     /// Documentation generation and management.
     Documentation,
+    /// Learning and educational tools.
+    Learning,
     /// Utilities and miscellaneous.
     Utility,
     /// Uncategorized plugins.
@@ -216,28 +218,55 @@ pub struct MarketplaceCatalog {
     pub plugins: Vec<CatalogPlugin>,
 }
 
+/// Author info from a marketplace catalog (can be string or object).
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum CatalogAuthor {
+    /// Simple string author name.
+    Simple(String),
+    /// Detailed author object.
+    Detailed {
+        name: String,
+        #[serde(default)]
+        email: Option<String>,
+    },
+}
+
+impl CatalogAuthor {
+    pub fn name(&self) -> &str {
+        match self {
+            CatalogAuthor::Simple(s) => s,
+            CatalogAuthor::Detailed { name, .. } => name,
+        }
+    }
+}
+
 /// Raw plugin entry from a marketplace catalog.
 #[derive(Debug, Deserialize)]
 pub struct CatalogPlugin {
-    /// Unique identifier.
-    pub id: String,
-    /// Human-readable name.
+    /// Plugin name (used as ID if no id field).
     pub name: String,
+    /// Explicit ID (optional, falls back to name).
+    #[serde(default)]
+    pub id: Option<String>,
     /// Description.
     #[serde(default)]
     pub description: Option<String>,
     /// Version string.
     #[serde(default)]
     pub version: Option<String>,
-    /// Author name.
+    /// Author (can be string or object with name/email).
     #[serde(default)]
-    pub author: Option<String>,
+    pub author: Option<CatalogAuthor>,
     /// Category string (will be parsed into PluginCategory).
     #[serde(default)]
     pub category: Option<String>,
     /// Types as strings (will be parsed into PluginType).
     #[serde(default)]
     pub types: Vec<String>,
+    /// Source path (relative to marketplace repo).
+    #[serde(default)]
+    pub source: Option<String>,
     /// Repository URL.
     #[serde(default)]
     pub repository: Option<String>,
@@ -269,17 +298,39 @@ pub struct CatalogPlugin {
 
 impl CatalogPlugin {
     /// Converts a raw catalog entry to a MarketplacePlugin.
-    pub fn into_marketplace_plugin(self, marketplace_id: &str) -> MarketplacePlugin {
+    ///
+    /// The `marketplace_repo_url` is used to construct the full plugin URL
+    /// when only a relative `source` path is provided.
+    pub fn into_marketplace_plugin(self, marketplace_id: &str, marketplace_repo_url: &str) -> MarketplacePlugin {
+        // Use explicit id or fall back to name
+        let plugin_id = self.id.unwrap_or_else(|| self.name.clone());
+
+        // Extract author name from either simple string or detailed object
+        let author_name = self.author
+            .as_ref()
+            .map(|a| a.name().to_string())
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        // Build repository URL: prefer explicit repository, then construct from source path
+        let repository_url = self.repository.or_else(|| {
+            self.source.as_ref().map(|source| {
+                // Convert relative source path to full GitHub URL
+                // e.g., "./plugins/agent-sdk-dev" -> "https://github.com/anthropics/claude-code/tree/main/plugins/agent-sdk-dev"
+                let source_path = source.trim_start_matches("./");
+                format!("{}/tree/main/{}", marketplace_repo_url.trim_end_matches('/'), source_path)
+            })
+        });
+
         MarketplacePlugin {
-            id: self.id,
+            id: plugin_id,
             name: self.name,
             description: self.description.unwrap_or_default(),
             version: self.version.unwrap_or_else(|| "0.0.0".to_string()),
-            author: self.author.unwrap_or_else(|| "Unknown".to_string()),
+            author: author_name,
             category: parse_category(&self.category),
             types: self.types.iter().filter_map(|t| parse_plugin_type(t)).collect(),
             download_url: self.download_url,
-            repository_url: self.repository,
+            repository_url,
             tags: self.tags,
             marketplace_id: marketplace_id.to_string(),
             icon_url: self.icon,
@@ -301,6 +352,7 @@ fn parse_category(s: &Option<String>) -> PluginCategory {
         Some("data") => PluginCategory::Data,
         Some("security") => PluginCategory::Security,
         Some("documentation") => PluginCategory::Documentation,
+        Some("learning") => PluginCategory::Learning,
         Some("utility") => PluginCategory::Utility,
         _ => PluginCategory::Other,
     }

@@ -18,6 +18,7 @@ export type PluginCategory =
   | "data"
   | "security"
   | "documentation"
+  | "learning"
   | "utility"
   | "other";
 

@@ -9,6 +9,7 @@ const CATEGORIES: { value: PluginCategory; label: string }[] = [
   { value: "data", label: "Data" },
   { value: "security", label: "Security" },
   { value: "documentation", label: "Docs" },
+  { value: "learning", label: "Learning" },
   { value: "utility", label: "Utility" },
 ];
 

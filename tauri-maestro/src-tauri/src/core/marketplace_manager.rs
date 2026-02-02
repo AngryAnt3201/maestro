@@ -16,6 +16,11 @@ use tokio::process::Command;
 use super::marketplace_error::{MarketplaceError, MarketplaceResult};
 use super::marketplace_models::*;
 
+/// Official Anthropic Claude Code marketplace.
+const OFFICIAL_MARKETPLACE_NAME: &str = "Claude Code Official";
+const OFFICIAL_MARKETPLACE_URL: &str = "https://github.com/anthropics/claude-code";
+const OFFICIAL_MARKETPLACE_ID: &str = "official-anthropic-claude-code";
+
 /// Session key for per-session configuration: (project_path, session_id).
 type SessionKey = (String, u32);
 
@@ -34,10 +39,20 @@ pub struct MarketplaceManager {
 }
 
 impl MarketplaceManager {
-    /// Creates a new marketplace manager with empty state.
+    /// Creates a new marketplace manager with the official Anthropic marketplace.
     pub fn new() -> Self {
+        let official_source = MarketplaceSource {
+            id: OFFICIAL_MARKETPLACE_ID.to_string(),
+            name: OFFICIAL_MARKETPLACE_NAME.to_string(),
+            repository_url: OFFICIAL_MARKETPLACE_URL.to_string(),
+            is_official: true,
+            is_enabled: true,
+            last_fetched: None,
+            last_error: None,
+        };
+
         Self {
-            sources: RwLock::new(Vec::new()),
+            sources: RwLock::new(vec![official_source]),
             available_plugins: DashMap::new(),
             installed_plugins: RwLock::new(Vec::new()),
             session_configs: DashMap::new(),
@@ -158,11 +173,12 @@ impl MarketplaceManager {
     /// Constructs the raw GitHub URL for a marketplace.json file.
     fn get_marketplace_json_url(repository_url: &str) -> String {
         // Convert GitHub repo URL to raw content URL
-        // e.g., "https://github.com/owner/repo" -> "https://raw.githubusercontent.com/owner/repo/main/marketplace.json"
+        // The marketplace.json is located at .claude-plugin/marketplace.json
+        // e.g., "https://github.com/owner/repo" -> "https://raw.githubusercontent.com/owner/repo/main/.claude-plugin/marketplace.json"
         let repo = repository_url
             .trim_end_matches('/')
             .replace("https://github.com/", "");
-        format!("https://raw.githubusercontent.com/{}/main/marketplace.json", repo)
+        format!("https://raw.githubusercontent.com/{}/main/.claude-plugin/marketplace.json", repo)
     }
 
     /// Fetches and parses a marketplace catalog from a source.
@@ -199,7 +215,7 @@ impl MarketplaceManager {
         // Convert to MarketplacePlugin list
         let plugins: Vec<MarketplacePlugin> = catalog.plugins
             .into_iter()
-            .map(|p| p.into_marketplace_plugin(source_id))
+            .map(|p| p.into_marketplace_plugin(source_id, &source.repository_url))
             .collect();
 
         // Update source status
@@ -627,9 +643,9 @@ mod tests {
     #[test]
     fn test_marketplace_json_url() {
         let url = MarketplaceManager::get_marketplace_json_url("https://github.com/owner/repo");
-        assert_eq!(url, "https://raw.githubusercontent.com/owner/repo/main/marketplace.json");
+        assert_eq!(url, "https://raw.githubusercontent.com/owner/repo/main/.claude-plugin/marketplace.json");
 
         let url_trailing = MarketplaceManager::get_marketplace_json_url("https://github.com/owner/repo/");
-        assert_eq!(url_trailing, "https://raw.githubusercontent.com/owner/repo/main/marketplace.json");
+        assert_eq!(url_trailing, "https://raw.githubusercontent.com/owner/repo/main/.claude-plugin/marketplace.json");
     }
 }
