@@ -113,6 +113,9 @@ pub fn run() {
             commands::mcp::write_session_mcp_config,
             commands::mcp::remove_session_mcp_config,
             commands::mcp::generate_project_hash,
+            commands::mcp::get_custom_mcp_servers,
+            commands::mcp::save_custom_mcp_server,
+            commands::mcp::delete_custom_mcp_server,
             // Plugin commands
             commands::plugin::get_project_plugins,
             commands::plugin::refresh_project_plugins,

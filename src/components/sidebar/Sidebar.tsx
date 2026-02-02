@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Circle,
   Cpu,
+  Edit2,
   FileText,
   GitBranch,
   Globe,
@@ -13,6 +14,7 @@ import {
   Moon,
   Package,
   Play,
+  Plus,
   PlusCircle,
   RefreshCw,
   Server,
@@ -21,6 +23,7 @@ import {
   Sparkles,
   Store,
   Sun,
+  Trash2,
   User,
   Wrench,
   X,
@@ -36,6 +39,8 @@ import { useProcessTreeStore, type ProcessInfo, type SessionProcessTree } from "
 import { GitSettingsModal, RemoteStatusIndicator } from "@/components/git";
 import { QuickActionsManager } from "@/components/quickactions/QuickActionsManager";
 import { MarketplaceBrowser } from "@/components/marketplace";
+import { McpServerEditorModal } from "@/components/mcp";
+import type { McpCustomServer } from "@/lib/mcp";
 
 type SidebarTab = "config" | "processes";
 
@@ -483,7 +488,6 @@ function SessionsSection() {
                 <Bot size={12} className="text-maestro-purple shrink-0" />
                 <span className="flex-1 font-medium">#{s.id}</span>
                 <span className="text-[10px] text-maestro-muted">{STATUS_LABEL[s.status]}</span>
-                <ChevronDown size={12} className="text-maestro-muted" />
               </div>
             ))
           )}
@@ -618,16 +622,31 @@ function MaestroMCPSection() {
 
 function MCPServersSection() {
   const [expanded, setExpanded] = useState(false);
+  const [showEditorModal, setShowEditorModal] = useState(false);
+  const [editingServer, setEditingServer] = useState<McpCustomServer | undefined>(undefined);
   const tabs = useWorkspaceStore((s) => s.tabs);
   const activeTab = tabs.find((t) => t.active);
   const projectPath = activeTab?.projectPath ?? "";
 
-  const { projectServers, fetchProjectServers, refreshProjectServers, isLoading } = useMcpStore();
+  const {
+    projectServers,
+    customServers,
+    customServersLoaded,
+    fetchProjectServers,
+    refreshProjectServers,
+    fetchCustomServers,
+    deleteCustomServer,
+    isLoading,
+  } = useMcpStore();
+
   // Filter out the internal "maestro" server - it's shown in the dedicated Maestro MCP section
-  const servers = projectPath
+  const discoveredServers = projectPath
     ? (projectServers[projectPath] ?? []).filter((s) => s.name !== "maestro")
     : [];
   const loading = projectPath ? (isLoading[projectPath] ?? false) : false;
+
+  // Total count includes discovered + custom servers
+  const totalCount = discoveredServers.length + customServers.length;
 
   // Fetch servers when project changes
   useEffect(() => {
@@ -636,72 +655,167 @@ function MCPServersSection() {
     }
   }, [projectPath, fetchProjectServers]);
 
+  // Fetch custom servers on mount
+  useEffect(() => {
+    if (!customServersLoaded) {
+      fetchCustomServers();
+    }
+  }, [customServersLoaded, fetchCustomServers]);
+
   const handleRefresh = useCallback(() => {
     if (projectPath) {
       refreshProjectServers(projectPath);
     }
-  }, [projectPath, refreshProjectServers]);
+    fetchCustomServers();
+  }, [projectPath, refreshProjectServers, fetchCustomServers]);
+
+  const handleAddServer = () => {
+    setEditingServer(undefined);
+    setShowEditorModal(true);
+  };
+
+  const handleEditServer = (server: McpCustomServer) => {
+    setEditingServer(server);
+    setShowEditorModal(true);
+  };
+
+  const handleDeleteServer = async (serverId: string) => {
+    try {
+      await deleteCustomServer(serverId);
+    } catch (err) {
+      console.error("Failed to delete custom MCP server:", err);
+    }
+  };
 
   return (
-    <div className={cardClass}>
-      <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-maestro-muted">
-        <button
-          type="button"
-          onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-1 hover:text-maestro-text"
-        >
-          {expanded ? (
-            <ChevronDown size={13} className="text-maestro-muted/80" />
-          ) : (
-            <ChevronRight size={13} className="text-maestro-muted/80" />
+    <>
+      <div className={cardClass}>
+        <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-maestro-muted">
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1 hover:text-maestro-text"
+          >
+            {expanded ? (
+              <ChevronDown size={13} className="text-maestro-muted/80" />
+            ) : (
+              <ChevronRight size={13} className="text-maestro-muted/80" />
+            )}
+          </button>
+          <Server size={13} className={totalCount > 0 ? "text-maestro-green" : "text-maestro-muted/80"} />
+          <span className="flex-1">MCP Servers</span>
+          {totalCount > 0 && (
+            <span className="bg-maestro-green/20 text-maestro-green text-[10px] px-1.5 rounded-full font-bold">
+              {totalCount}
+            </span>
           )}
-        </button>
-        <Server size={13} className={servers.length > 0 ? "text-maestro-green" : "text-maestro-muted/80"} />
-        <span className="flex-1">MCP Servers</span>
-        {servers.length > 0 && (
-          <span className="bg-maestro-green/20 text-maestro-green text-[10px] px-1.5 rounded-full font-bold">
-            {servers.length}
-          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="rounded p-0.5 hover:bg-maestro-border/40"
+              title="Refresh MCP servers"
+            >
+              <RefreshCw size={12} className={`text-maestro-muted ${loading ? "animate-spin" : ""}`} />
+            </button>
+            <button
+              type="button"
+              onClick={handleAddServer}
+              className="rounded p-0.5 hover:bg-maestro-border/40"
+              title="Add custom MCP server"
+            >
+              <Plus size={12} className="text-maestro-accent" />
+            </button>
+          </div>
+        </div>
+
+        {expanded && (
+          <div className="space-y-0.5">
+            {/* Discovered servers from .mcp.json */}
+            {discoveredServers.length > 0 && (
+              <>
+                <div className="px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide text-maestro-muted/60">
+                  Discovered ({discoveredServers.length})
+                </div>
+                {discoveredServers.map((server) => {
+                  const serverType = server.type;
+                  const isHttp = serverType === "http";
+                  return (
+                    <div
+                      key={server.name}
+                      className="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-maestro-text hover:bg-maestro-border/40"
+                    >
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-maestro-green" />
+                      <span className="flex-1 truncate font-medium">{server.name}</span>
+                      <span className="text-[10px] text-maestro-muted">
+                        {isHttp ? "HTTP" : "stdio"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
+            {/* Custom servers */}
+            {customServers.length > 0 && (
+              <>
+                <div className="px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide text-maestro-muted/60">
+                  Custom ({customServers.length})
+                </div>
+                {customServers.map((server) => (
+                  <div
+                    key={server.id}
+                    className="group flex items-center gap-2 rounded-md px-2 py-1 text-xs text-maestro-text hover:bg-maestro-border/40"
+                  >
+                    <span
+                      className={`h-2 w-2 shrink-0 rounded-full ${
+                        server.isEnabled ? "bg-maestro-green" : "bg-maestro-muted"
+                      }`}
+                    />
+                    <span className="flex-1 truncate font-medium">{server.name}</span>
+                    <span className="text-[10px] text-maestro-muted">custom</span>
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        type="button"
+                        onClick={() => handleEditServer(server)}
+                        className="rounded p-0.5 hover:bg-maestro-border/40"
+                        title="Edit server"
+                      >
+                        <Edit2 size={10} className="text-maestro-muted" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteServer(server.id)}
+                        className="rounded p-0.5 hover:bg-maestro-red/10"
+                        title="Delete server"
+                      >
+                        <Trash2 size={10} className="text-maestro-red" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* Empty state */}
+            {totalCount === 0 && (
+              <div className="px-2 py-1 text-[11px] text-maestro-muted/60">
+                No MCP servers configured
+              </div>
+            )}
+          </div>
         )}
-        <button
-          type="button"
-          onClick={handleRefresh}
-          className="rounded p-0.5 hover:bg-maestro-border/40"
-          title="Refresh MCP servers"
-        >
-          <RefreshCw size={12} className={`text-maestro-muted ${loading ? "animate-spin" : ""}`} />
-        </button>
       </div>
 
-      {expanded && (
-        <div className="space-y-0.5">
-          {!projectPath ? (
-            <div className="px-2 py-1 text-[11px] text-maestro-muted/60">No project selected</div>
-          ) : servers.length === 0 ? (
-            <div className="px-2 py-1 text-[11px] text-maestro-muted/60">
-              No MCP servers in .mcp.json
-            </div>
-          ) : (
-            servers.map((server) => {
-              const serverType = server.type;
-              const isHttp = serverType === "http";
-              return (
-                <div
-                  key={server.name}
-                  className="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-maestro-text hover:bg-maestro-border/40"
-                >
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-maestro-green" />
-                  <span className="flex-1 truncate font-medium">{server.name}</span>
-                  <span className="text-[10px] text-maestro-muted">
-                    {isHttp ? "HTTP" : "stdio"}
-                  </span>
-                </div>
-              );
-            })
-          )}
-        </div>
+      {/* Editor Modal */}
+      {showEditorModal && (
+        <McpServerEditorModal
+          server={editingServer}
+          onClose={() => setShowEditorModal(false)}
+          onSaved={() => fetchCustomServers()}
+        />
       )}
-    </div>
+    </>
   );
 }
 

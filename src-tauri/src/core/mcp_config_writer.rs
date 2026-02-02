@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 
 use super::mcp_manager::{McpServerConfig, McpServerType};
+use crate::commands::mcp::McpCustomServer;
 
 /// Finds the MaestroMCPServer binary in common installation locations.
 ///
@@ -65,6 +66,21 @@ fn server_config_to_json(config: &McpServerConfig) -> Value {
     }
 }
 
+/// Converts a custom MCP server to the JSON format expected by `.mcp.json`.
+fn custom_server_to_json(server: &McpCustomServer) -> Value {
+    let mut obj = json!({
+        "type": "stdio",
+        "command": server.command,
+        "args": server.args,
+    });
+    if !server.env.is_empty() {
+        obj["env"] = json!(server.env);
+    }
+    // Note: working_directory is not part of the standard .mcp.json format,
+    // but we could add it as a custom field if needed in the future
+    obj
+}
+
 /// Merges new MCP servers with an existing `.mcp.json` file.
 ///
 /// This function preserves user-defined servers while updating Maestro-managed
@@ -117,21 +133,24 @@ fn merge_with_existing(
 ///
 /// This function:
 /// 1. Creates the Maestro MCP server entry with session-specific env vars
-/// 2. Adds enabled custom servers from the UI
-/// 3. Merges with any existing `.mcp.json` (preserving user servers)
-/// 4. Writes the final config to the working directory
+/// 2. Adds enabled discovered servers from the project's .mcp.json
+/// 3. Adds enabled custom servers (user-defined, global)
+/// 4. Merges with any existing `.mcp.json` (preserving user servers)
+/// 5. Writes the final config to the working directory
 ///
 /// # Arguments
 ///
 /// * `working_dir` - Directory where `.mcp.json` will be written
 /// * `session_id` - Session identifier for the Maestro MCP server
 /// * `project_hash` - SHA256 hash of the project path for status file routing
-/// * `enabled_servers` - List of MCP server configs enabled for this session
+/// * `enabled_servers` - List of discovered MCP server configs enabled for this session
+/// * `custom_servers` - List of custom MCP servers that are enabled
 pub async fn write_session_mcp_config(
     working_dir: &Path,
     session_id: u32,
     _project_hash: &str, // No longer written to .mcp.json; inherited from shell env
     enabled_servers: &[McpServerConfig],
+    custom_servers: &[McpCustomServer],
 ) -> Result<(), String> {
     let mut mcp_servers: HashMap<String, Value> = HashMap::new();
 
@@ -164,9 +183,14 @@ pub async fn write_session_mcp_config(
         );
     }
 
-    // Add enabled custom servers
+    // Add enabled discovered servers from project .mcp.json
     for server in enabled_servers {
         mcp_servers.insert(server.name.clone(), server_config_to_json(server));
+    }
+
+    // Add enabled custom servers (user-defined, global)
+    for server in custom_servers {
+        mcp_servers.insert(server.name.clone(), custom_server_to_json(server));
     }
 
     // Merge with existing .mcp.json if present (preserve user servers)
@@ -284,6 +308,7 @@ mod tests {
             dir.path(),
             1,
             "abc123",
+            &[],
             &[],
         )
         .await;

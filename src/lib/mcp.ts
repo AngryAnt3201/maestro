@@ -10,6 +10,29 @@ import { invoke } from "@tauri-apps/api/core";
 export type McpEnv = Record<string, string>;
 
 /**
+ * A custom MCP server configured by the user.
+ * Stored globally (user-level) and available across all projects.
+ */
+export interface McpCustomServer {
+  /** Unique identifier for the custom server. */
+  id: string;
+  /** Display name for the server. */
+  name: string;
+  /** Command to run (e.g., "npx", "node", "python"). */
+  command: string;
+  /** Arguments to pass to the command. */
+  args: string[];
+  /** Environment variables for the server process. */
+  env: McpEnv;
+  /** Working directory for the server process. */
+  workingDirectory?: string;
+  /** Whether this server is enabled by default. */
+  isEnabled: boolean;
+  /** ISO timestamp of when the server was created. */
+  createdAt: string;
+}
+
+/**
  * Stdio MCP server config (flattened from backend).
  * The backend uses `#[serde(flatten)]` so type fields are at the root level.
  */
@@ -141,4 +164,27 @@ export async function removeSessionMcpConfig(
   sessionId: number,
 ): Promise<void> {
   return invoke("remove_session_mcp_config", { workingDir, sessionId });
+}
+
+/**
+ * Gets all custom MCP servers configured by the user.
+ * Custom servers are stored globally and available across all projects.
+ */
+export async function getCustomMcpServers(): Promise<McpCustomServer[]> {
+  return invoke<McpCustomServer[]>("get_custom_mcp_servers");
+}
+
+/**
+ * Saves a custom MCP server configuration.
+ * If the server already exists (by ID), it will be updated.
+ */
+export async function saveCustomMcpServer(server: McpCustomServer): Promise<void> {
+  return invoke("save_custom_mcp_server", { server });
+}
+
+/**
+ * Deletes a custom MCP server by ID.
+ */
+export async function deleteCustomMcpServer(serverId: string): Promise<void> {
+  return invoke("delete_custom_mcp_server", { serverId });
 }

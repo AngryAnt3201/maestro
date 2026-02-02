@@ -13,7 +13,11 @@ import {
   setSessionMcpServers as setSessionMcpServersApi,
   saveProjectMcpDefaults,
   loadProjectMcpDefaults,
+  getCustomMcpServers,
+  saveCustomMcpServer,
+  deleteCustomMcpServer as deleteCustomMcpServerApi,
   type McpServerConfig,
+  type McpCustomServer,
 } from "@/lib/mcp";
 
 /** Key for session-enabled lookup: "projectPath:sessionId" */
@@ -24,6 +28,12 @@ function sessionKey(projectPath: string, sessionId: number): string {
 interface McpState {
   /** MCP servers discovered per project path. */
   projectServers: Record<string, McpServerConfig[]>;
+
+  /** Custom MCP servers configured by the user (global, user-level). */
+  customServers: McpCustomServer[];
+
+  /** Whether custom servers have been loaded. */
+  customServersLoaded: boolean;
 
   /** Enabled server names per session (keyed by "projectPath:sessionId"). */
   sessionEnabled: Record<string, string[]>;
@@ -87,10 +97,37 @@ interface McpState {
    * Clears session-enabled state when a session is closed.
    */
   clearSession: (projectPath: string, sessionId: number) => void;
+
+  /**
+   * Fetches custom MCP servers from the backend.
+   */
+  fetchCustomServers: () => Promise<McpCustomServer[]>;
+
+  /**
+   * Adds or updates a custom MCP server.
+   */
+  addCustomServer: (server: McpCustomServer) => Promise<void>;
+
+  /**
+   * Updates an existing custom MCP server.
+   */
+  updateCustomServer: (server: McpCustomServer) => Promise<void>;
+
+  /**
+   * Deletes a custom MCP server by ID.
+   */
+  deleteCustomServer: (serverId: string) => Promise<void>;
+
+  /**
+   * Gets all servers (discovered + custom) for a project.
+   */
+  getAllServers: (projectPath: string) => McpServerConfig[];
 }
 
 export const useMcpStore = create<McpState>()((set, get) => ({
   projectServers: {},
+  customServers: [],
+  customServersLoaded: false,
   sessionEnabled: {},
   projectDefaults: {},
   isLoading: {},
@@ -223,5 +260,93 @@ export const useMcpStore = create<McpState>()((set, get) => ({
       const { [key]: _, ...rest } = state.sessionEnabled;
       return { sessionEnabled: rest };
     });
+  },
+
+  fetchCustomServers: async () => {
+    try {
+      const servers = await getCustomMcpServers();
+      set({ customServers: servers, customServersLoaded: true });
+      return servers;
+    } catch (err) {
+      console.error("Failed to fetch custom MCP servers:", err);
+      return [];
+    }
+  },
+
+  addCustomServer: async (server: McpCustomServer) => {
+    // Optimistically update local state
+    set((state) => ({
+      customServers: [...state.customServers, server],
+    }));
+
+    try {
+      await saveCustomMcpServer(server);
+    } catch (err) {
+      console.error("Failed to save custom MCP server:", err);
+      // Revert on error
+      set((state) => ({
+        customServers: state.customServers.filter((s) => s.id !== server.id),
+      }));
+      throw err;
+    }
+  },
+
+  updateCustomServer: async (server: McpCustomServer) => {
+    const state = get();
+    const previousServers = state.customServers;
+
+    // Optimistically update local state
+    set((state) => ({
+      customServers: state.customServers.map((s) =>
+        s.id === server.id ? server : s
+      ),
+    }));
+
+    try {
+      await saveCustomMcpServer(server);
+    } catch (err) {
+      console.error("Failed to update custom MCP server:", err);
+      // Revert on error
+      set({ customServers: previousServers });
+      throw err;
+    }
+  },
+
+  deleteCustomServer: async (serverId: string) => {
+    const state = get();
+    const previousServers = state.customServers;
+
+    // Optimistically update local state
+    set((state) => ({
+      customServers: state.customServers.filter((s) => s.id !== serverId),
+    }));
+
+    try {
+      await deleteCustomMcpServerApi(serverId);
+    } catch (err) {
+      console.error("Failed to delete custom MCP server:", err);
+      // Revert on error
+      set({ customServers: previousServers });
+      throw err;
+    }
+  },
+
+  getAllServers: (projectPath: string) => {
+    const state = get();
+    const discoveredServers = state.projectServers[projectPath] ?? [];
+    const enabledCustomServers = state.customServers.filter((s) => s.isEnabled);
+
+    // Convert custom servers to McpServerConfig format
+    const customServerConfigs: McpServerConfig[] = enabledCustomServers.map(
+      (custom) => ({
+        name: custom.name,
+        type: "stdio" as const,
+        command: custom.command,
+        args: custom.args,
+        env: custom.env,
+      })
+    );
+
+    return [...discoveredServers, ...customServerConfigs];
   },
 }));

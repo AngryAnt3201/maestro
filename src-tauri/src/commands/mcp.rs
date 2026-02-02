@@ -1,8 +1,10 @@
 //! IPC commands for MCP server discovery and session configuration.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, State};
 use tauri_plugin_store::StoreExt;
@@ -10,6 +12,32 @@ use tauri_plugin_store::StoreExt;
 use crate::core::mcp_config_writer;
 use crate::core::mcp_manager::{McpManager, McpServerConfig};
 use crate::core::mcp_status_monitor::McpStatusMonitor;
+
+/// Store filename for custom MCP servers (global, user-level).
+const CUSTOM_MCP_SERVERS_STORE: &str = "mcp-custom-servers.json";
+
+/// A custom MCP server configured by the user.
+/// Stored globally (user-level) and available across all projects.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpCustomServer {
+    /// Unique identifier for the custom server.
+    pub id: String,
+    /// Display name for the server.
+    pub name: String,
+    /// Command to run (e.g., "npx", "node", "python").
+    pub command: String,
+    /// Arguments to pass to the command.
+    pub args: Vec<String>,
+    /// Environment variables for the server process.
+    pub env: HashMap<String, String>,
+    /// Working directory for the server process.
+    pub working_directory: Option<String>,
+    /// Whether this server is enabled by default.
+    pub is_enabled: bool,
+    /// ISO timestamp of when the server was created.
+    pub created_at: String,
+}
 
 /// Creates a stable hash of a project path for use in store filenames.
 fn hash_project_path(path: &str) -> String {
@@ -220,12 +248,14 @@ pub async fn remove_session_status(
 ///
 /// The written config includes:
 /// - The `maestro` MCP server with session-specific environment variables
-/// - All enabled custom servers from the project's `.mcp.json`
+/// - All enabled servers from the project's `.mcp.json`
+/// - All enabled custom servers (user-defined, global)
 ///
 /// Existing user-defined servers in the working directory's `.mcp.json` are
 /// preserved (only Maestro-managed servers are replaced).
 #[tauri::command]
 pub async fn write_session_mcp_config(
+    app: AppHandle,
     mcp_state: State<'_, McpManager>,
     working_dir: String,
     session_id: u32,
@@ -239,27 +269,48 @@ pub async fn write_session_mcp_config(
 
     let project_hash = McpStatusMonitor::generate_project_hash(&canonical);
 
-    // Get full server configs for enabled servers
-    let all_servers = mcp_state.get_project_servers(&canonical);
-    let enabled_servers: Vec<_> = all_servers
+    // Get full server configs for enabled discovered servers
+    let all_discovered = mcp_state.get_project_servers(&canonical);
+    let enabled_discovered: Vec<_> = all_discovered
         .into_iter()
         .filter(|s| enabled_server_names.contains(&s.name))
         .collect();
 
+    // Get enabled custom servers
+    let custom_servers = get_custom_mcp_servers_internal(&app)?;
+    let enabled_custom: Vec<_> = custom_servers
+        .into_iter()
+        .filter(|s| s.is_enabled)
+        .collect();
+
     log::info!(
-        "Writing MCP config for session {} to {} ({} enabled servers)",
+        "Writing MCP config for session {} to {} ({} discovered + {} custom servers)",
         session_id,
         working_dir,
-        enabled_servers.len()
+        enabled_discovered.len(),
+        enabled_custom.len()
     );
 
     mcp_config_writer::write_session_mcp_config(
         Path::new(&working_dir),
         session_id,
         &project_hash,
-        &enabled_servers,
+        &enabled_discovered,
+        &enabled_custom,
     )
     .await
+}
+
+/// Internal helper to get custom MCP servers (non-async for use within commands).
+fn get_custom_mcp_servers_internal(app: &AppHandle) -> Result<Vec<McpCustomServer>, String> {
+    let store = app.store(CUSTOM_MCP_SERVERS_STORE).map_err(|e| e.to_string())?;
+
+    let servers = store
+        .get("servers")
+        .and_then(|v| serde_json::from_value::<Vec<McpCustomServer>>(v.clone()).ok())
+        .unwrap_or_default();
+
+    Ok(servers)
 }
 
 /// Removes a session-specific Maestro server from `.mcp.json`.
@@ -290,4 +341,88 @@ pub async fn generate_project_hash(
         .into_owned();
 
     Ok(McpStatusMonitor::generate_project_hash(&canonical))
+}
+
+/// Gets all custom MCP servers configured by the user.
+///
+/// Custom servers are stored globally (user-level) and available across all projects.
+#[tauri::command]
+pub async fn get_custom_mcp_servers(app: AppHandle) -> Result<Vec<McpCustomServer>, String> {
+    let store = app.store(CUSTOM_MCP_SERVERS_STORE).map_err(|e| e.to_string())?;
+
+    let servers = store
+        .get("servers")
+        .and_then(|v| serde_json::from_value::<Vec<McpCustomServer>>(v.clone()).ok())
+        .unwrap_or_default();
+
+    log::debug!("Loaded {} custom MCP servers", servers.len());
+    Ok(servers)
+}
+
+/// Saves a custom MCP server configuration.
+///
+/// If a server with the same ID already exists, it will be updated.
+/// Otherwise, the new server is added to the list.
+#[tauri::command]
+pub async fn save_custom_mcp_server(
+    app: AppHandle,
+    server: McpCustomServer,
+) -> Result<(), String> {
+    let store = app.store(CUSTOM_MCP_SERVERS_STORE).map_err(|e| e.to_string())?;
+
+    // Load existing servers
+    let mut servers: Vec<McpCustomServer> = store
+        .get("servers")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+
+    // Update or add the server
+    if let Some(index) = servers.iter().position(|s| s.id == server.id) {
+        servers[index] = server.clone();
+        log::debug!("Updated custom MCP server: {}", server.name);
+    } else {
+        log::debug!("Added new custom MCP server: {}", server.name);
+        servers.push(server);
+    }
+
+    // Save back to store
+    store.set(
+        "servers",
+        serde_json::to_value(&servers).map_err(|e| e.to_string())?,
+    );
+    store.save().map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// Deletes a custom MCP server by ID.
+#[tauri::command]
+pub async fn delete_custom_mcp_server(
+    app: AppHandle,
+    server_id: String,
+) -> Result<(), String> {
+    let store = app.store(CUSTOM_MCP_SERVERS_STORE).map_err(|e| e.to_string())?;
+
+    // Load existing servers
+    let mut servers: Vec<McpCustomServer> = store
+        .get("servers")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+
+    // Remove the server
+    let original_len = servers.len();
+    servers.retain(|s| s.id != server_id);
+
+    if servers.len() < original_len {
+        log::debug!("Deleted custom MCP server with ID: {}", server_id);
+    }
+
+    // Save back to store
+    store.set(
+        "servers",
+        serde_json::to_value(&servers).map_err(|e| e.to_string())?,
+    );
+    store.save().map_err(|e| e.to_string())?;
+
+    Ok(())
 }
