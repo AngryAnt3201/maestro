@@ -1,9 +1,25 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
+import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import { killSession } from "@/lib/terminal";
 
 // --- Types ---
+
+/** The type of workspace - single repo, multi-repo, or non-git. */
+export type WorkspaceType = "single-repo" | "multi-repo" | "non-git";
+
+/** Information about a detected git repository within a workspace. */
+export interface RepositoryInfo {
+  /** Absolute path to the repository root. */
+  path: string;
+  /** Display name (folder name). */
+  name: string;
+  /** Current branch name (if available). */
+  currentBranch: string | null;
+  /** Primary remote URL (origin, or first remote if no origin). */
+  remoteUrl: string | null;
+}
 
 /**
  * Represents a single open project tab in the workspace sidebar.
@@ -13,6 +29,9 @@ import { killSession } from "@/lib/terminal";
  * @property active - Exactly one tab should be active at a time; enforced by store actions.
  * @property sessionIds - PTY session IDs belonging to this project.
  * @property sessionsLaunched - Whether user has launched sessions for this project.
+ * @property workspaceType - Whether this is a single repo, multi-repo workspace, or non-git.
+ * @property repositories - Detected repositories within this workspace (empty for single-repo).
+ * @property selectedRepoPath - Currently selected repository path for git operations.
  */
 export type WorkspaceTab = {
   id: string;
@@ -21,6 +40,9 @@ export type WorkspaceTab = {
   active: boolean;
   sessionIds: number[];
   sessionsLaunched: boolean;
+  workspaceType: WorkspaceType;
+  repositories: RepositoryInfo[];
+  selectedRepoPath: string | null;
 };
 
 /** Read-only slice of the workspace store; persisted to disk via Zustand `persist`. */
@@ -34,13 +56,17 @@ type WorkspaceState = {
  * to the Tauri LazyStore (async, fire-and-forget).
  */
 type WorkspaceActions = {
-  openProject: (path: string) => void;
+  openProject: (path: string) => Promise<void>;
   selectTab: (id: string) => void;
   closeTab: (id: string) => void;
   addSessionToProject: (tabId: string, sessionId: number) => void;
   removeSessionFromProject: (tabId: string, sessionId: number) => void;
   setSessionsLaunched: (tabId: string, launched: boolean) => void;
   getTabByPath: (projectPath: string) => WorkspaceTab | undefined;
+  /** Switch selected repository for a tab (multi-repo workspaces). */
+  setSelectedRepo: (tabId: string, repoPath: string) => void;
+  /** Update repositories list after recursive scan. */
+  updateRepositories: (tabId: string, repositories: RepositoryInfo[]) => void;
 };
 
 // --- Tauri LazyStore-backed StateStorage adapter ---
@@ -116,7 +142,7 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
     (set, get) => ({
       tabs: [],
 
-      openProject: (path: string) => {
+      openProject: async (path: string) => {
         const { tabs } = get();
 
         // Deduplicate: if path already open, just activate that tab
@@ -131,10 +157,45 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
         const id = crypto.randomUUID();
         const name = basename(path);
 
+        // Detect workspace type
+        let workspaceType: WorkspaceType;
+        let repositories: RepositoryInfo[] = [];
+        let selectedRepoPath: string | null = null;
+
+        try {
+          const isRepo = await invoke<boolean>("is_git_repository", { path });
+
+          if (isRepo) {
+            // Single repository - existing behavior
+            workspaceType = "single-repo";
+            selectedRepoPath = path;
+          } else {
+            // Check for nested repositories
+            repositories = await invoke<RepositoryInfo[]>("detect_repositories", { path });
+            workspaceType = repositories.length > 0 ? "multi-repo" : "non-git";
+            selectedRepoPath = repositories[0]?.path ?? null;
+          }
+        } catch (err) {
+          console.error("Failed to detect workspace type:", err);
+          // Fall back to single-repo for backward compatibility
+          workspaceType = "single-repo";
+          selectedRepoPath = path;
+        }
+
         set({
           tabs: [
             ...tabs.map((t) => ({ ...t, active: false })),
-            { id, name, projectPath: path, active: true, sessionIds: [], sessionsLaunched: false },
+            {
+              id,
+              name,
+              projectPath: path,
+              active: true,
+              sessionIds: [],
+              sessionsLaunched: false,
+              workspaceType,
+              repositories,
+              selectedRepoPath,
+            },
           ],
         });
       },
@@ -209,12 +270,39 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
       getTabByPath: (projectPath: string) => {
         return get().tabs.find((t) => t.projectPath === projectPath);
       },
+
+      setSelectedRepo: (tabId: string, repoPath: string) => {
+        set({
+          tabs: get().tabs.map((t) =>
+            t.id === tabId ? { ...t, selectedRepoPath: repoPath } : t
+          ),
+        });
+      },
+
+      updateRepositories: (tabId: string, repositories: RepositoryInfo[]) => {
+        set({
+          tabs: get().tabs.map((t) =>
+            t.id === tabId
+              ? {
+                  ...t,
+                  repositories,
+                  workspaceType: repositories.length > 0 ? "multi-repo" : "non-git",
+                  // Auto-select first repo if current selection is no longer valid
+                  selectedRepoPath:
+                    repositories.find((r) => r.path === t.selectedRepoPath)?.path ??
+                    repositories[0]?.path ??
+                    null,
+                }
+              : t
+          ),
+        });
+      },
     }),
     {
       name: "maestro-workspace",
       storage: createJSONStorage(() => tauriStorage),
       partialize: (state) => ({ tabs: state.tabs }),
-      version: 2,
+      version: 3,
       onRehydrateStorage: () => {
         return (state) => {
           if (state) {
@@ -230,18 +318,29 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
       },
       migrate: (persistedState, version) => {
         const state = persistedState as WorkspaceState;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let tabs = state.tabs as any[];
+
+        // v1 -> v2: Add sessionIds and sessionsLaunched
         if (version < 2) {
-          // Add new fields to existing tabs
-          return {
-            ...state,
-            tabs: state.tabs.map((t) => ({
-              ...t,
-              sessionIds: (t as WorkspaceTab).sessionIds ?? [],
-              sessionsLaunched: (t as WorkspaceTab).sessionsLaunched ?? false,
-            })),
-          };
+          tabs = tabs.map((t) => ({
+            ...t,
+            sessionIds: t.sessionIds ?? [],
+            sessionsLaunched: t.sessionsLaunched ?? false,
+          }));
         }
-        return state;
+
+        // v2 -> v3: Add multi-repo fields
+        if (version < 3) {
+          tabs = tabs.map((t) => ({
+            ...t,
+            workspaceType: (t.workspaceType as WorkspaceType) ?? "single-repo",
+            repositories: t.repositories ?? [],
+            selectedRepoPath: t.selectedRepoPath ?? t.projectPath,
+          }));
+        }
+
+        return { ...state, tabs: tabs as WorkspaceTab[] };
       },
     },
   ),

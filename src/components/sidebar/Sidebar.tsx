@@ -422,7 +422,7 @@ function GitRepositorySection() {
       </div>
 
       {showSettings && (
-        <GitSettingsModal repoPath={repoPath} onClose={() => setShowSettings(false)} />
+        <GitSettingsModal repoPath={repoPath} tabId={activeTab?.id ?? ""} onClose={() => setShowSettings(false)} />
       )}
     </>
   );
