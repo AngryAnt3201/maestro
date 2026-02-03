@@ -207,6 +207,13 @@ impl ProcessManager {
         #[cfg(unix)]
         cmd.arg("-l"); // Login shell for proper env on Unix
 
+        // Set TERM for proper terminal emulation.
+        // xterm-256color is the standard for modern terminal emulators and enables:
+        // - Proper cursor positioning and line editing
+        // - 256-color support
+        // - Correct handling of escape sequences
+        cmd.env("TERM", "xterm-256color");
+
         // Inject MAESTRO_SESSION_ID automatically (used by MCP status server)
         cmd.env("MAESTRO_SESSION_ID", id.to_string());
 
