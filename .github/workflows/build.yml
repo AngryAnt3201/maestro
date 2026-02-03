@@ -60,16 +60,17 @@ jobs:
       - name: Build MCP server
         shell: bash
         run: |
-          cd maestro-mcp-server
           if [ "${{ matrix.platform }}" = "macos-latest" ]; then
-            cargo build --release --target aarch64-apple-darwin
-            cargo build --release --target x86_64-apple-darwin
-            mkdir -p target/release
-            lipo -create -output target/release/maestro-mcp-server \
+            cargo build --release -p maestro-mcp-server --target aarch64-apple-darwin
+            cargo build --release -p maestro-mcp-server --target x86_64-apple-darwin
+            mkdir -p maestro-mcp-server/target/release
+            lipo -create -output maestro-mcp-server/target/release/maestro-mcp-server \
               target/aarch64-apple-darwin/release/maestro-mcp-server \
               target/x86_64-apple-darwin/release/maestro-mcp-server
           else
-            cargo build --release
+            cargo build --release -p maestro-mcp-server
+            mkdir -p maestro-mcp-server/target/release
+            cp target/release/maestro-mcp-server* maestro-mcp-server/target/release/
           fi
 
       - name: Build Tauri app
