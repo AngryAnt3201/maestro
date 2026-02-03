@@ -1,10 +1,9 @@
 //! IPC commands for Claude Code usage tracking.
 //!
 //! Fetches real rate limit data from Anthropic's OAuth API.
-//! Reads OAuth tokens from macOS Keychain (primary) or credentials file (fallback).
+//! Reads OAuth tokens from platform credential store (primary) or credentials file (fallback).
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 /// Usage data from Anthropic's OAuth API.
 #[derive(Debug, Clone, Serialize)]
@@ -82,39 +81,40 @@ fn is_token_expired(expires_at: u64) -> bool {
     expires_at < now_ms + 60_000
 }
 
-/// Get the current username for keychain access.
+/// Get the current username for credential store access.
 fn get_username() -> Option<String> {
-    std::env::var("USER").ok()
+    // USER (Unix) or USERNAME (Windows)
+    std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .ok()
 }
 
-/// Read credentials from macOS Keychain.
-/// Claude Code stores credentials in keychain with:
+/// Read credentials from platform credential store (cross-platform).
+/// Claude Code stores credentials with:
 /// - Service: "Claude Code-credentials"
 /// - Account: <username>
-#[cfg(target_os = "macos")]
+///
+/// Uses keyring crate for unified access to:
+/// - macOS: Keychain
+/// - Windows: Credential Manager
+/// - Linux: Secret Service (D-Bus)
 async fn read_keychain_credentials() -> Result<CredentialsData, String> {
     let username = get_username().ok_or("Could not get username")?;
 
-    let output = tokio::process::Command::new("security")
-        .args([
-            "find-generic-password",
-            "-s", "Claude Code-credentials",
-            "-a", &username,
-            "-w",
-        ])
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run security: {}", e))?;
+    let result = tokio::task::spawn_blocking(move || {
+        let entry = keyring::Entry::new("Claude Code-credentials", &username)
+            .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
 
-    if !output.status.success() {
-        return Err("No keychain entry found".to_string());
-    }
+        entry.get_password().map_err(|e| match e {
+            keyring::Error::NoEntry => "No credential entry found".to_string(),
+            _ => format!("Credential store error: {}", e),
+        })
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))??;
 
-    let data = String::from_utf8(output.stdout)
-        .map_err(|_| "Invalid keychain data")?;
-
-    serde_json::from_str(data.trim())
-        .map_err(|e| format!("Failed to parse keychain data: {}", e))
+    serde_json::from_str(&result)
+        .map_err(|e| format!("Failed to parse credential data: {}", e))
 }
 
 /// Read credentials from file (fallback for non-macOS or if keychain fails).
@@ -137,19 +137,16 @@ async fn read_file_credentials() -> Result<CredentialsData, String> {
         .map_err(|e| format!("Failed to parse file: {}", e))
 }
 
-/// Get a valid access token, trying keychain first then file.
+/// Get a valid access token, trying platform credential store first then file.
 async fn get_access_token() -> Result<String, String> {
-    // Try keychain first (macOS only)
-    #[cfg(target_os = "macos")]
-    {
-        if let Ok(creds) = read_keychain_credentials().await {
-            if let Some(oauth) = creds.claude_ai_oauth {
-                if !is_token_expired(oauth.expires_at) {
-                    log::debug!("Using token from keychain");
-                    return Ok(oauth.access_token);
-                }
-                log::debug!("Keychain token expired");
+    // Try platform credential store first (all platforms)
+    if let Ok(creds) = read_keychain_credentials().await {
+        if let Some(oauth) = creds.claude_ai_oauth {
+            if !is_token_expired(oauth.expires_at) {
+                log::debug!("Using token from platform credential store");
+                return Ok(oauth.access_token);
             }
+            log::debug!("Credential store token expired");
         }
     }
 
