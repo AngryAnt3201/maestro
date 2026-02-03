@@ -4,7 +4,6 @@
 //! status updates from the Rust MCP server. Provides real-time updates
 //! and eliminates race conditions.
 
-use std::net::TcpListener;
 use std::sync::Arc;
 
 use axum::{
@@ -56,11 +55,13 @@ pub struct StatusServer {
 }
 
 impl StatusServer {
-    /// Find an available port in the given range.
-    fn find_available_port(range_start: u16, range_end: u16) -> Option<u16> {
+    /// Find and bind to an available port in the given range.
+    /// Returns the bound listener to avoid race conditions.
+    async fn find_and_bind_port(range_start: u16, range_end: u16) -> Option<(u16, tokio::net::TcpListener)> {
         for port in range_start..=range_end {
-            if TcpListener::bind(("127.0.0.1", port)).is_ok() {
-                return Some(port);
+            let addr = format!("127.0.0.1:{}", port);
+            if let Ok(listener) = tokio::net::TcpListener::bind(&addr).await {
+                return Some((port, listener));
             }
         }
         None
@@ -79,7 +80,9 @@ impl StatusServer {
     ///
     /// Returns the server instance with the port it's listening on.
     pub async fn start(app_handle: AppHandle, instance_id: String) -> Option<Self> {
-        let port = Self::find_available_port(9900, 9999)?;
+        // Find and bind in one step to avoid race conditions where another
+        // process grabs the port between checking and binding
+        let (port, listener) = Self::find_and_bind_port(9900, 9999).await?;
         let session_projects = Arc::new(RwLock::new(std::collections::HashMap::new()));
 
         let state = Arc::new(ServerState {
@@ -93,14 +96,6 @@ impl StatusServer {
             .with_state(state);
 
         let addr = format!("127.0.0.1:{}", port);
-        let listener = match tokio::net::TcpListener::bind(&addr).await {
-            Ok(l) => l,
-            Err(e) => {
-                log::error!("Failed to bind status server to {}: {}", addr, e);
-                return None;
-            }
-        };
-
         eprintln!("[STATUS SERVER] Started on http://{}", addr);
         eprintln!("[STATUS SERVER] Instance ID: {}", instance_id);
 
