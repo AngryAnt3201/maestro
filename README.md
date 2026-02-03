@@ -5,7 +5,7 @@
 
 **Orchestrate multiple AI coding assistants in parallel**
 
-A cross-platform desktop application that lets you run 1-12 Claude Code (or other AI CLI) sessions simultaneously, each in its own isolated git worktree.
+A cross-platform desktop application that lets you run 1-6 Claude Code (or other AI CLI) sessions simultaneously, each in its own isolated git worktree.
 
 ![macOS](https://img.shields.io/badge/macOS-13%2B-blue)
 ![Windows](https://img.shields.io/badge/Windows-10%2B-blue)
@@ -49,7 +49,7 @@ A cross-platform desktop application that lets you run 1-12 Claude Code (or othe
 
 | Principle | Description |
 |-----------|-------------|
-| **Parallel Development** | Launch 1-12 AI sessions simultaneously. Work on feature branches, bug fixes, and refactoring all at once. |
+| **Parallel Development** | Launch 1-6 AI sessions simultaneously. Work on feature branches, bug fixes, and refactoring all at once. |
 | **True Isolation** | Each session operates in its own git worktree. No merge conflicts, no stepping on each other's changes. |
 | **AI-Native Workflow** | Built specifically for Claude Code, Gemini CLI, OpenAI Codex, and other AI coding assistants. |
 | **Cross-Platform** | Runs on macOS, Windows, and Linux with native performance. |
@@ -59,7 +59,7 @@ A cross-platform desktop application that lets you run 1-12 Claude Code (or othe
 ## Features
 
 ### Multi-Terminal Session Grid
-- Dynamic grid layout (1x1 to 3x4) that adapts to your session count
+- Dynamic grid layout (1x1 to 2x3) that adapts to your session count
 - Real-time status indicators: idle, working, waiting for input, done, error
 - Per-session mode selection (Claude Code, Gemini CLI, OpenAI Codex, Plain Terminal)
 
@@ -81,15 +81,18 @@ A cross-platform desktop application that lets you run 1-12 Claude Code (or othe
 - Commit detail panel with diffs
 - See which sessions are working on which branches
 
-### Template Presets
-- Save session configurations (modes, branches, count)
-- Quickly load common workflows
-- Persist across app restarts
-
 ### Quick Actions
 - Custom action buttons per session
 - "Run App", "Commit & Push", and custom prompts
 - Execute commands via AI assistant
+
+### Appearance Settings
+- Light and dark theme support
+- Terminal font customization with support for:
+  - System-installed fonts
+  - Nerd Fonts (icons and glyphs)
+  - Custom fonts
+- Adjustable text size for terminal display
 
 ### Multi-AI Support
 - **Claude Code** - Anthropic's Claude in the terminal
@@ -130,7 +133,7 @@ A cross-platform desktop application that lets you run 1-12 Claude Code (or othe
                               │ MCP Protocol (stdio)
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    MCP Server (Node.js)                         │
+│                    MCP Server (Rust)                            │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────────┐│
 │  │                     StatusManager                           ││
@@ -147,7 +150,7 @@ A cross-platform desktop application that lets you run 1-12 Claude Code (or othe
 | Desktop App | Tauri 2.0, Rust |
 | Frontend | React, TypeScript, Tailwind CSS |
 | Terminal Emulator | xterm.js |
-| MCP Server | Node.js |
+| MCP Server | Rust |
 | Git Operations | Native git CLI |
 
 ---
@@ -156,12 +159,38 @@ A cross-platform desktop application that lets you run 1-12 Claude Code (or othe
 
 ### Requirements
 
-- **macOS** 13 (Ventura) or later
-- **Windows** 10 or later
-- **Linux** with WebKit2GTK
-- Node.js 18+ and npm
-- Rust 1.70+ (for building from source)
-- Claude Code CLI (`npm install -g @anthropic-ai/claude-code`)
+- **Node.js** 18+ and npm
+- **Rust** 1.70+ (for building from source)
+- **Git** (for worktree operations)
+
+#### Platform-Specific Prerequisites
+
+**macOS** (13 Ventura or later):
+```bash
+# Install Xcode Command Line Tools
+xcode-select --install
+```
+
+**Windows** (10 or later):
+- Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with "C++ build tools" workload
+- Install [Rust](https://rustup.rs/)
+
+**Linux** (Ubuntu/Debian):
+```bash
+# Install required system dependencies
+sudo apt-get update
+sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+```
+
+**Linux** (Fedora):
+```bash
+sudo dnf install webkit2gtk4.1-devel libappindicator-gtk3-devel librsvg2-devel
+```
+
+**Linux** (Arch):
+```bash
+sudo pacman -S webkit2gtk-4.1 libappindicator-gtk3 librsvg
+```
 
 ### Build from Source
 
@@ -171,21 +200,26 @@ A cross-platform desktop application that lets you run 1-12 Claude Code (or othe
    cd maestro
    ```
 
-2. **Install dependencies:**
+2. **Install npm dependencies:**
    ```bash
    npm install
    ```
 
-3. **Run in development mode:**
+3. **Build the MCP server:**
+   ```bash
+   cargo build --release -p maestro-mcp-server
+   ```
+   This builds the Rust MCP server binary that Tauri bundles with the application.
+
+4. **Run in development mode:**
    ```bash
    npm run tauri dev
    ```
 
-4. **Build for production:**
+5. **Build for production:**
    ```bash
    npm run tauri build
    ```
-
    The built application will be in `src-tauri/target/release/bundle/`.
 
 ### Optional: Install AI CLIs
@@ -210,7 +244,7 @@ npm install -g @openai/codex
 1. **Launch Claude Maestro**
 2. **Select a project directory** (ideally a git repository)
 3. **Configure sessions** in the sidebar:
-   - Set the number of terminals (1-12)
+   - Set the number of terminals (1-6)
    - Choose AI mode for each session
    - Assign branches to sessions
 4. **Click "Launch"** to start all sessions
@@ -230,14 +264,6 @@ When you assign a branch to a session:
 2. The session's terminal opens in that worktree
 3. All file changes are isolated to that worktree
 4. Worktrees are cleaned up when sessions close
-
-### Template Presets
-
-Save your session configurations:
-1. Configure sessions as desired
-2. Click "Save Preset" in the sidebar
-3. Name your preset (e.g., "Feature Development", "Bug Triage")
-4. Load presets from the dropdown to restore configurations
 
 ### Quick Actions
 
@@ -289,14 +315,16 @@ git worktree prune
 
 If you encounter build issues:
 ```bash
-# Clear Rust build cache
+# Clear all Rust build caches
 rm -rf src-tauri/target
+rm -rf maestro-mcp-server/target
 
 # Clear node modules and reinstall
 rm -rf node_modules
 npm install
 
-# Rebuild
+# Rebuild MCP server first, then Tauri app
+cargo build --release -p maestro-mcp-server
 npm run tauri build
 ```
 
@@ -307,10 +335,11 @@ npm run tauri build
 ### Development Setup
 
 1. Fork and clone the repository
-2. Install dependencies: `npm install`
-3. Run in dev mode: `npm run tauri dev`
-4. Make your changes
-5. Test thoroughly with multiple sessions
+2. Install npm dependencies: `npm install`
+3. Build the MCP server: `cargo build --release -p maestro-mcp-server`
+4. Run in dev mode: `npm run tauri dev`
+5. Make your changes
+6. Test thoroughly with multiple sessions
 
 ### Project Structure
 
@@ -320,13 +349,18 @@ maestro/
 │   ├── components/          # UI components
 │   ├── lib/                 # Utility libraries
 │   └── App.tsx              # Main application
-├── src-tauri/               # Rust backend
+├── src-tauri/               # Tauri Rust backend
 │   ├── src/
 │   │   ├── commands/        # Tauri command handlers
 │   │   ├── core/            # Core business logic
 │   │   └── lib.rs           # Main Rust entry point
 │   ├── Cargo.toml           # Rust dependencies
 │   └── tauri.conf.json      # Tauri configuration
+├── maestro-mcp-server/      # Rust MCP server (bundled with app)
+│   ├── src/
+│   │   └── main.rs          # MCP server entry point
+│   └── Cargo.toml           # MCP server dependencies
+├── Cargo.toml               # Workspace configuration
 ├── package.json             # Node.js dependencies
 └── README.md
 ```
