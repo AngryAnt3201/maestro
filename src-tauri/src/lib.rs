@@ -44,20 +44,6 @@ pub fn run() {
             let instance_id = uuid::Uuid::new_v4().to_string();
             log::info!("Maestro instance ID: {}", instance_id);
 
-            // Verify git is available at startup (non-blocking with timeout)
-            tauri::async_runtime::spawn(async {
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(5),
-                    verify_git_available(),
-                )
-                .await
-                {
-                    Ok(Ok(version)) => log::info!("Git available: {version}"),
-                    Ok(Err(e)) => log::error!("Git not found: {e}. Git operations will fail."),
-                    Err(_) => log::error!("Git version check timed out after 5s"),
-                }
-            });
-
             // Start the HTTP status server for MCP status reporting
             // IMPORTANT: This must be done synchronously so the server is ready
             // before any commands try to use it
@@ -193,18 +179,8 @@ pub fn run() {
         .expect("error while running Maestro");
 }
 
-async fn verify_git_available() -> Result<String, String> {
-    let output = tokio::process::Command::new("git")
-        .arg("--version")
-        .kill_on_drop(true)
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run git: {e}"))?;
-
-    if output.status.success() {
-        let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        Ok(version)
-    } else {
-        Err("git --version returned non-zero".to_string())
-    }
-}
+// Note: We intentionally don't check git availability at startup.
+// Spawning processes during Tauri's app initialization phase can cause
+// crashes on some systems (particularly macOS with certain shell configurations).
+// Git availability is checked lazily when git operations are performed,
+// and the GitRunner handles GitNotFound errors gracefully.
