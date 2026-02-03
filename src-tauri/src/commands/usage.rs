@@ -4,6 +4,10 @@
 //! Reads OAuth tokens from platform credential store (primary) or credentials file (fallback).
 
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Flag to skip credential store after first failure (prevents repeated prompts).
+static CREDENTIAL_STORE_FAILED: AtomicBool = AtomicBool::new(false);
 
 /// Usage data from Anthropic's OAuth API.
 #[derive(Debug, Clone, Serialize)]
@@ -139,14 +143,22 @@ async fn read_file_credentials() -> Result<CredentialsData, String> {
 
 /// Get a valid access token, trying platform credential store first then file.
 async fn get_access_token() -> Result<String, String> {
-    // Try platform credential store first (all platforms)
-    if let Ok(creds) = read_keychain_credentials().await {
-        if let Some(oauth) = creds.claude_ai_oauth {
-            if !is_token_expired(oauth.expires_at) {
-                log::debug!("Using token from platform credential store");
-                return Ok(oauth.access_token);
+    // Try platform credential store first (skip if previously failed to avoid repeated prompts)
+    if !CREDENTIAL_STORE_FAILED.load(Ordering::Relaxed) {
+        match read_keychain_credentials().await {
+            Ok(creds) => {
+                if let Some(oauth) = creds.claude_ai_oauth {
+                    if !is_token_expired(oauth.expires_at) {
+                        log::debug!("Using token from platform credential store");
+                        return Ok(oauth.access_token);
+                    }
+                    log::debug!("Credential store token expired");
+                }
             }
-            log::debug!("Credential store token expired");
+            Err(e) => {
+                log::debug!("Credential store failed, will use file fallback: {}", e);
+                CREDENTIAL_STORE_FAILED.store(true, Ordering::Relaxed);
+            }
         }
     }
 
