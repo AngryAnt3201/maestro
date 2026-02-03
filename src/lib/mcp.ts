@@ -188,3 +188,25 @@ export async function saveCustomMcpServer(server: McpCustomServer): Promise<void
 export async function deleteCustomMcpServer(serverId: string): Promise<void> {
   return invoke("delete_custom_mcp_server", { serverId });
 }
+
+/**
+ * Status server information returned from the backend.
+ */
+export interface StatusServerInfo {
+  /** Port the status server is listening on. */
+  port: number;
+  /** Full URL for posting status updates. */
+  statusUrl: string;
+  /** Instance ID for this Maestro app instance. */
+  instanceId: string;
+  /** Path to the maestro-mcp-server binary, if found. */
+  mcpBinaryPath: string | null;
+}
+
+/**
+ * Gets the status server info (URL, port, instance ID, and binary path).
+ * Used to display MCP server status in the sidebar.
+ */
+export async function getStatusServerInfo(): Promise<StatusServerInfo> {
+  return invoke<StatusServerInfo>("get_status_server_info");
+}

@@ -46,6 +46,8 @@ pub struct StatusServerInfo {
     pub port: u16,
     pub status_url: String,
     pub instance_id: String,
+    /// Path to the maestro-mcp-server binary, if found.
+    pub mcp_binary_path: Option<String>,
 }
 
 /// Creates a stable hash of a project path for use in store filenames.
@@ -240,24 +242,29 @@ pub async fn remove_session_status(
     Ok(())
 }
 
-/// Gets the status server info (URL, port, instance ID).
+/// Gets the status server info (URL, port, instance ID, and binary path).
 ///
 /// This is needed by the frontend when writing MCP configs so the
-/// MCP server knows where to POST status updates.
+/// MCP server knows where to POST status updates. Also used by the
+/// sidebar to display MCP server status.
 #[tauri::command]
 pub async fn get_status_server_info(
     status_server: State<'_, Arc<StatusServer>>,
 ) -> Result<StatusServerInfo, String> {
     let registered = status_server.registered_sessions().await;
+    let mcp_binary_path = mcp_config_writer::find_maestro_mcp_path()
+        .map(|p| p.to_string_lossy().into_owned());
     log::info!(
-        "get_status_server_info: instance_id={}, registered_sessions={:?}",
+        "get_status_server_info: instance_id={}, registered_sessions={:?}, mcp_binary={:?}",
         status_server.instance_id(),
-        registered
+        registered,
+        mcp_binary_path
     );
     Ok(StatusServerInfo {
         port: status_server.port(),
         status_url: status_server.status_url(),
         instance_id: status_server.instance_id().to_string(),
+        mcp_binary_path,
     })
 }
 

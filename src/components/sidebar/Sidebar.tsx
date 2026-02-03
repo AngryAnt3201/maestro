@@ -45,7 +45,7 @@ import { MarketplaceBrowser } from "@/components/marketplace";
 import { McpServerEditorModal } from "@/components/mcp";
 import { ClaudeMdEditorModal } from "@/components/claudemd";
 import { TerminalSettingsModal } from "@/components/terminal/TerminalSettingsModal";
-import type { McpCustomServer } from "@/lib/mcp";
+import { getStatusServerInfo, type McpCustomServer, type StatusServerInfo } from "@/lib/mcp";
 import { checkClaudeMd, type ClaudeMdStatus } from "@/lib/claudemd";
 
 type SidebarTab = "config" | "processes";
@@ -701,24 +701,74 @@ function StatusSection() {
 /* ── 5. Maestro MCP ── */
 
 function MaestroMCPSection() {
+  const [serverInfo, setServerInfo] = useState<StatusServerInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchServerInfo = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const info = await getStatusServerInfo();
+      setServerInfo(info);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to get server info");
+      setServerInfo(null);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchServerInfo();
+  }, [fetchServerInfo]);
+
+  // Truncate path for display
+  const truncatePath = (path: string | null): string => {
+    if (!path) return "Not found";
+    const maxLen = 30;
+    if (path.length <= maxLen) return path;
+    // Show last part of path
+    const parts = path.replace(/\\/g, "/").split("/");
+    const filename = parts[parts.length - 1];
+    if (filename.length >= maxLen - 3) {
+      return `...${filename.slice(-(maxLen - 3))}`;
+    }
+    return `...${path.slice(-(maxLen - 3))}`;
+  };
+
+  const isRunning = serverInfo !== null && !error;
+  const statusColor = isRunning ? "bg-maestro-green" : "bg-maestro-red";
+  const statusText = error ? "Error" : isRunning ? `Running on port ${serverInfo.port}` : "Unavailable";
+  const iconColor = isRunning ? "text-maestro-green" : "text-maestro-red";
+
   return (
     <div className={cardClass}>
       <SectionHeader
         icon={Server}
         label="Maestro MCP"
-        iconColor="text-maestro-green"
+        iconColor={iconColor}
         right={
-          <button type="button" className="rounded p-0.5 hover:bg-maestro-border/40">
-            <RefreshCw size={12} className="text-maestro-muted" />
+          <button
+            type="button"
+            className="rounded p-0.5 hover:bg-maestro-border/40"
+            onClick={fetchServerInfo}
+            disabled={isRefreshing}
+            title="Refresh status"
+          >
+            <RefreshCw
+              size={12}
+              className={`text-maestro-muted ${isRefreshing ? "animate-spin" : ""}`}
+            />
           </button>
         }
       />
       <div className="flex items-center gap-2 px-1 py-1">
-        <span className="h-2 w-2 shrink-0 rounded-full bg-maestro-green" />
-        <span className="text-xs text-maestro-text font-medium">Available</span>
+        <span className={`h-2 w-2 shrink-0 rounded-full ${statusColor}`} />
+        <span className="text-xs text-maestro-text font-medium">{statusText}</span>
       </div>
-      <div className="pl-5 text-[10px] text-maestro-muted truncate">
-        /usr/lib/maestro...MCPServer
+      <div className="pl-5 text-[10px] text-maestro-muted truncate" title={serverInfo?.mcpBinaryPath ?? undefined}>
+        {truncatePath(serverInfo?.mcpBinaryPath ?? null)}
       </div>
     </div>
   );

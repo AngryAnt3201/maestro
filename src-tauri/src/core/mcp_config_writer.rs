@@ -20,7 +20,7 @@ use crate::commands::mcp::McpCustomServer;
 /// 3. Development: relative to src-tauri/target/debug or release
 /// 4. macOS Application Support (~Library/Application Support/Claude Maestro/)
 /// 5. Linux local share (~/.local/share/maestro/)
-fn find_maestro_mcp_path() -> Option<PathBuf> {
+pub fn find_maestro_mcp_path() -> Option<PathBuf> {
     // Determine the binary name based on platform
     #[cfg(target_os = "windows")]
     let binary_name = "maestro-mcp-server.exe";
