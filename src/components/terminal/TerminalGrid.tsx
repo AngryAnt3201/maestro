@@ -20,6 +20,7 @@ import {
   createSession,
   killSession,
   spawnShell,
+  waitForTerminalReady,
   writeStdin,
 } from "@/lib/terminal";
 import { cleanupSessionWorktree, prepareSessionWorktree } from "@/lib/worktreeManager";
@@ -457,6 +458,22 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
         await setSessionPlugins(projectPath, sessionId, slot.enabledPlugins);
       }
 
+      // Update slot state FIRST to mount TerminalView and initialize xterm.js.
+      // This MUST happen before sending any commands to the PTY, otherwise
+      // xterm.js won't be listening when output arrives and it will be lost.
+      // This is also critical because CLIs like Codex send DSR (cursor position)
+      // queries on startup, and xterm.js must be mounted to respond to them.
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.id === slotId ? { ...s, sessionId, worktreePath } : s
+        )
+      );
+
+      // Register session with the project
+      if (tabId) {
+        addSessionToProject(tabId, sessionId);
+      }
+
       // Auto-launch AI CLI after shell initializes
       // IMPORTANT: For Claude mode, we must write MCP config and launch CLI atomically
       // to prevent race conditions when multiple sessions launch without worktrees.
@@ -490,10 +507,19 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
               // Writing a `plugins` array was interfering with auto-discovery
             }
 
-            // Brief delay for shell to initialize (reduced from 500ms)
+            // Wait for xterm.js to mount and start listening for PTY output
+            // This ensures we don't send CLI commands before the terminal is ready
+            // (which would cause output to be lost since Tauri events aren't buffered)
+            try {
+              await waitForTerminalReady(sessionId);
+            } catch (err) {
+              console.warn("Terminal ready timeout, proceeding anyway:", err);
+            }
+
+            // Brief delay for shell to initialize
             await new Promise((resolve) => setTimeout(resolve, 100));
 
-            // Send CLI launch command IMMEDIATELY after writing config
+            // Send CLI launch command
             await writeStdin(sessionId, `${cliConfig.command}\r`);
 
             // Brief delay for CLI initialization.
@@ -507,20 +533,6 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             );
           }
         }
-      }
-
-      // Update slot state FIRST to mount TerminalView and initialize xterm.js.
-      // This is critical because CLIs like Codex send DSR (cursor position) queries
-      // on startup, and xterm.js must be mounted to respond to them.
-      setSlots((prev) =>
-        prev.map((s) =>
-          s.id === slotId ? { ...s, sessionId, worktreePath } : s
-        )
-      );
-
-      // Register session with the project
-      if (tabId) {
-        addSessionToProject(tabId, sessionId);
       }
     } catch (err) {
       console.error("Failed to spawn shell:", err);

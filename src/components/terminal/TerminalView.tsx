@@ -6,7 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 
 import { QuickActionsManager } from "@/components/quickactions/QuickActionsManager";
 import { buildFontFamily, waitForFont } from "@/lib/fonts";
-import { getBackendInfo, killSession, onPtyOutput, resizePty, writeStdin, type BackendInfo } from "@/lib/terminal";
+import { getBackendInfo, killSession, onPtyOutput, resizePty, signalTerminalReady, writeStdin, type BackendInfo } from "@/lib/terminal";
 import { DEFAULT_THEME, LIGHT_THEME, toXtermTheme } from "@/lib/terminalTheme";
 import { useMcpStore } from "@/stores/useMcpStore";
 import { type AiMode, type BackendSessionStatus, useSessionStore } from "@/stores/useSessionStore";
@@ -298,6 +298,9 @@ export function TerminalView({ sessionId, status = "idle", isFocused = false, on
             fn();
           } else {
             unlisten = fn;
+            // Signal that the terminal is ready to receive PTY output
+            // This allows TerminalGrid to know it can now send CLI commands
+            signalTerminalReady(sessionId);
           }
         })
         .catch((err) => {

@@ -132,3 +132,63 @@ export async function hasEnhancedState(): Promise<boolean> {
   const info = await getBackendInfo();
   return info.capabilities.enhancedState;
 }
+
+// Terminal ready signaling mechanism
+// Used to coordinate between TerminalGrid (which sends CLI commands) and
+// TerminalView (which needs to be listening for PTY output first)
+//
+// Uses window-level storage to ensure the same instance is shared across
+// all chunks in production builds (module-level Maps can be duplicated).
+declare global {
+  interface Window {
+    __maestroTerminalsReady?: Set<number>;
+  }
+}
+
+function getTerminalsReadySet(): Set<number> {
+  if (!window.__maestroTerminalsReady) {
+    window.__maestroTerminalsReady = new Set();
+  }
+  return window.__maestroTerminalsReady;
+}
+
+/**
+ * Signals that a terminal is ready to receive PTY output.
+ * Called by TerminalView after xterm.js is mounted and listening.
+ */
+export function signalTerminalReady(sessionId: number): void {
+  getTerminalsReadySet().add(sessionId);
+}
+
+/**
+ * Waits for a terminal to signal it's ready to receive PTY output.
+ * Called by TerminalGrid before sending CLI commands.
+ * Uses polling to check if the terminal has signaled ready.
+ * @param sessionId - The session ID to wait for
+ * @param timeoutMs - Maximum time to wait (default 5000ms to account for font loading)
+ * @returns Promise that resolves when terminal is ready or rejects on timeout
+ */
+export function waitForTerminalReady(sessionId: number, timeoutMs = 5000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    const pollInterval = 50; // Check every 50ms
+
+    const check = () => {
+      const readySet = getTerminalsReadySet();
+      if (readySet.has(sessionId)) {
+        readySet.delete(sessionId);
+        resolve();
+        return;
+      }
+
+      if (Date.now() - startTime >= timeoutMs) {
+        reject(new Error(`Terminal ${sessionId} ready timeout after ${timeoutMs}ms`));
+        return;
+      }
+
+      setTimeout(check, pollInterval);
+    };
+
+    check();
+  });
+}

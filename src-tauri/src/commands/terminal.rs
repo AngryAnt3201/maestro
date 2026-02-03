@@ -228,40 +228,66 @@ pub async fn kill_all_sessions(state: State<'_, ProcessManager>) -> Result<u32, 
 }
 
 /// Checks if a command is available in the user's PATH.
-/// Uses platform-appropriate method:
-/// - Unix: runs `command -v <cmd>` via interactive login shell to get user's real PATH
-/// - Windows: runs `where.exe <cmd>`
+///
+/// On macOS/Linux, when the app is launched from GUI launchers (Raycast, Spotlight),
+/// the PATH is minimal and doesn't include user installations. This function searches
+/// common installation directories directly without spawning a shell (which can cause
+/// issues with shell plugins like powerlevel10k).
+///
+/// On Windows, uses `where.exe` to check.
 #[tauri::command]
 pub async fn check_cli_available(command: String) -> Result<bool, String> {
     #[cfg(unix)]
     {
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+        // Search for command in PATH and common installation directories
+        // We avoid spawning a shell because shell plugins (oh-my-zsh, powerlevel10k)
+        // can hang or abort when run without a TTY
+        let mut paths: Vec<String> = Vec::new();
 
-        // First, get the user's real PATH from their shell profile
-        // This handles nvm, homebrew, etc. that modify PATH in .zshrc/.bashrc
-        let path_output = tokio::process::Command::new(&shell)
-            .args(["-l", "-i", "-c", "echo $PATH"])
-            .output()
-            .await
-            .map_err(|e| format!("Failed to get PATH: {}", e))?;
+        // Start with current environment PATH
+        if let Ok(env_path) = std::env::var("PATH") {
+            paths.extend(env_path.split(':').map(String::from));
+        }
 
-        let user_path = String::from_utf8_lossy(&path_output.stdout)
-            .trim()
-            .to_string();
+        // Add common user installation directories that GUI launchers often miss
+        if let Ok(home) = std::env::var("HOME") {
+            // Homebrew on Apple Silicon
+            paths.push("/opt/homebrew/bin".to_string());
+            paths.push("/opt/homebrew/sbin".to_string());
+            // Homebrew on Intel Mac
+            paths.push("/usr/local/bin".to_string());
+            paths.push("/usr/local/sbin".to_string());
+            // npm global installations
+            paths.push(format!("{}/.npm-global/bin", home));
+            paths.push(format!("{}/node_modules/.bin", home));
+            // Cargo/Rust
+            paths.push(format!("{}/.cargo/bin", home));
+            // Go
+            paths.push(format!("{}/go/bin", home));
+            // Python user installs
+            paths.push(format!("{}/.local/bin", home));
+            // pyenv
+            paths.push(format!("{}/.pyenv/shims", home));
+            // rbenv
+            paths.push(format!("{}/.rbenv/shims", home));
+        }
 
-        // Now check for the command using the user's PATH
-        let output = tokio::process::Command::new(&shell)
-            .args(["-l", "-c", &format!("command -v {}", command)])
-            .env("PATH", &user_path)
-            .output()
-            .await
-            .map_err(|e| format!("Failed to check CLI: {}", e))?;
+        // Search for command in all PATH directories
+        for dir in &paths {
+            let cmd_path = format!("{}/{}", dir, command);
+            if std::path::Path::new(&cmd_path).exists() {
+                log::debug!("Found {} at {}", command, cmd_path);
+                return Ok(true);
+            }
+        }
 
-        Ok(output.status.success())
+        log::debug!("Command {} not found in PATH", command);
+        Ok(false)
     }
 
     #[cfg(windows)]
     {
+        use crate::core::windows_process::TokioCommandExt;
         let output = tokio::process::Command::new("where.exe")
             .arg(&command)
             .hide_console_window()

@@ -101,3 +101,94 @@ impl Git {
         Git::new(path).run(args).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // GitOutput utility tests
+
+    #[test]
+    fn test_git_output_lines() {
+        let output = GitOutput {
+            stdout: "line1\nline2\n\nline3\n".to_string(),
+            stderr: String::new(),
+        };
+        assert_eq!(output.lines(), vec!["line1", "line2", "line3"]);
+    }
+
+    #[test]
+    fn test_git_output_lines_empty() {
+        let output = GitOutput {
+            stdout: String::new(),
+            stderr: String::new(),
+        };
+        assert!(output.lines().is_empty());
+    }
+
+    #[test]
+    fn test_git_output_trimmed() {
+        let output = GitOutput {
+            stdout: "  hello world  \n".to_string(),
+            stderr: String::new(),
+        };
+        assert_eq!(output.trimmed(), "hello world");
+    }
+
+    // Git runner integration tests
+
+    #[tokio::test]
+    async fn test_git_version_command() {
+        // Use current directory - tests run from repo root
+        let git = Git::new(".");
+        let result = git.run(&["--version"]).await;
+        assert!(result.is_ok(), "git --version should succeed");
+        assert!(
+            result.unwrap().stdout.contains("git version"),
+            "output should contain 'git version'"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_git_status_in_repo() {
+        let git = Git::new(".");
+        let result = git.run(&["status", "--porcelain"]).await;
+        assert!(result.is_ok(), "git status should succeed in repo");
+    }
+
+    #[tokio::test]
+    async fn test_git_not_a_repo_error() {
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+        let git = Git::new(dir.path());
+        let result = git.run(&["status"]).await;
+        assert!(result.is_err(), "git status should fail in non-repo");
+        match result.unwrap_err() {
+            GitError::CommandFailed { stderr, .. } => {
+                assert!(
+                    stderr.contains("not a git repository"),
+                    "error should mention 'not a git repository'"
+                );
+            }
+            e => panic!("Expected CommandFailed, got {:?}", e),
+        }
+    }
+
+    // Error handling tests
+
+    #[test]
+    fn test_git_not_found_error_message() {
+        let err = GitError::GitNotFound;
+        assert_eq!(
+            err.to_string(),
+            "git executable not found. Is git installed?"
+        );
+    }
+
+    #[test]
+    fn test_error_serialization() {
+        let err = GitError::GitNotFound;
+        let json = serde_json::to_string(&err).unwrap();
+        assert_eq!(json, "\"git executable not found. Is git installed?\"");
+    }
+}
