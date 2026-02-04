@@ -63,8 +63,10 @@ fn copy_mcp_server_binary() {
         return;
     }
 
-    // Destination: src-tauri/target/{profile}/maestro-mcp-server
-    let target_dir = project_root.join("src-tauri").join("target").join(&profile);
+    // Destination: target/{profile}/maestro-mcp-server (next to the main executable)
+    // In workspace builds, the main exe is at target/{profile}/maestro.exe,
+    // so place the MCP binary alongside it for find_maestro_mcp_path candidate [0].
+    let target_dir = project_root.join("target").join(&profile);
     let mcp_dest = target_dir.join(binary_name);
 
     // Only copy if source is newer than destination (or destination doesn't exist)
