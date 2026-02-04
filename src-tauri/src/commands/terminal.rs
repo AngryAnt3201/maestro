@@ -102,6 +102,19 @@ pub async fn spawn_shell(
                 "cwd '{dir}' is not a directory"
             )));
         }
+        // On Windows, canonicalize() prepends \\?\ (the Win32 extended-length
+        // path prefix). cmd.exe treats that as a UNC path and refuses to use it
+        // as a working directory, falling back to C:\Windows instead.
+        // Strip the prefix so the shell receives a normal path.
+        #[cfg(windows)]
+        let canonical = {
+            let s = canonical.to_string_lossy();
+            match s.strip_prefix(r"\\?\") {
+                Some(stripped) => std::path::PathBuf::from(stripped),
+                None => canonical,
+            }
+        };
+
         Some(canonical.to_string_lossy().into_owned())
     } else {
         None
