@@ -451,7 +451,11 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
       // Assign the branch to the session so the header displays it
       if (slot.branch) {
-        await assignSessionBranch(sessionId, slot.branch, worktreePath);
+        const updatedConfig = await assignSessionBranch(sessionId, slot.branch, worktreePath);
+        useSessionStore.getState().updateSession(sessionId, {
+          branch: updatedConfig.branch,
+          worktree_path: updatedConfig.worktree_path,
+        });
       }
 
       // Save enabled MCP servers for this session
