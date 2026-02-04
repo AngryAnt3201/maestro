@@ -62,7 +62,7 @@ export function TerminalHeader({
   mcpCount = 1,
   activeCount = 0,
   statusMessage,
-  branchName = "Current",
+  branchName = "...",
   showLaunch = false,
   isWorktree = false,
   onKill,
@@ -135,28 +135,21 @@ export function TerminalHeader({
 
       {/* Right cluster */}
       <div className="flex shrink-0 items-center gap-1">
-        {/* Branch display - static when on worktree, button otherwise */}
-        {isWorktree ? (
-          <span
-            className="flex items-center gap-0.5 px-1 py-0.5 text-[10px] text-maestro-muted"
-            title={`Worktree branch: ${branchName}`}
-          >
-            <GitBranch size={10} />
-            <span className="max-w-[60px] truncate">{branchName}</span>
+        {/* Branch display */}
+        <span
+          className="flex items-center gap-0.5 px-1 py-0.5 text-[10px] text-maestro-muted"
+          title={
+            isWorktree
+              ? `Isolated worktree branch: ${branchName}`
+              : `Checked-out branch: ${branchName} (updates live)`
+          }
+        >
+          <GitBranch size={10} />
+          <span className="max-w-[80px] truncate">{branchName}</span>
+          <span className="ml-0.5 rounded bg-maestro-accent/15 px-1 py-px text-[8px] font-medium text-maestro-accent">
+            {isWorktree ? "worktree" : "checked out"}
           </span>
-        ) : (
-          <button
-            type="button"
-            aria-label={`Select branch, current: ${branchName || "none"}`}
-            aria-disabled="true"
-            title="Branch selection not yet available"
-            className="flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-maestro-muted transition-colors hover:bg-maestro-card hover:text-maestro-text"
-          >
-            <GitBranch size={10} />
-            <span className="max-w-[60px] truncate">{branchName}</span>
-            <ChevronDown size={9} />
-          </button>
-        )}
+        </span>
 
         {/* Launch button (pre-launch only) */}
         {showLaunch && (

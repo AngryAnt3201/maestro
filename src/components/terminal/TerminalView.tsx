@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 
 import { QuickActionsManager } from "@/components/quickactions/QuickActionsManager";
+import { useSessionBranch } from "@/hooks/useSessionBranch";
 import { buildFontFamily, waitForFont } from "@/lib/fonts";
 import { getBackendInfo, killSession, onPtyOutput, resizePty, signalTerminalReady, writeStdin, type BackendInfo } from "@/lib/terminal";
 import { DEFAULT_THEME, LIGHT_THEME, toXtermTheme } from "@/lib/terminalTheme";
@@ -99,9 +100,10 @@ export function TerminalView({ sessionId, status = "idle", isFocused = false, on
   const sessionConfig = useSessionStore((s) => s.sessions.find((sess) => sess.id === sessionId));
   const effectiveStatus = sessionConfig ? mapStatus(sessionConfig.status) : status;
   const effectiveProvider = sessionConfig ? mapAiMode(sessionConfig.mode) : "claude";
-  const effectiveBranch = sessionConfig?.branch ?? "Current";
   const isWorktree = Boolean(sessionConfig?.worktree_path);
   const projectPath = sessionConfig?.project_path ?? "";
+  const liveBranch = useSessionBranch(projectPath, isWorktree, sessionConfig?.branch ?? null);
+  const effectiveBranch = liveBranch ?? "...";
 
   // Get terminal settings from store
   const terminalSettings = useTerminalSettingsStore((s) => s.settings);
