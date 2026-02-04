@@ -7,7 +7,7 @@ import { isMac } from "@/lib/platform";
  * Content uses CSS var(--mac-title-bar-inset) so this is the single source of truth.
  * Tune here if alignment differs across macOS versions or display scales.
  */
-export const MAC_TITLE_BAR_INSET_PX = 72;
+export const MAC_TITLE_BAR_INSET_PX = 74;
 
 /**
  * On macOS with native traffic lights: returns true when the title bar should
