@@ -88,8 +88,8 @@ export async function assignSessionBranch(
   sessionId: number,
   branch: string,
   worktreePath: string | null
-): Promise<void> {
-  return invoke("assign_session_branch", { sessionId, branch, worktreePath });
+): Promise<SessionConfig> {
+  return invoke<SessionConfig>("assign_session_branch", { sessionId, branch, worktreePath });
 }
 
 /**

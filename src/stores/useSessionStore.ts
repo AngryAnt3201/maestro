@@ -70,6 +70,7 @@ interface SessionState {
   addSession: (session: SessionConfig) => void;
   removeSession: (sessionId: number) => void;
   removeSessionsForProject: (projectPath: string) => Promise<SessionConfig[]>;
+  updateSession: (sessionId: number, updates: Partial<SessionConfig>) => void;
   getSessionsByProject: (projectPath: string) => SessionConfig[];
   initListeners: () => Promise<UnlistenFn>;
 }
@@ -210,6 +211,14 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       }
       return { sessions: [...state.sessions, session] };
     });
+  },
+
+  updateSession: (sessionId: number, updates: Partial<SessionConfig>) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId ? { ...s, ...updates } : s
+      ),
+    }));
   },
 
   removeSession: (sessionId: number) => {

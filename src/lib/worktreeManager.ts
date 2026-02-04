@@ -7,6 +7,8 @@ export interface WorktreeInfo {
   head: string;
   branch: string | null;
   is_bare: boolean;
+  /** True for the main working tree (the original clone directory). */
+  is_main_worktree: boolean;
 }
 
 /** Result of preparing a worktree for a session. */

@@ -26,6 +26,9 @@ pub struct WorktreeInfo {
     pub head: String,
     pub branch: Option<String>,
     pub is_bare: bool,
+    /// `true` for the first entry returned by `git worktree list`, which is
+    /// always the main working tree (the original clone directory).
+    pub is_main_worktree: bool,
 }
 
 /// A single commit entry parsed from `git log` output.
@@ -175,11 +178,13 @@ impl Git {
             if let Some(path) = line.strip_prefix("worktree ") {
                 // Save previous entry if we have one
                 if !current_path.is_empty() {
+                    let is_main = worktrees.is_empty();
                     worktrees.push(WorktreeInfo {
                         path: current_path,
                         head: current_head,
                         branch: current_branch,
                         is_bare: current_bare,
+                        is_main_worktree: is_main,
                     });
                 }
                 current_path = path.to_string();
@@ -197,11 +202,13 @@ impl Git {
 
         // Push last entry
         if !current_path.is_empty() {
+            let is_main = worktrees.is_empty();
             worktrees.push(WorktreeInfo {
                 path: current_path,
                 head: current_head,
                 branch: current_branch,
                 is_bare: current_bare,
+                is_main_worktree: is_main,
             });
         }
 
@@ -263,6 +270,7 @@ impl Git {
             head: head_output.trimmed().to_string(),
             branch,
             is_bare: false,
+            is_main_worktree: false,
         })
     }
 
@@ -610,5 +618,195 @@ impl Git {
     pub async fn detach_head(&self) -> Result<(), GitError> {
         self.run(&["checkout", "--detach"]).await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::runner::Git;
+    use tempfile::tempdir;
+
+    /// Helper: creates a temp git repo with an initial commit.
+    async fn create_test_repo() -> (tempfile::TempDir, Git) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+        let git = Git::new(&path);
+
+        git.run(&["init"]).await.unwrap();
+        git.run(&["config", "user.email", "test@test.com"])
+            .await
+            .unwrap();
+        git.run(&["config", "user.name", "Test"]).await.unwrap();
+
+        let file_path = path.join("README.md");
+        tokio::fs::write(&file_path, "# Test").await.unwrap();
+        git.run(&["add", "."]).await.unwrap();
+        git.run(&["commit", "-m", "initial"]).await.unwrap();
+
+        (dir, git)
+    }
+
+    #[tokio::test]
+    async fn test_worktree_list_main_repo_only() {
+        let (_dir, git) = create_test_repo().await;
+        let worktrees = git.worktree_list().await.unwrap();
+
+        assert_eq!(worktrees.len(), 1);
+        assert!(worktrees[0].is_main_worktree);
+    }
+
+    #[tokio::test]
+    async fn test_worktree_list_with_added_worktree() {
+        let (dir, git) = create_test_repo().await;
+        git.run(&["branch", "test-branch"]).await.unwrap();
+
+        let wt_path = dir.path().join("wt-test");
+        git.worktree_add(&wt_path, None, Some("test-branch"))
+            .await
+            .unwrap();
+
+        let worktrees = git.worktree_list().await.unwrap();
+        assert_eq!(worktrees.len(), 2);
+        assert!(worktrees[0].is_main_worktree);
+        assert!(!worktrees[1].is_main_worktree);
+
+        // Cleanup
+        git.worktree_remove(&wt_path, true).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_worktree_list_main_has_correct_branch() {
+        let (_dir, git) = create_test_repo().await;
+        let current = git.current_branch().await.unwrap();
+        let worktrees = git.worktree_list().await.unwrap();
+
+        assert_eq!(worktrees[0].branch.as_deref(), Some(current.as_str()));
+    }
+
+    #[tokio::test]
+    async fn test_worktree_list_detached_head() {
+        let (_dir, git) = create_test_repo().await;
+        git.detach_head().await.unwrap();
+
+        let worktrees = git.worktree_list().await.unwrap();
+        assert!(
+            worktrees[0].branch.is_none(),
+            "Detached HEAD should have no branch"
+        );
+        assert!(worktrees[0].is_main_worktree);
+    }
+
+    #[tokio::test]
+    async fn test_worktree_list_multiple_worktrees() {
+        let (dir, git) = create_test_repo().await;
+        git.run(&["branch", "branch-a"]).await.unwrap();
+        git.run(&["branch", "branch-b"]).await.unwrap();
+
+        let wt_a = dir.path().join("wt-a");
+        let wt_b = dir.path().join("wt-b");
+        git.worktree_add(&wt_a, None, Some("branch-a"))
+            .await
+            .unwrap();
+        git.worktree_add(&wt_b, None, Some("branch-b"))
+            .await
+            .unwrap();
+
+        let worktrees = git.worktree_list().await.unwrap();
+        assert_eq!(worktrees.len(), 3);
+
+        // Only the first should be main
+        let main_count = worktrees.iter().filter(|wt| wt.is_main_worktree).count();
+        assert_eq!(main_count, 1);
+        assert!(worktrees[0].is_main_worktree);
+
+        // Cleanup
+        git.worktree_remove(&wt_a, true).await.unwrap();
+        git.worktree_remove(&wt_b, true).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_worktree_add_existing_branch() {
+        let (dir, git) = create_test_repo().await;
+        git.run(&["branch", "wt-existing"]).await.unwrap();
+
+        let wt_path = dir.path().join("wt-existing");
+        let info = git
+            .worktree_add(&wt_path, None, Some("wt-existing"))
+            .await
+            .unwrap();
+
+        assert_eq!(info.branch.as_deref(), Some("wt-existing"));
+        assert!(!info.is_main_worktree);
+        assert!(!info.head.is_empty());
+
+        // Cleanup
+        git.worktree_remove(&wt_path, true).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_worktree_add_new_branch() {
+        let (dir, git) = create_test_repo().await;
+
+        let wt_path = dir.path().join("wt-new");
+        let info = git
+            .worktree_add(&wt_path, Some("new-wt-branch"), None)
+            .await
+            .unwrap();
+
+        assert_eq!(info.branch.as_deref(), Some("new-wt-branch"));
+        assert!(!info.is_main_worktree);
+
+        // Cleanup
+        git.worktree_remove(&wt_path, true).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_list_branches_local() {
+        let (_dir, git) = create_test_repo().await;
+        git.run(&["branch", "local-test"]).await.unwrap();
+
+        let branches = git.list_branches().await.unwrap();
+        let local_names: Vec<&str> = branches
+            .iter()
+            .filter(|b| !b.is_remote)
+            .map(|b| b.name.as_str())
+            .collect();
+
+        assert!(local_names.contains(&"local-test"));
+    }
+
+    #[tokio::test]
+    async fn test_create_branch_from_head() {
+        let (_dir, git) = create_test_repo().await;
+        git.create_branch("from-head", None).await.unwrap();
+
+        let branches = git.list_branches().await.unwrap();
+        assert!(branches.iter().any(|b| b.name == "from-head" && !b.is_remote));
+    }
+
+    #[tokio::test]
+    async fn test_checkout_branch() {
+        let (_dir, git) = create_test_repo().await;
+        git.run(&["branch", "checkout-test"]).await.unwrap();
+
+        git.checkout_branch("checkout-test").await.unwrap();
+        let current = git.current_branch().await.unwrap();
+        assert_eq!(current, "checkout-test");
+    }
+
+    #[tokio::test]
+    async fn test_detach_head() {
+        let (_dir, git) = create_test_repo().await;
+        git.detach_head().await.unwrap();
+
+        // After detach, symbolic-ref should fail; current_branch falls back to short hash
+        let current = git.current_branch().await.unwrap();
+        // The result should be a short hash (hex characters), not a branch name
+        assert!(
+            current.chars().all(|c| c.is_ascii_hexdigit()),
+            "Detached HEAD should return a commit hash, got: {}",
+            current
+        );
     }
 }

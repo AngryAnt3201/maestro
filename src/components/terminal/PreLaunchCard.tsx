@@ -57,6 +57,8 @@ export interface SessionSlot {
   sessionId: number | null;
   /** Path to the worktree if one was created for this session. */
   worktreePath: string | null;
+  /** Warning message from worktree preparation (e.g., fallback to project path). */
+  worktreeWarning: string | null;
   /** Names of enabled MCP servers for this session. */
   enabledMcpServers: string[];
   /** IDs of enabled skills for this session. */

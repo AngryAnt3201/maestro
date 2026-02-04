@@ -105,6 +105,7 @@ function createEmptySlot(
     branch: null,
     sessionId: null,
     worktreePath: null,
+    worktreeWarning: null,
     enabledMcpServers: mcpServers.map((s) => s.name), // All enabled by default
     enabledSkills: skills.map((s) => s.id), // All enabled by default
     enabledPlugins: plugins.filter((p) => p.enabled_by_default).map((p) => p.id),
@@ -410,11 +411,17 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       // If a branch is selected, prepare a worktree first
       let workingDirectory = projectPath;
       let worktreePath: string | null = null;
+      let worktreeWarning: string | null = null;
 
       if (projectPath && slot.branch) {
         const result = await prepareSessionWorktree(projectPath, slot.branch);
         workingDirectory = result.working_directory;
         worktreePath = result.worktree_path;
+        worktreeWarning = result.warning;
+
+        if (worktreeWarning) {
+          console.error(`[Worktree] Warning for branch "${slot.branch}": ${worktreeWarning}`);
+        }
       }
 
       // Generate project hash for MCP status identification
@@ -444,7 +451,11 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
       // Assign the branch to the session so the header displays it
       if (slot.branch) {
-        await assignSessionBranch(sessionId, slot.branch, worktreePath);
+        const updatedConfig = await assignSessionBranch(sessionId, slot.branch, worktreePath);
+        useSessionStore.getState().updateSession(sessionId, {
+          branch: updatedConfig.branch,
+          worktree_path: updatedConfig.worktree_path,
+        });
       }
 
       // Save enabled MCP servers for this session
@@ -465,7 +476,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       // queries on startup, and xterm.js must be mounted to respond to them.
       setSlots((prev) =>
         prev.map((s) =>
-          s.id === slotId ? { ...s, sessionId, worktreePath } : s
+          s.id === slotId ? { ...s, sessionId, worktreePath, worktreeWarning } : s
         )
       );
 

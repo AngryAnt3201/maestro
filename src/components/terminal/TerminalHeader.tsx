@@ -146,7 +146,7 @@ export function TerminalHeader({
         >
           <GitBranch size={10} />
           <span className="max-w-[80px] truncate">{branchName}</span>
-          <span className="ml-0.5 rounded bg-maestro-accent/15 px-1 py-px text-[8px] font-medium text-maestro-accent">
+          <span className={`ml-0.5 rounded px-1 py-px text-[8px] font-medium ${isWorktree ? "bg-purple-500/15 text-purple-400" : "bg-maestro-accent/15 text-maestro-accent"}`}>
             {isWorktree ? "worktree" : "checked out"}
           </span>
         </span>

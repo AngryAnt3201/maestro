@@ -74,8 +74,8 @@ impl WorktreeManager {
         Self
     }
 
-    /// Compute the worktree path for a given repo + branch
-    async fn worktree_path(&self, repo_path: &Path, branch: &str) -> PathBuf {
+    /// Compute the worktree path for a given repo + branch.
+    pub(crate) async fn worktree_path(&self, repo_path: &Path, branch: &str) -> PathBuf {
         let hash = repo_hash(repo_path).await;
         let sanitized = sanitize_branch(branch);
         worktree_base_dir().join(hash).join(sanitized)
@@ -94,9 +94,14 @@ impl WorktreeManager {
     ) -> Result<PathBuf, GitError> {
         let git = Git::new(repo_path);
 
-        // Check if branch is already checked out in another worktree
+        // Check if branch is already checked out in another (non-main) worktree.
+        // The main worktree is managed by `prepare_session_worktree` which switches
+        // it to a fallback branch before calling `create()`, so we skip it here.
         let existing = git.worktree_list().await?;
         for wt in &existing {
+            if wt.is_main_worktree {
+                continue;
+            }
             if let Some(ref wt_branch) = wt.branch {
                 if wt_branch == branch {
                     return Err(GitError::BranchAlreadyCheckedOut {
@@ -209,5 +214,191 @@ impl WorktreeManager {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::Git;
+    use tempfile::tempdir;
+
+    /// Helper: creates a temp git repo with an initial commit and returns its path.
+    async fn create_test_repo() -> (tempfile::TempDir, PathBuf) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+        let git = Git::new(&path);
+
+        git.run(&["init"]).await.unwrap();
+        git.run(&["config", "user.email", "test@test.com"])
+            .await
+            .unwrap();
+        git.run(&["config", "user.name", "Test"]).await.unwrap();
+
+        // Create initial commit
+        let file_path = path.join("README.md");
+        tokio::fs::write(&file_path, "# Test").await.unwrap();
+        git.run(&["add", "."]).await.unwrap();
+        git.run(&["commit", "-m", "initial"]).await.unwrap();
+
+        (dir, path)
+    }
+
+    #[test]
+    fn test_sanitize_branch_normal() {
+        assert_eq!(sanitize_branch("main"), "main");
+    }
+
+    #[test]
+    fn test_sanitize_branch_with_slashes() {
+        assert_eq!(sanitize_branch("feature/x"), "feature-x");
+    }
+
+    #[test]
+    fn test_sanitize_branch_empty() {
+        assert_eq!(sanitize_branch(""), "unnamed-branch");
+    }
+
+    #[test]
+    fn test_sanitize_branch_dot() {
+        assert_eq!(sanitize_branch("."), "unnamed-branch");
+        assert_eq!(sanitize_branch(".."), "unnamed-branch");
+    }
+
+    #[test]
+    fn test_sanitize_branch_special_chars() {
+        assert_eq!(sanitize_branch("a:b*c"), "a-b-c");
+        assert_eq!(sanitize_branch("a?b\"c"), "a-b-c");
+        assert_eq!(sanitize_branch("a<b>c|d"), "a-b-c-d");
+    }
+
+    #[tokio::test]
+    async fn test_create_worktree_for_existing_branch() {
+        let (_dir, path) = create_test_repo().await;
+        let git = Git::new(&path);
+        git.run(&["branch", "feature-test"]).await.unwrap();
+
+        let wm = WorktreeManager::new();
+        let wt_path = wm.create("feature-test", &path).await.unwrap();
+
+        assert!(wt_path.exists());
+
+        // Verify worktree is on the correct branch
+        let wt_git = Git::new(&wt_path);
+        let branch = wt_git.current_branch().await.unwrap();
+        assert_eq!(branch, "feature-test");
+
+        // Cleanup
+        let _ = wm.remove(&path, &wt_path).await;
+    }
+
+    #[tokio::test]
+    async fn test_create_skips_main_worktree_check() {
+        let (_dir, path) = create_test_repo().await;
+        let git = Git::new(&path);
+
+        // The current branch is checked out in the main worktree.
+        // After detaching HEAD, create() should succeed because it
+        // now skips the main worktree in its duplicate check.
+        let current = git.current_branch().await.unwrap();
+        git.run(&["branch", "fallback"]).await.unwrap();
+        git.run(&["checkout", "fallback"]).await.unwrap();
+
+        let wm = WorktreeManager::new();
+        let wt_path = wm.create(&current, &path).await.unwrap();
+
+        assert!(wt_path.exists());
+
+        // Cleanup
+        let _ = wm.remove(&path, &wt_path).await;
+    }
+
+    #[tokio::test]
+    async fn test_create_fails_for_branch_in_existing_worktree() {
+        let (_dir, path) = create_test_repo().await;
+        let git = Git::new(&path);
+        git.run(&["branch", "dup-test"]).await.unwrap();
+
+        let wm = WorktreeManager::new();
+
+        // First creation should succeed
+        let wt_path1 = wm.create("dup-test", &path).await.unwrap();
+
+        // Second creation should fail with BranchAlreadyCheckedOut
+        let result = wm.create("dup-test", &path).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            GitError::BranchAlreadyCheckedOut { branch, .. } => {
+                assert_eq!(branch, "dup-test");
+            }
+            e => panic!("Expected BranchAlreadyCheckedOut, got {:?}", e),
+        }
+
+        // Cleanup
+        let _ = wm.remove(&path, &wt_path1).await;
+    }
+
+    #[tokio::test]
+    async fn test_remove_worktree() {
+        let (_dir, path) = create_test_repo().await;
+        let git = Git::new(&path);
+        git.run(&["branch", "remove-test"]).await.unwrap();
+
+        let wm = WorktreeManager::new();
+        let wt_path = wm.create("remove-test", &path).await.unwrap();
+        assert!(wt_path.exists());
+
+        wm.remove(&path, &wt_path).await.unwrap();
+        // Worktree directory should be gone
+        assert!(!wt_path.exists());
+    }
+
+    #[tokio::test]
+    async fn test_list_managed_excludes_main() {
+        let (_dir, path) = create_test_repo().await;
+        let git = Git::new(&path);
+        git.run(&["branch", "managed-test"]).await.unwrap();
+
+        let wm = WorktreeManager::new();
+        let wt_path = wm.create("managed-test", &path).await.unwrap();
+
+        let managed = wm.list_managed(&path).await.unwrap();
+        // Should contain only the managed worktree, not the main repo
+        assert!(managed.len() >= 1);
+        for wt in &managed {
+            assert!(!wt.is_main_worktree);
+        }
+
+        // Cleanup
+        let _ = wm.remove(&path, &wt_path).await;
+    }
+
+    #[tokio::test]
+    async fn test_list_managed_empty_for_fresh_repo() {
+        let (_dir, path) = create_test_repo().await;
+        let wm = WorktreeManager::new();
+
+        let managed = wm.list_managed(&path).await.unwrap();
+        assert!(managed.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_worktree_path_deterministic() {
+        let (_dir, path) = create_test_repo().await;
+        let wm = WorktreeManager::new();
+
+        let path1 = wm.worktree_path(&path, "feature-x").await;
+        let path2 = wm.worktree_path(&path, "feature-x").await;
+        assert_eq!(path1, path2);
+    }
+
+    #[tokio::test]
+    async fn test_worktree_path_differs_for_different_branches() {
+        let (_dir, path) = create_test_repo().await;
+        let wm = WorktreeManager::new();
+
+        let path1 = wm.worktree_path(&path, "branch-a").await;
+        let path2 = wm.worktree_path(&path, "branch-b").await;
+        assert_ne!(path1, path2);
     }
 }
