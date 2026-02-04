@@ -313,6 +313,7 @@ impl ProcessManager {
         // Tokio task: drain the channel and emit Tauri events
         let event_name = format!("pty-output-{id}");
         let app = app_handle.clone();
+        let inner_ref = self.inner.clone();
         tokio::spawn(async move {
             let mut decoder = Utf8Decoder::new();
             loop {
@@ -320,6 +321,39 @@ impl ProcessManager {
                     data = rx.recv() => {
                         match data {
                             Some(bytes) => {
+                                // Windows ConPTY workaround: Respond to DSR (Device Status
+                                // Report) cursor position requests (ESC[6n) from the backend.
+                                // ConPTY sends this query and BLOCKS all output until it
+                                // receives a response (ESC[{row};{col}R). Since xterm.js may
+                                // not be mounted yet, we respond immediately to unblock ConPTY.
+                                #[cfg(windows)]
+                                {
+                                    if bytes.len() >= 4 {
+                                        // Check for ESC[6n (0x1b 0x5b 0x36 0x6e) anywhere in the data
+                                        for i in 0..bytes.len().saturating_sub(3) {
+                                            if bytes[i] == 0x1b
+                                                && bytes[i + 1] == 0x5b
+                                                && bytes[i + 2] == 0x36
+                                                && bytes[i + 3] == 0x6e
+                                            {
+                                                log::info!(
+                                                    "PTY emitter {}: detected DSR request (ESC[6n), \
+                                                     responding with cursor position",
+                                                    id
+                                                );
+                                                // Respond with cursor at position 1,1
+                                                if let Some(session) = inner_ref.sessions.get(&id) {
+                                                    if let Ok(mut w) = session.writer.lock() {
+                                                        let _ = w.write_all(b"\x1b[1;1R");
+                                                        let _ = w.flush();
+                                                    }
+                                                }
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
                                 let text = decoder.decode(&bytes);
                                 if !text.is_empty() {
                                     let _ = app.emit(&event_name, text);

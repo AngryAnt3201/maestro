@@ -44,7 +44,21 @@ fn find_maestro_mcp_path() -> Option<PathBuf> {
                 .and_then(|d| d.parent())
                 .map(|d| d.join("Resources").join(binary_name))
         }),
-        // Development: relative to src-tauri/target/debug or release
+        // Workspace development: MCP binary in release, main app in debug (or vice versa)
+        // In workspace builds, exe is at target/{profile}/maestro.exe
+        // and MCP binary is at target/release/maestro-mcp-server.exe
+        current_exe.as_ref().and_then(|p| {
+            p.parent() // target/{profile}
+                .and_then(|d| d.parent()) // target
+                .map(|d| d.join("release").join(binary_name))
+        }),
+        // Workspace development: also check debug build of MCP server
+        current_exe.as_ref().and_then(|p| {
+            p.parent() // target/{profile}
+                .and_then(|d| d.parent()) // target
+                .map(|d| d.join("debug").join(binary_name))
+        }),
+        // Non-workspace development: relative to src-tauri/target/debug or release
         // e.g., src-tauri/target/debug/../../../maestro-mcp-server/target/release/
         current_exe.as_ref().and_then(|p| {
             p.parent() // target/debug or target/release
@@ -53,7 +67,7 @@ fn find_maestro_mcp_path() -> Option<PathBuf> {
                 .and_then(|d| d.parent()) // project root
                 .map(|d| d.join("maestro-mcp-server/target/release").join(binary_name))
         }),
-        // Development: also check debug build of MCP server
+        // Non-workspace development: also check debug build of MCP server
         current_exe.as_ref().and_then(|p| {
             p.parent() // target/debug or target/release
                 .and_then(|d| d.parent()) // target
