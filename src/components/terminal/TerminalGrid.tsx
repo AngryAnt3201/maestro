@@ -31,7 +31,7 @@ import { useMcpStore } from "@/stores/useMcpStore";
 import { usePluginStore } from "@/stores/usePluginStore";
 import { useSessionStore } from "@/stores/useSessionStore";
 import type { AiMode } from "@/stores/useSessionStore";
-import { useWorkspaceStore } from "@/stores/useWorkspaceStore";
+import { useWorkspaceStore, type RepositoryInfo, type WorkspaceType } from "@/stores/useWorkspaceStore";
 import { PreLaunchCard, type SessionSlot } from "./PreLaunchCard";
 import { TerminalView } from "./TerminalView";
 
@@ -126,6 +126,11 @@ export interface TerminalGridHandle {
 /**
  * @property projectPath - Working directory passed to `spawnShell`; when absent the backend
  *   uses its own default cwd.
+ * @property repoPath - Git repository path for branch/worktree operations. Defaults to projectPath.
+ *   For multi-repo workspaces, this is the selected repository path.
+ * @property repositories - List of all repositories in the workspace (for multi-repo workspaces).
+ * @property workspaceType - Type of workspace: "single-repo" | "multi-repo" | "non-git".
+ * @property onRepoChange - Callback to change the selected repository in multi-repo workspaces.
  * @property tabId - Workspace tab ID for session-project association.
  * @property preserveOnHide - If true, don't kill sessions when component unmounts (for project switching).
  * @property onSessionCountChange - Fires whenever session counts change,
@@ -133,6 +138,10 @@ export interface TerminalGridHandle {
  */
 interface TerminalGridProps {
   projectPath?: string;
+  repoPath?: string;
+  repositories?: RepositoryInfo[];
+  workspaceType?: WorkspaceType;
+  onRepoChange?: (path: string) => void;
   tabId?: string;
   preserveOnHide?: boolean;
   onSessionCountChange?: (slotCount: number, launchedCount: number) => void;
@@ -152,9 +161,12 @@ interface TerminalGridProps {
  *   a fresh slot so the user is never left with an empty grid.
  */
 export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(function TerminalGrid(
-  { projectPath, tabId, preserveOnHide = false, onSessionCountChange },
+  { projectPath, repoPath, repositories, workspaceType, onRepoChange, tabId, preserveOnHide = false, onSessionCountChange },
   ref,
 ) {
+  // Use repoPath for git operations, falling back to projectPath
+  const effectiveRepoPath = repoPath ?? projectPath;
+
   const addSessionToProject = useWorkspaceStore((s) => s.addSessionToProject);
   const removeSessionFromProject = useWorkspaceStore((s) => s.removeSessionFromProject);
 
@@ -235,15 +247,15 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     onSessionCountChange?.(slots.length, launchedCount);
   }, [slots, onSessionCountChange]);
 
-  // Fetch branches and MCP servers when projectPath is available
+  // Fetch branches when effectiveRepoPath is available
   useEffect(() => {
-    if (!projectPath) {
+    if (!effectiveRepoPath) {
       setIsGitRepo(false);
       return;
     }
 
     setIsLoadingBranches(true);
-    getBranchesWithWorktreeStatus(projectPath)
+    getBranchesWithWorktreeStatus(effectiveRepoPath)
       .then((branchList) => {
         setBranches(branchList);
         setIsGitRepo(true);
@@ -254,6 +266,11 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
         setIsGitRepo(false);
         setIsLoadingBranches(false);
       });
+  }, [effectiveRepoPath]);
+
+  // Fetch MCP servers and plugins when projectPath is available
+  useEffect(() => {
+    if (!projectPath) return;
 
     // Fetch MCP servers
     fetchMcpServers(projectPath).catch(console.error);
@@ -333,7 +350,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
    * Called when slot config changes (plugins, skills, MCP servers).
    */
   const debouncedSaveBranchConfig = useCallback((slot: SessionSlot) => {
-    if (!projectPath || !slot.branch) return;
+    if (!effectiveRepoPath || !slot.branch) return;
 
     // Clear existing timer for this slot
     const existingTimer = branchConfigSaveTimers.current.get(slot.id);
@@ -343,7 +360,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
     // Set new timer
     const timer = setTimeout(() => {
-      saveBranchConfig(projectPath, slot.branch!, {
+      saveBranchConfig(effectiveRepoPath, slot.branch!, {
         enabled_plugins: slot.enabledPlugins,
         enabled_skills: slot.enabledSkills,
         enabled_mcp_servers: slot.enabledMcpServers,
@@ -354,7 +371,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     }, 500);
 
     branchConfigSaveTimers.current.set(slot.id, timer);
-  }, [projectPath]);
+  }, [effectiveRepoPath]);
 
   // Save branch config when slot config changes (debounced)
   // Track previous slots to detect config changes
@@ -398,8 +415,8 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
     try {
       // Save branch config before launching (ensures it's persisted)
-      if (projectPath && slot.branch) {
-        await saveBranchConfig(projectPath, slot.branch, {
+      if (effectiveRepoPath && slot.branch) {
+        await saveBranchConfig(effectiveRepoPath, slot.branch, {
           enabled_plugins: slot.enabledPlugins,
           enabled_skills: slot.enabledSkills,
           enabled_mcp_servers: slot.enabledMcpServers,
@@ -411,12 +428,13 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
       // Determine the working directory
       // If a branch is selected, prepare a worktree first
-      let workingDirectory = projectPath;
+      // For multi-repo workspaces, use effectiveRepoPath for git operations
+      let workingDirectory = effectiveRepoPath ?? projectPath;
       let worktreePath: string | null = null;
       let worktreeWarning: string | null = null;
 
-      if (projectPath && slot.branch) {
-        const result = await prepareSessionWorktree(projectPath, slot.branch);
+      if (effectiveRepoPath && slot.branch) {
+        const result = await prepareSessionWorktree(effectiveRepoPath, slot.branch);
         workingDirectory = result.working_directory;
         worktreePath = result.worktree_path;
         worktreeWarning = result.warning;
@@ -555,7 +573,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       console.error("Failed to spawn shell:", err);
       setError("Failed to start terminal session");
     }
-  }, [projectPath, tabId, addSessionToProject]);
+  }, [projectPath, effectiveRepoPath, tabId, addSessionToProject]);
 
   /**
    * Launches a single slot by spawning a shell with the configured settings.
@@ -616,10 +634,11 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     }
 
     // Clean up worktree if one was created (fire-and-forget)
-    if (projectPath && worktreePath) {
-      cleanupSessionWorktree(projectPath, worktreePath).catch(console.error);
+    // Use effectiveRepoPath for worktree cleanup since worktrees are git-repo specific
+    if (effectiveRepoPath && worktreePath) {
+      cleanupSessionWorktree(effectiveRepoPath, worktreePath).catch(console.error);
     }
-  }, [tabId, projectPath, removeSessionFromProject]);
+  }, [tabId, effectiveRepoPath, projectPath, removeSessionFromProject]);
 
   /**
    * Removes a pre-launch slot (before it's launched).
@@ -651,10 +670,10 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       )
     );
 
-    // If a branch is selected and we have a project path, try to load saved config
-    if (branch && projectPath) {
+    // If a branch is selected and we have a repo path, try to load saved config
+    if (branch && effectiveRepoPath) {
       try {
-        const savedConfig = await loadBranchConfig(projectPath, branch);
+        const savedConfig = await loadBranchConfig(effectiveRepoPath, branch);
         if (savedConfig) {
           // Apply saved config to the slot
           setSlots((prev) =>
@@ -674,7 +693,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
         // Non-fatal - continue with current slot config
       }
     }
-  }, [projectPath]);
+  }, [effectiveRepoPath]);
 
   /**
    * Toggles an MCP server for a slot.
@@ -872,6 +891,11 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             branches={branches}
             isLoadingBranches={isLoadingBranches}
             isGitRepo={isGitRepo}
+            repositories={repositories}
+            workspaceType={workspaceType}
+            selectedRepoPath={effectiveRepoPath}
+            onRepoChange={onRepoChange}
+            fetchBranchesForRepo={getBranchesWithWorktreeStatus}
             mcpServers={mcpServers}
             skills={skills}
             plugins={plugins}
