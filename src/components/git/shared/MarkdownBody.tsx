@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import remarkGemoji from "remark-gemoji";
 
@@ -18,10 +19,14 @@ export function MarkdownBody({ content, className = "" }: MarkdownBodyProps) {
     );
   }
 
+  // Convert <image src="..."> tags to standard markdown images
+  const processedContent = content.replace(/<image\s+src="([^"]+)"[^>]*>/gi, '![]($1)');
+
   return (
     <div className={`markdown-body ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkGemoji]}
+        rehypePlugins={[rehypeRaw]}
         components={{
           // Style links
           a: ({ href, children }) => (
@@ -131,7 +136,7 @@ export function MarkdownBody({ content, className = "" }: MarkdownBodyProps) {
           ),
         }}
       >
-        {content}
+        {processedContent}
       </ReactMarkdown>
     </div>
   );

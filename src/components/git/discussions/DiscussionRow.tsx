@@ -1,6 +1,7 @@
 import { CheckCircle } from "lucide-react";
 import { useMemo } from "react";
 import type { DiscussionInfo } from "../../../stores/useGitHubStore";
+import { parseEmoji } from "../shared/emojiUtils";
 
 interface DiscussionRowProps {
   discussion: DiscussionInfo;
@@ -46,7 +47,7 @@ export function DiscussionRow({ discussion, isSelected, onClick }: DiscussionRow
     >
       {/* Category emoji */}
       <div className="shrink-0 rounded bg-maestro-surface p-1">
-        <span className="text-sm">{discussion.category.emoji || "💬"}</span>
+        <span className="text-sm">{parseEmoji(discussion.category.emoji)}</span>
       </div>
 
       {/* Title and category */}

@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useGitHubStore } from "../../../stores/useGitHubStore";
 import { MarkdownBody } from "../shared/MarkdownBody";
 import { CommentList } from "../shared/CommentList";
+import { parseEmoji } from "../shared/emojiUtils";
 
 interface DiscussionDetailPanelProps {
   repoPath: string;
@@ -69,7 +70,7 @@ export function DiscussionDetailPanel({
           >
             <X size={16} />
           </button>
-          <span className="text-sm">{selectedDiscussion.category.emoji || "💬"}</span>
+          <span className="text-sm">{parseEmoji(selectedDiscussion.category.emoji)}</span>
           <span className="text-sm font-medium text-maestro-text">
             #{selectedDiscussion.number}
           </span>

@@ -323,6 +323,8 @@ export const useGitHubStore = create<GitHubState>()((set, get) => ({
     body: string
   ) => {
     await invoke("github_comment_pr", { repoPath, number, body });
+    // Refresh PR detail to show the new comment
+    await get().fetchPullRequestDetail(repoPath, number);
   },
 
   fetchIssues: async (repoPath: string, state?: IssueFilterState) => {
@@ -398,6 +400,8 @@ export const useGitHubStore = create<GitHubState>()((set, get) => ({
 
   commentIssue: async (repoPath: string, number: number, body: string) => {
     await invoke("github_comment_issue", { repoPath, number, body });
+    // Refresh issue detail to show the new comment
+    await get().fetchIssueDetail(repoPath, number);
   },
 
   clearSelectedIssue: () => {
@@ -420,6 +424,8 @@ export const useGitHubStore = create<GitHubState>()((set, get) => ({
 
   commentDiscussion: async (repoPath: string, number: number, body: string) => {
     await invoke("github_comment_discussion", { repoPath, number, body });
+    // Refresh discussion detail to show the new comment
+    await get().fetchDiscussionDetail(repoPath, number);
   },
 
   clearSelectedDiscussion: () => {
