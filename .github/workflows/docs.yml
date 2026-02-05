@@ -20,12 +20,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/jekyll-build-pages@v1
+
+      - uses: ruby/setup-ruby@v1
         with:
-          source: ./website
-          destination: ./_site
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: website
+
+      - name: Build Jekyll site
+        run: bundle exec jekyll build --baseurl "/maestro"
+        working-directory: website
+        env:
+          JEKYLL_ENV: production
+
+      - uses: actions/configure-pages@v5
+
       - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/_site
 
   deploy:
     environment:
