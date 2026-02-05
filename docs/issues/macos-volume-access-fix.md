@@ -1,8 +1,9 @@
 # Fix: macOS repeating permission prompts for external/network drives
 
-## Status: IMPLEMENTED
+## Status: IMPLEMENTED -- PR #120
 
 **Tested on:** Mac Studio M2 Ultra (MQH63LL/A), macOS 26.2 (Tahoe)
+**PR:** https://github.com/its-maestro-baby/maestro/pull/120
 
 ## The Problem
 
