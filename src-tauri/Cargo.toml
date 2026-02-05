@@ -47,6 +47,11 @@ uuid = { version = "1", features = ["v4"] }
 vte = { version = "0.14", optional = true }
 # Cross-platform font detection
 font-kit = "0.14"
+# Date/time handling for usage tracking
+chrono = "0.4"
+# Cross-platform credential store access (Keychain, Credential Manager, Secret Service)
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+
 # macOS permissions (Full Disk Access check)
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-plugin-macos-permissions = "2.1"

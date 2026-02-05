@@ -368,3 +368,79 @@
     transform: none;
   }
 }
+
+/* ── Tamagotchi Animations ── */
+
+@keyframes tama-bounce {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  25% {
+    transform: translateY(-4px) scale(1.05);
+  }
+  50% {
+    transform: translateY(0) scale(1);
+  }
+  75% {
+    transform: translateY(-2px) scale(1.02);
+  }
+}
+
+@keyframes tama-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes tama-droop {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(2px) rotate(-2deg);
+  }
+}
+
+@keyframes tama-hungry {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(1px) rotate(-1deg);
+  }
+  75% {
+    transform: translateY(1px) rotate(1deg);
+  }
+}
+
+.animate-tama-bounce {
+  animation: tama-bounce 1.5s ease-in-out infinite;
+}
+
+.animate-tama-float {
+  animation: tama-float 2.5s ease-in-out infinite;
+}
+
+.animate-tama-droop {
+  animation: tama-droop 3s ease-in-out infinite;
+}
+
+.animate-tama-hungry {
+  animation: tama-hungry 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-tama-bounce,
+  .animate-tama-float,
+  .animate-tama-droop,
+  .animate-tama-hungry {
+    animation: none;
+  }
+}

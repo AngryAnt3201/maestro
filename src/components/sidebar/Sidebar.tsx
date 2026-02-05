@@ -39,6 +39,7 @@ import { usePluginStore } from "@/stores/usePluginStore";
 import { useMarketplaceStore } from "@/stores/useMarketplaceStore";
 import { useWorkspaceStore } from "@/stores/useWorkspaceStore";
 import { useProcessTreeStore, type ProcessInfo, type SessionProcessTree } from "@/stores/useProcessTreeStore";
+import { useUsageStore } from "@/stores/useUsageStore";
 import { GitSettingsModal, RemoteStatusIndicator } from "@/components/git";
 import { QuickActionsManager } from "@/components/quickactions/QuickActionsManager";
 import { MarketplaceBrowser } from "@/components/marketplace";
@@ -46,6 +47,7 @@ import { McpServerEditorModal } from "@/components/mcp";
 import { ClaudeMdEditorModal } from "@/components/claudemd";
 import { CliSettingsModal } from "@/components/terminal/CliSettingsModal";
 import { TerminalSettingsModal } from "@/components/terminal/TerminalSettingsModal";
+import { Tamagotchi } from "@/components/tamagotchi";
 import type { McpCustomServer } from "@/lib/mcp";
 import { checkClaudeMd, type ClaudeMdStatus } from "@/lib/claudemd";
 
@@ -221,6 +223,9 @@ export function Sidebar({ collapsed, onCollapse, theme, onToggleTheme }: Sidebar
           <ProcessesTab />
         )}
       </div>
+
+      {/* Tamagotchi widget - fixed footer */}
+      {!collapsed && <Tamagotchi />}
 
       {/* Drag handle */}
       {!collapsed && (
@@ -1348,6 +1353,7 @@ function AppearanceSection({
   const isDark = theme !== "light";
   const [showTerminalSettings, setShowTerminalSettings] = useState(false);
   const [showCliSettings, setShowCliSettings] = useState(false);
+  const { showCharacter, toggleCharacter } = useUsageStore();
 
   return (
     <>
@@ -1367,6 +1373,14 @@ function AppearanceSection({
             <Moon size={14} className="text-maestro-accent" />
           )}
           <span>{isDark ? "Switch to Light" : "Switch to Dark"}</span>
+        </button>
+        <button
+          type="button"
+          onClick={toggleCharacter}
+          className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-maestro-text transition-colors hover:bg-maestro-border/40"
+        >
+          <Bot size={14} className={showCharacter ? "text-maestro-accent" : "text-maestro-muted"} />
+          <span>{showCharacter ? "Hide Tamagotchi" : "Show Tamagotchi"}</span>
         </button>
         <button
           type="button"
