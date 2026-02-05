@@ -16,6 +16,8 @@ A cross-platform desktop application that lets you run 1-6 Claude Code (or other
 [![X (Twitter)](https://img.shields.io/badge/X-@maestro5240871-000000?style=flat&logo=x&logoColor=white)](https://x.com/maestro5240871)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/3tQyFUYPVP)
 
+[![Docs](https://img.shields.io/badge/docs-website-blue)](https://its-maestro-baby.github.io/maestro/)
+
 **Star us on GitHub — your support motivates us a lot!**
 
 ---

@@ -47,3 +47,8 @@ claude.md
 # Notes
 plan.md
 reddit-post.md
+
+# Jekyll docs site
+website/_site/
+website/.jekyll-cache/
+website/.jekyll-metadata
