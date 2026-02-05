@@ -44,6 +44,7 @@ import { QuickActionsManager } from "@/components/quickactions/QuickActionsManag
 import { MarketplaceBrowser } from "@/components/marketplace";
 import { McpServerEditorModal } from "@/components/mcp";
 import { ClaudeMdEditorModal } from "@/components/claudemd";
+import { CliSettingsModal } from "@/components/terminal/CliSettingsModal";
 import { TerminalSettingsModal } from "@/components/terminal/TerminalSettingsModal";
 import type { McpCustomServer } from "@/lib/mcp";
 import { checkClaudeMd, type ClaudeMdStatus } from "@/lib/claudemd";
@@ -1346,6 +1347,7 @@ function AppearanceSection({
 }) {
   const isDark = theme !== "light";
   const [showTerminalSettings, setShowTerminalSettings] = useState(false);
+  const [showCliSettings, setShowCliSettings] = useState(false);
 
   return (
     <>
@@ -1374,10 +1376,21 @@ function AppearanceSection({
           <Wrench size={14} className="text-maestro-muted" />
           <span>Terminal Settings</span>
         </button>
+        <button
+          type="button"
+          onClick={() => setShowCliSettings(true)}
+          className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-maestro-text transition-colors hover:bg-maestro-border/40"
+        >
+          <Zap size={14} className="text-maestro-accent" />
+          <span>CLI Settings</span>
+        </button>
       </div>
 
       {showTerminalSettings && (
         <TerminalSettingsModal onClose={() => setShowTerminalSettings(false)} />
+      )}
+      {showCliSettings && (
+        <CliSettingsModal onClose={() => setShowCliSettings(false)} />
       )}
     </>
   );

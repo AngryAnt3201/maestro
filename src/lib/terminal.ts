@@ -39,23 +39,34 @@ export async function killSession(sessionId: number): Promise<void> {
 /** AI mode variants matching the backend enum. */
 export type AiMode = "Claude" | "Gemini" | "Codex" | "Plain";
 
+/** CLI modes that support flags (excludes Plain). */
+export type CliAiMode = Exclude<AiMode, "Plain">;
+
 /** CLI command configuration for each AI mode */
-export const AI_CLI_CONFIG: Record<AiMode, { command: string | null; installHint: string }> = {
+export const AI_CLI_CONFIG: Record<AiMode, {
+  command: string | null;
+  installHint: string;
+  skipPermissionsFlag: string | null;
+}> = {
   Claude: {
     command: "claude",
-    installHint: "npm install -g @anthropic-ai/claude-code"
+    installHint: "npm install -g @anthropic-ai/claude-code",
+    skipPermissionsFlag: "--dangerously-skip-permissions",
   },
   Gemini: {
     command: "gemini",
-    installHint: "npm install -g @google/gemini-cli"
+    installHint: "npm install -g @google/gemini-cli",
+    skipPermissionsFlag: "--yolo",
   },
   Codex: {
     command: "codex",
-    installHint: "npm install -g codex"
+    installHint: "npm install -g codex",
+    skipPermissionsFlag: "--dangerously-bypass-approvals-and-sandbox",
   },
   Plain: {
     command: null,
-    installHint: ""
+    installHint: "",
+    skipPermissionsFlag: null,
   },
 };
 
@@ -191,4 +202,47 @@ export function waitForTerminalReady(sessionId: number, timeoutMs = 5000): Promi
 
     check();
   });
+}
+
+/**
+ * CLI flags for a specific AI mode.
+ */
+export type CliFlags = {
+  skipPermissions: boolean;
+  customFlags: string;
+};
+
+/**
+ * Builds the full CLI command with user-configured flags.
+ *
+ * @param mode - The AI mode to build the command for
+ * @param flags - The CLI flags configuration for this mode
+ * @returns The full CLI command string, or null for Plain mode
+ *
+ * @example
+ * buildCliCommand("Claude", { skipPermissions: true, customFlags: "--verbose" })
+ * // Returns: "claude --dangerously-skip-permissions --verbose"
+ *
+ * buildCliCommand("Gemini", { skipPermissions: true, customFlags: "" })
+ * // Returns: "gemini --yolo"
+ *
+ * buildCliCommand("Codex", { skipPermissions: true, customFlags: "" })
+ * // Returns: "codex --dangerously-bypass-approvals-and-sandbox"
+ */
+export function buildCliCommand(mode: AiMode, flags?: CliFlags): string | null {
+  const config = AI_CLI_CONFIG[mode];
+  if (!config.command) return null;
+
+  const parts: string[] = [config.command];
+
+  if (flags) {
+    if (flags.skipPermissions && config.skipPermissionsFlag) {
+      parts.push(config.skipPermissionsFlag);
+    }
+    if (flags.customFlags.trim()) {
+      parts.push(flags.customFlags.trim());
+    }
+  }
+
+  return parts.join(" ");
 }

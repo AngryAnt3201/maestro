@@ -16,6 +16,7 @@ import {
 import {
   AI_CLI_CONFIG,
   assignSessionBranch,
+  buildCliCommand,
   checkCliAvailable,
   createSession,
   killSession,
@@ -23,6 +24,7 @@ import {
   waitForTerminalReady,
   writeStdin,
 } from "@/lib/terminal";
+import { useCliSettingsStore } from "@/stores/useCliSettingsStore";
 import { cleanupSessionWorktree, prepareSessionWorktree } from "@/lib/worktreeManager";
 import { useTerminalKeyboard } from "@/hooks/useTerminalKeyboard";
 import { useMcpStore } from "@/stores/useMcpStore";
@@ -530,8 +532,12 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             // Brief delay for shell to initialize
             await new Promise((resolve) => setTimeout(resolve, 100));
 
+            // Build CLI command with user-configured flags
+            const cliFlags = useCliSettingsStore.getState().getFlags(slot.mode);
+            const cliCommand = buildCliCommand(slot.mode, cliFlags);
+
             // Send CLI launch command
-            await writeStdin(sessionId, `${cliConfig.command}\r`);
+            await writeStdin(sessionId, `${cliCommand}\r`);
 
             // Brief delay for CLI initialization.
             // With session-specific MCP server names (maestro-1, maestro-2, etc.),
