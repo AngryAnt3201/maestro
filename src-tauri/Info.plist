@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSRemovableVolumesUsageDescription</key>
+  <string>Maestro needs access to external drives to open and manage projects stored on removable media.</string>
+  <key>NSNetworkVolumesUsageDescription</key>
+  <string>Maestro needs access to network drives to open and manage projects stored on network shares.</string>
+</dict>
+</plist>
