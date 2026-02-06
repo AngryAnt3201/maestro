@@ -1,9 +1,11 @@
 pub mod claudemd;
 pub mod fonts;
 pub mod git;
+pub mod github;
 pub mod marketplace;
 pub mod mcp;
 pub mod plugin;
 pub mod session;
 pub mod terminal;
+pub mod usage;
 pub mod worktree;

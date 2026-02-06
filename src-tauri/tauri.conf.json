@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.maestro.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "cargo build -p maestro-mcp-server && npm run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
@@ -37,7 +37,7 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "../target/release/maestro-mcp-server*"
+      "../target/*/maestro-mcp-server*"
     ],
     "linux": {
       "deb": {

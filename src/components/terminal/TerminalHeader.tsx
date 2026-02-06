@@ -3,8 +3,10 @@ import {
   CheckCircle,
   ChevronDown,
   Code2,
+  Expand,
   GitBranch,
   GitCompareArrows,
+  Minimize,
   Sparkles,
   Terminal,
   X,
@@ -26,6 +28,9 @@ interface TerminalHeaderProps {
   isWorktree?: boolean;
   onKill: (sessionId: number) => void;
   onLaunch?: () => void;
+  terminalCount?: number;
+  isZoomed?: boolean;
+  onToggleZoom?: () => void;
 }
 
 const STATUS_COLOR: Record<SessionStatus, string> = {
@@ -67,13 +72,103 @@ export function TerminalHeader({
   isWorktree = false,
   onKill,
   onLaunch,
+  terminalCount = 1,
+  isZoomed = false,
+  onToggleZoom,
 }: TerminalHeaderProps) {
   const { icon: ProviderIcon, label: providerLabel } = providerConfig[provider];
 
+  // Calculate adaptive styling based on terminal count
+  const getAdaptiveClasses = () => {
+    if (isZoomed) {
+      // When zoomed, use normal/larger sizes
+      return {
+        headerHeight: "h-8",
+        providerIconSize: 18,
+        sessionLabelSize: "text-[11px]",
+        badgeSize: "text-[9px]",
+        badgePadding: "px-1.5 py-px",
+        branchMaxWidth: "max-w-[80px]",
+        statusSize: "text-[10px]",
+        showAllElements: true,
+        gapSize: "gap-1",
+      };
+    }
+
+    if (terminalCount <= 2) {
+      // 1-2 terminals: normal size
+      return {
+        headerHeight: "h-7",
+        providerIconSize: 18,
+        sessionLabelSize: "text-[11px]",
+        badgeSize: "text-[9px]",
+        badgePadding: "px-1.5 py-px",
+        branchMaxWidth: "max-w-[80px]",
+        statusSize: "text-[10px]",
+        showAllElements: true,
+        gapSize: "gap-1",
+      };
+    } else if (terminalCount <= 3) {
+      // 3 terminals: slightly smaller
+      return {
+        headerHeight: "h-6",
+        providerIconSize: 16,
+        sessionLabelSize: "text-[10px]",
+        badgeSize: "text-[8px]",
+        badgePadding: "px-1.5 py-px",
+        branchMaxWidth: "max-w-[70px]",
+        statusSize: "text-[9px]",
+        showAllElements: true,
+        gapSize: "gap-1",
+      };
+    } else if (terminalCount === 4) {
+      // 4 terminals: more compact to fit on one line
+      return {
+        headerHeight: "h-5",
+        providerIconSize: 14,
+        sessionLabelSize: "text-[9px]",
+        badgeSize: "text-[7px]",
+        badgePadding: "px-1 py-px",
+        branchMaxWidth: "max-w-[55px]",
+        statusSize: "text-[8px]",
+        showAllElements: true,
+        gapSize: "gap-0.5",
+      };
+    } else if (terminalCount <= 6) {
+      // 5-6 terminals: very compact
+      return {
+        headerHeight: "h-5",
+        providerIconSize: 14,
+        sessionLabelSize: "text-[8px]",
+        badgeSize: "text-[7px]",
+        badgePadding: "px-0.5 py-px",
+        branchMaxWidth: "max-w-[45px]",
+        statusSize: "text-[7px]",
+        showAllElements: true,
+        gapSize: "gap-0.5",
+      };
+    } else {
+      // 7+ terminals: ultra compact, hide some elements
+      return {
+        headerHeight: "h-4",
+        providerIconSize: 12,
+        sessionLabelSize: "text-[7px]",
+        badgeSize: "text-[6px]",
+        badgePadding: "px-0.5 py-0",
+        branchMaxWidth: "max-w-[40px]",
+        statusSize: "text-[7px]",
+        showAllElements: false,
+        gapSize: "gap-0.5",
+      };
+    }
+  };
+
+  const adaptive = getAdaptiveClasses();
+
   return (
-    <div className="no-select flex h-7 shrink-0 items-center gap-1.5 border-b border-maestro-border bg-maestro-surface px-2">
+    <div className={`no-select flex ${adaptive.headerHeight} shrink-0 items-center ${adaptive.gapSize} border-b border-maestro-border bg-maestro-surface px-2`}>
       {/* Left cluster */}
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+      <div className={`flex min-w-0 flex-1 items-center ${adaptive.gapSize}`}>
         {/* AI provider icon + dropdown */}
         <button
           type="button"
@@ -83,72 +178,75 @@ export function TerminalHeader({
           className="flex shrink-0 items-center gap-0.5 text-maestro-muted hover:text-maestro-text"
         >
           <ProviderIcon
-            size={18}
+            size={adaptive.providerIconSize}
             strokeWidth={1.5}
             className="text-violet-500 drop-shadow-[0_0_4px_rgba(139,92,246,0.5)]"
           />
-          <ChevronDown size={9} className="text-maestro-muted/60" />
+          {!isZoomed && terminalCount <= 4 && <ChevronDown size={9} className="text-maestro-muted/60" />}
         </button>
 
         {/* Session label */}
-        <span className="shrink-0 text-[11px] font-medium text-maestro-text">
+        <span className={`shrink-0 font-medium text-maestro-text ${adaptive.sessionLabelSize}`}>
           {providerLabel} #{sessionId}
         </span>
 
         {/* MCP badge */}
-        <span className="shrink-0 rounded-full bg-maestro-accent/15 px-1.5 py-px text-[9px] font-medium text-maestro-accent">
-          {mcpCount} MCP
-        </span>
+        {(adaptive.showAllElements || terminalCount <= 6) && (
+          <span className={`shrink-0 rounded-full bg-maestro-accent/15 font-medium text-maestro-accent ${adaptive.badgePadding} ${adaptive.badgeSize}`}>
+            {mcpCount} MCP
+          </span>
+        )}
 
-        {/* Terminal count badge */}
-        {/* TODO: Replace hardcoded "1" with actual terminal count prop */}
-        <span className="shrink-0 rounded-full bg-maestro-muted/10 px-1.5 py-px text-[9px] font-medium text-maestro-muted">
-          1
-        </span>
+        {/* Blue checkmark (verified/ready) - hide in very compact mode */}
+        {adaptive.showAllElements && (
+          <CheckCircle size={terminalCount <= 4 ? 11 : 9} className="shrink-0 text-maestro-accent" />
+        )}
 
-        {/* Blue checkmark (verified/ready) */}
-        <CheckCircle size={11} className="shrink-0 text-maestro-accent" />
+        {/* Active count - hide in compact mode */}
+        {adaptive.showAllElements && (
+          <span
+            className={`shrink-0 rounded-full font-medium ${adaptive.badgePadding} ${adaptive.badgeSize} ${
+              activeCount > 0
+                ? "bg-maestro-orange/15 text-maestro-orange"
+                : "bg-maestro-muted/10 text-maestro-muted"
+            }`}
+          >
+            {activeCount} Active
+          </span>
+        )}
 
-        {/* Active count */}
-        <span
-          className={`shrink-0 rounded-full px-1.5 py-px text-[9px] font-medium ${
-            activeCount > 0
-              ? "bg-maestro-orange/15 text-maestro-orange"
-              : "bg-maestro-muted/10 text-maestro-muted"
-          }`}
-        >
-          {activeCount} Active
-        </span>
+        {/* Git arrows + change count - hide in compact mode */}
+        {adaptive.showAllElements && (
+          <span className="flex shrink-0 items-center gap-0.5 text-maestro-muted">
+            <GitCompareArrows size={terminalCount <= 4 ? 11 : 9} />
+            <span className={adaptive.badgeSize}>0</span>
+          </span>
+        )}
 
-        {/* Git arrows + change count */}
-        {/* TODO: Replace hardcoded "0" with actual git change count prop */}
-        <span className="flex shrink-0 items-center gap-0.5 text-maestro-muted">
-          <GitCompareArrows size={11} />
-          <span className="text-[9px]">0</span>
-        </span>
-
-        {/* Truncated status message */}
-        {statusMessage && (
-          <span className="min-w-0 truncate text-[10px] text-maestro-muted">{statusMessage}</span>
+        {/* Truncated status message - hide in very compact mode */}
+        {statusMessage && (adaptive.showAllElements || terminalCount <= 6) && (
+          <span className={`min-w-0 truncate text-maestro-muted ${adaptive.badgeSize}`}>{statusMessage}</span>
         )}
       </div>
 
       {/* Right cluster */}
-      <div className="flex shrink-0 items-center gap-1">
-        {/* Branch display */}
+      <div className="flex shrink-0 items-center gap-0.5">
+        {/* Branch display - more compact in dense mode */}
         <span
-          className="flex items-center gap-0.5 px-1 py-0.5 text-[10px] text-maestro-muted"
+          className={`flex items-center gap-0.5 px-1 py-0.5 text-maestro-muted ${adaptive.badgeSize}`}
           title={
             isWorktree
               ? `Isolated worktree branch: ${branchName}`
               : `Checked-out branch: ${branchName} (updates live)`
           }
         >
-          <GitBranch size={10} />
-          <span className="max-w-[80px] truncate">{branchName}</span>
-          <span className={`ml-0.5 rounded px-1 py-px text-[8px] font-medium ${isWorktree ? "bg-purple-500/15 text-purple-400" : "bg-maestro-accent/15 text-maestro-accent"}`}>
-            {isWorktree ? "worktree" : "checked out"}
-          </span>
+          <GitBranch size={terminalCount <= 4 ? 10 : 8} />
+          <span className={`truncate ${adaptive.branchMaxWidth}`}>{branchName}</span>
+          {(adaptive.showAllElements || terminalCount <= 6) && (
+            <span className={`ml-0.5 rounded font-medium ${adaptive.badgePadding} ${adaptive.badgeSize} ${isWorktree ? "bg-purple-500/15 text-purple-400" : "bg-maestro-accent/15 text-maestro-accent"}`}>
+              {isWorktree ? "worktree" : "checked out"}
+            </span>
+          )}
         </span>
 
         {/* Launch button (pre-launch only) */}
@@ -156,14 +254,27 @@ export function TerminalHeader({
           <button
             type="button"
             onClick={() => onLaunch?.()}
-            className="rounded bg-maestro-green px-2 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-maestro-green/80"
+            className="rounded bg-maestro-green px-1.5 py-0.5 font-medium text-white transition-colors hover:bg-maestro-green/80 text-[9px]"
           >
             Launch
           </button>
         )}
 
+        {/* Zoom toggle button */}
+        {onToggleZoom && (
+          <button
+            type="button"
+            onClick={() => onToggleZoom()}
+            className="rounded p-0.5 text-maestro-muted transition-colors hover:bg-maestro-card hover:text-maestro-accent"
+            title={isZoomed ? "Restore grid view" : "Zoom terminal"}
+            aria-label={isZoomed ? "Restore grid view" : "Zoom terminal"}
+          >
+            {isZoomed ? <Minimize size={terminalCount <= 4 ? 14 : 12} /> : <Expand size={terminalCount <= 4 ? 14 : 12} />}
+          </button>
+        )}
+
         {/* Status indicator */}
-        <span className={`text-[10px] font-medium ${STATUS_COLOR[status]}`}>
+        <span className={`font-medium ${STATUS_COLOR[status]} ${adaptive.statusSize}`}>
           {STATUS_LABEL[status]}
         </span>
 
@@ -175,7 +286,7 @@ export function TerminalHeader({
           title="Kill session"
           aria-label={`Kill session ${sessionId}`}
         >
-          <X size={11} />
+          <X size={terminalCount <= 4 ? 11 : 9} />
         </button>
       </div>
     </div>

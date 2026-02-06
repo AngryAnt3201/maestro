@@ -9,6 +9,7 @@ interface CommitRowProps {
   isHead: boolean;
   refs: string[];
   onClick: () => void;
+  graphAreaWidth?: number;
 }
 
 /** Dimensions for the graph canvas on the left side. */
@@ -16,7 +17,7 @@ const RAIL_WIDTH = 16;
 const DOT_RADIUS = 5;
 const GRAPH_PADDING = 12;
 
-export function CommitRow({ node, isSelected, isHead, refs, onClick }: CommitRowProps) {
+export function CommitRow({ node, isSelected, isHead, refs, onClick, graphAreaWidth }: CommitRowProps) {
   const { commit, column, railColor } = node;
   const isMerge = commit.parent_hashes.length > 1;
 
@@ -62,8 +63,8 @@ export function CommitRow({ node, isSelected, isHead, refs, onClick }: CommitRow
     return "now";
   }, [commit.timestamp]);
 
-  // Calculate graph area width based on column position
-  const graphWidth = GRAPH_PADDING + (column + 1) * RAIL_WIDTH + GRAPH_PADDING;
+  // Use provided graphAreaWidth or calculate based on column position
+  const graphWidth = graphAreaWidth ?? GRAPH_PADDING + (column + 1) * RAIL_WIDTH + GRAPH_PADDING;
 
   return (
     <button

@@ -6,11 +6,49 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, LazyLock};
 
+use dashmap::DashMap;
 use serde_json::{json, Value};
+use tokio::sync::Mutex;
 
 use super::mcp_manager::{McpServerConfig, McpServerType};
 use crate::commands::mcp::McpCustomServer;
+
+/// Per-directory lock map to serialize concurrent .mcp.json read-modify-write operations.
+static DIR_LOCKS: LazyLock<DashMap<PathBuf, Arc<Mutex<()>>>> = LazyLock::new(DashMap::new);
+
+/// Acquire a per-directory lock for atomic .mcp.json operations.
+fn dir_lock(dir: &Path) -> Arc<Mutex<()>> {
+    DIR_LOCKS
+        .entry(dir.to_path_buf())
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .value()
+        .clone()
+}
+
+/// Write content to a file atomically: write to a temp file in the same directory, then rename.
+async fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
+    let parent = path.parent().ok_or("No parent directory")?;
+    let temp_path = parent.join(format!(
+        ".mcp.json.tmp.{}",
+        std::process::id()
+    ));
+
+    tokio::fs::write(&temp_path, content)
+        .await
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+
+    tokio::fs::rename(&temp_path, path)
+        .await
+        .map_err(|e| {
+            // Clean up temp file on rename failure
+            let _ = std::fs::remove_file(&temp_path);
+            format!("Failed to rename temp file: {}", e)
+        })?;
+
+    Ok(())
+}
 
 /// Finds the maestro-mcp-server binary in common installation locations.
 ///
@@ -311,17 +349,19 @@ pub async fn write_session_mcp_config(
         mcp_servers.insert(server.name.clone(), custom_server_to_json(server));
     }
 
+    // Acquire per-directory lock to serialize concurrent read-modify-write
+    let lock = dir_lock(working_dir);
+    let _guard = lock.lock().await;
+
     // Merge with existing .mcp.json if present (preserve user servers AND other sessions)
     let mcp_path = working_dir.join(".mcp.json");
     let final_config = merge_with_existing(&mcp_path, mcp_servers, session_id)?;
 
-    // Write the file
+    // Write the file atomically (temp file + rename)
     let content = serde_json::to_string_pretty(&final_config)
         .map_err(|e| format!("Failed to serialize MCP config: {}", e))?;
 
-    tokio::fs::write(&mcp_path, content)
-        .await
-        .map_err(|e| format!("Failed to write .mcp.json: {}", e))?;
+    atomic_write(&mcp_path, &content).await?;
 
     log::debug!(
         "Wrote session {} MCP config to {:?}",
@@ -350,6 +390,10 @@ pub async fn remove_session_mcp_config(working_dir: &Path, session_id: u32) -> R
     if !mcp_path.exists() {
         return Ok(());
     }
+
+    // Acquire per-directory lock to serialize concurrent read-modify-write
+    let lock = dir_lock(working_dir);
+    let _guard = lock.lock().await;
 
     let content = tokio::fs::read_to_string(&mcp_path)
         .await
@@ -381,9 +425,7 @@ pub async fn remove_session_mcp_config(working_dir: &Path, session_id: u32) -> R
     let output = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
-    tokio::fs::write(&mcp_path, output)
-        .await
-        .map_err(|e| format!("Failed to write .mcp.json: {}", e))?;
+    atomic_write(&mcp_path, &output).await?;
 
     Ok(())
 }
@@ -530,6 +572,76 @@ mod tests {
             "3",
             "maestro-status should have session ID 3 in env"
         );
+    }
+
+    #[tokio::test]
+    async fn test_atomic_write_produces_valid_json() {
+        let dir = tempdir().unwrap();
+        let mcp_path = dir.path().join(".mcp.json");
+
+        let content = serde_json::to_string_pretty(&json!({
+            "mcpServers": { "test": { "type": "stdio", "command": "test" } }
+        }))
+        .unwrap();
+
+        atomic_write(&mcp_path, &content).await.unwrap();
+
+        let read_back = std::fs::read_to_string(&mcp_path).unwrap();
+        let parsed: Value = serde_json::from_str(&read_back).unwrap();
+        assert!(parsed["mcpServers"]["test"].is_object());
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_writes_produce_valid_json() {
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path().to_path_buf();
+
+        // Seed an initial file
+        let initial = json!({ "mcpServers": {} });
+        std::fs::write(
+            dir_path.join(".mcp.json"),
+            serde_json::to_string_pretty(&initial).unwrap(),
+        )
+        .unwrap();
+
+        // Launch 10 concurrent merge+write operations
+        let mut handles = vec![];
+        for i in 0..10u32 {
+            let dp = dir_path.clone();
+            handles.push(tokio::spawn(async move {
+                let lock = dir_lock(&dp);
+                let _guard = lock.lock().await;
+
+                let mcp_path = dp.join(".mcp.json");
+                let content = std::fs::read_to_string(&mcp_path).unwrap();
+                let mut config: Value = serde_json::from_str(&content).unwrap();
+
+                // Each task adds its own server entry
+                config["mcpServers"][format!("server-{}", i)] =
+                    json!({ "type": "stdio", "command": format!("/bin/server-{}", i) });
+
+                let output = serde_json::to_string_pretty(&config).unwrap();
+                atomic_write(&mcp_path, &output).await.unwrap();
+            }));
+        }
+
+        for h in handles {
+            h.await.unwrap();
+        }
+
+        // Verify the final file is valid JSON with all 10 servers
+        let final_content = std::fs::read_to_string(dir_path.join(".mcp.json")).unwrap();
+        let final_config: Value = serde_json::from_str(&final_content)
+            .expect("final .mcp.json should be valid JSON");
+        let servers = final_config["mcpServers"].as_object().unwrap();
+        assert_eq!(servers.len(), 10, "should have all 10 server entries");
+        for i in 0..10u32 {
+            assert!(
+                servers.contains_key(&format!("server-{}", i)),
+                "missing server-{}",
+                i
+            );
+        }
     }
 
     #[test]

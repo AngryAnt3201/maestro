@@ -11,6 +11,8 @@ import { GitGraphPanel } from "./components/git/GitGraphPanel";
 import { BottomBar } from "./components/shared/BottomBar";
 import { FDADialog } from "./components/shared/FDADialog";
 import { MultiProjectView, type MultiProjectViewHandle } from "./components/shared/MultiProjectView";
+import { MAC_TITLE_BAR_INSET_PX, useMacTitleBarPadding } from "@/hooks/useMacTitleBarPadding";
+import { isMac } from "@/lib/platform";
 import { ProjectTabs } from "./components/shared/ProjectTabs";
 import { TopBar } from "./components/shared/TopBar";
 import { Sidebar } from "./components/sidebar/Sidebar";
@@ -93,6 +95,7 @@ function App() {
   }, [initializeTerminalSettings]);
 
   const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
+  const macTitleBarPadding = useMacTitleBarPadding();
   const activeTab = tabs.find((tab) => tab.active) ?? null;
   const activeProjectPath = activeTab?.projectPath;
 
@@ -150,8 +153,14 @@ function App() {
     });
   }, []);
 
+  const macTitleBarInset =
+    isMac() && macTitleBarPadding ? `${MAC_TITLE_BAR_INSET_PX}px` : "0";
+
   return (
-    <div className="flex h-screen w-screen flex-col bg-maestro-bg">
+    <div
+      className="flex h-screen w-screen flex-col bg-maestro-bg"
+      style={{ ["--mac-title-bar-inset" as string]: macTitleBarInset }}
+    >
       {/* Project tabs — full width at top (with window controls) */}
       <ProjectTabs
         tabs={tabs.map((t) => ({ id: t.id, name: t.name, active: t.active }))}

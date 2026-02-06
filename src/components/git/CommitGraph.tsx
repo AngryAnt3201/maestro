@@ -12,6 +12,10 @@ interface CommitGraphProps {
 }
 
 export const ROW_HEIGHT = 28;
+const RAIL_WIDTH = 16;
+const GRAPH_PADDING = 12;
+const MIN_MESSAGE_WIDTH = 200;
+const METADATA_WIDTH = 120;
 
 export function CommitGraph({
   repoPath,
@@ -151,7 +155,11 @@ export function CommitGraph({
 
   // Calculate canvas width for positioning
   const maxColumn = rails.length > 0 ? rails.length - 1 : 0;
-  const canvasWidth = 12 + (maxColumn + 1) * 16 + 12;
+  const graphAreaWidth = GRAPH_PADDING + (maxColumn + 1) * RAIL_WIDTH + GRAPH_PADDING;
+
+  // Calculate total content width for horizontal scrolling
+  // Only enable horizontal scroll when graph area is wide enough to overlap content
+  const minTotalWidth = graphAreaWidth + MIN_MESSAGE_WIDTH + METADATA_WIDTH;
 
   return (
     <div
@@ -159,44 +167,48 @@ export function CommitGraph({
       className="relative h-full overflow-auto"
       style={{ scrollbarWidth: "thin" }}
     >
-      {/* Graph lines layer */}
-      <div className="absolute left-0 top-0" style={{ width: canvasWidth }}>
-        <GraphCanvas
-          nodes={nodes}
-          rowHeight={ROW_HEIGHT}
-          visibleStartRow={visibleRange.start}
-          visibleEndRow={visibleRange.end}
-        />
-      </div>
-
-      {/* Commit rows layer */}
-      <div className="relative">
-        {nodes.map((node) => (
-          <CommitRow
-            key={node.commit.hash}
-            node={node}
-            isSelected={node.commit.hash === selectedCommitHash}
-            isHead={node.commit.hash === headCommitHash}
-            refs={refsCache.get(node.commit.hash) ?? []}
-            onClick={() => onSelectCommit(node)}
+      {/* Scrollable content wrapper */}
+      <div className="relative" style={{ minWidth: minTotalWidth }}>
+        {/* Graph lines layer */}
+        <div className="absolute left-0 top-0" style={{ width: graphAreaWidth }}>
+          <GraphCanvas
+            nodes={nodes}
+            rowHeight={ROW_HEIGHT}
+            visibleStartRow={visibleRange.start}
+            visibleEndRow={visibleRange.end}
           />
-        ))}
+        </div>
 
-        {/* Load more indicator */}
-        {isLoadingMore && (
-          <div className="flex items-center justify-center py-2">
-            <span className="text-xs text-maestro-muted">Loading more...</span>
-          </div>
-        )}
+        {/* Commit rows layer */}
+        <div className="relative">
+          {nodes.map((node) => (
+            <CommitRow
+              key={node.commit.hash}
+              node={node}
+              isSelected={node.commit.hash === selectedCommitHash}
+              isHead={node.commit.hash === headCommitHash}
+              refs={refsCache.get(node.commit.hash) ?? []}
+              onClick={() => onSelectCommit(node)}
+              graphAreaWidth={graphAreaWidth}
+            />
+          ))}
 
-        {/* End of history indicator */}
-        {!hasMoreCommits && commits.length > 0 && (
-          <div className="flex items-center justify-center py-2">
-            <span className="text-[10px] text-maestro-muted/50">
-              End of history
-            </span>
-          </div>
-        )}
+          {/* Load more indicator */}
+          {isLoadingMore && (
+            <div className="flex items-center justify-center py-2">
+              <span className="text-xs text-maestro-muted">Loading more...</span>
+            </div>
+          )}
+
+          {/* End of history indicator */}
+          {!hasMoreCommits && commits.length > 0 && (
+            <div className="flex items-center justify-center py-2">
+              <span className="text-[10px] text-maestro-muted/50">
+                End of history
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

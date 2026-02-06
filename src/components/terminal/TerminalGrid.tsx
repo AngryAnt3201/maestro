@@ -31,7 +31,7 @@ import { useMcpStore } from "@/stores/useMcpStore";
 import { usePluginStore } from "@/stores/usePluginStore";
 import { useSessionStore } from "@/stores/useSessionStore";
 import type { AiMode } from "@/stores/useSessionStore";
-import { useWorkspaceStore } from "@/stores/useWorkspaceStore";
+import { useWorkspaceStore, type RepositoryInfo, type WorkspaceType } from "@/stores/useWorkspaceStore";
 import { PreLaunchCard, type SessionSlot } from "./PreLaunchCard";
 import { TerminalView } from "./TerminalView";
 
@@ -126,6 +126,11 @@ export interface TerminalGridHandle {
 /**
  * @property projectPath - Working directory passed to `spawnShell`; when absent the backend
  *   uses its own default cwd.
+ * @property repoPath - Git repository path for branch/worktree operations. Defaults to projectPath.
+ *   For multi-repo workspaces, this is the selected repository path.
+ * @property repositories - List of all repositories in the workspace (for multi-repo workspaces).
+ * @property workspaceType - Type of workspace: "single-repo" | "multi-repo" | "non-git".
+ * @property onRepoChange - Callback to change the selected repository in multi-repo workspaces.
  * @property tabId - Workspace tab ID for session-project association.
  * @property preserveOnHide - If true, don't kill sessions when component unmounts (for project switching).
  * @property onSessionCountChange - Fires whenever session counts change,
@@ -133,6 +138,10 @@ export interface TerminalGridHandle {
  */
 interface TerminalGridProps {
   projectPath?: string;
+  repoPath?: string;
+  repositories?: RepositoryInfo[];
+  workspaceType?: WorkspaceType;
+  onRepoChange?: (path: string) => void;
   tabId?: string;
   preserveOnHide?: boolean;
   onSessionCountChange?: (slotCount: number, launchedCount: number) => void;
@@ -152,9 +161,12 @@ interface TerminalGridProps {
  *   a fresh slot so the user is never left with an empty grid.
  */
 export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(function TerminalGrid(
-  { projectPath, tabId, preserveOnHide = false, onSessionCountChange },
+  { projectPath, repoPath, repositories, workspaceType, onRepoChange, tabId, preserveOnHide = false, onSessionCountChange },
   ref,
 ) {
+  // Use repoPath for git operations, falling back to projectPath
+  const effectiveRepoPath = repoPath ?? projectPath;
+
   const addSessionToProject = useWorkspaceStore((s) => s.addSessionToProject);
   const removeSessionFromProject = useWorkspaceStore((s) => s.removeSessionFromProject);
 
@@ -179,6 +191,9 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
   // Track which terminal slot is focused (by slot ID)
   const [focusedSlotId, setFocusedSlotId] = useState<string | null>(null);
+
+  // Track which terminal slot is zoomed (takes full screen)
+  const [zoomedSlotId, setZoomedSlotId] = useState<string | null>(null);
 
   // Git branch data
   const [branches, setBranches] = useState<BranchWithWorktreeStatus[]>([]);
@@ -235,15 +250,15 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     onSessionCountChange?.(slots.length, launchedCount);
   }, [slots, onSessionCountChange]);
 
-  // Fetch branches and MCP servers when projectPath is available
+  // Fetch branches when effectiveRepoPath is available
   useEffect(() => {
-    if (!projectPath) {
+    if (!effectiveRepoPath) {
       setIsGitRepo(false);
       return;
     }
 
     setIsLoadingBranches(true);
-    getBranchesWithWorktreeStatus(projectPath)
+    getBranchesWithWorktreeStatus(effectiveRepoPath)
       .then((branchList) => {
         setBranches(branchList);
         setIsGitRepo(true);
@@ -254,6 +269,11 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
         setIsGitRepo(false);
         setIsLoadingBranches(false);
       });
+  }, [effectiveRepoPath]);
+
+  // Fetch MCP servers and plugins when projectPath is available
+  useEffect(() => {
+    if (!projectPath) return;
 
     // Fetch MCP servers
     fetchMcpServers(projectPath).catch(console.error);
@@ -333,7 +353,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
    * Called when slot config changes (plugins, skills, MCP servers).
    */
   const debouncedSaveBranchConfig = useCallback((slot: SessionSlot) => {
-    if (!projectPath || !slot.branch) return;
+    if (!effectiveRepoPath || !slot.branch) return;
 
     // Clear existing timer for this slot
     const existingTimer = branchConfigSaveTimers.current.get(slot.id);
@@ -343,7 +363,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
     // Set new timer
     const timer = setTimeout(() => {
-      saveBranchConfig(projectPath, slot.branch!, {
+      saveBranchConfig(effectiveRepoPath, slot.branch!, {
         enabled_plugins: slot.enabledPlugins,
         enabled_skills: slot.enabledSkills,
         enabled_mcp_servers: slot.enabledMcpServers,
@@ -354,7 +374,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     }, 500);
 
     branchConfigSaveTimers.current.set(slot.id, timer);
-  }, [projectPath]);
+  }, [effectiveRepoPath]);
 
   // Save branch config when slot config changes (debounced)
   // Track previous slots to detect config changes
@@ -398,8 +418,8 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
     try {
       // Save branch config before launching (ensures it's persisted)
-      if (projectPath && slot.branch) {
-        await saveBranchConfig(projectPath, slot.branch, {
+      if (effectiveRepoPath && slot.branch) {
+        await saveBranchConfig(effectiveRepoPath, slot.branch, {
           enabled_plugins: slot.enabledPlugins,
           enabled_skills: slot.enabledSkills,
           enabled_mcp_servers: slot.enabledMcpServers,
@@ -411,12 +431,13 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
       // Determine the working directory
       // If a branch is selected, prepare a worktree first
-      let workingDirectory = projectPath;
+      // For multi-repo workspaces, use effectiveRepoPath for git operations
+      let workingDirectory = effectiveRepoPath ?? projectPath;
       let worktreePath: string | null = null;
       let worktreeWarning: string | null = null;
 
-      if (projectPath && slot.branch) {
-        const result = await prepareSessionWorktree(projectPath, slot.branch);
+      if (effectiveRepoPath && slot.branch) {
+        const result = await prepareSessionWorktree(effectiveRepoPath, slot.branch);
         workingDirectory = result.working_directory;
         worktreePath = result.worktree_path;
         worktreeWarning = result.warning;
@@ -555,7 +576,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       console.error("Failed to spawn shell:", err);
       setError("Failed to start terminal session");
     }
-  }, [projectPath, tabId, addSessionToProject]);
+  }, [projectPath, effectiveRepoPath, tabId, addSessionToProject]);
 
   /**
    * Launches a single slot by spawning a shell with the configured settings.
@@ -616,10 +637,11 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     }
 
     // Clean up worktree if one was created (fire-and-forget)
-    if (projectPath && worktreePath) {
-      cleanupSessionWorktree(projectPath, worktreePath).catch(console.error);
+    // Use effectiveRepoPath for worktree cleanup since worktrees are git-repo specific
+    if (effectiveRepoPath && worktreePath) {
+      cleanupSessionWorktree(effectiveRepoPath, worktreePath).catch(console.error);
     }
-  }, [tabId, projectPath, removeSessionFromProject]);
+  }, [tabId, effectiveRepoPath, projectPath, removeSessionFromProject]);
 
   /**
    * Removes a pre-launch slot (before it's launched).
@@ -651,10 +673,10 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       )
     );
 
-    // If a branch is selected and we have a project path, try to load saved config
-    if (branch && projectPath) {
+    // If a branch is selected and we have a repo path, try to load saved config
+    if (branch && effectiveRepoPath) {
       try {
-        const savedConfig = await loadBranchConfig(projectPath, branch);
+        const savedConfig = await loadBranchConfig(effectiveRepoPath, branch);
         if (savedConfig) {
           // Apply saved config to the slot
           setSlots((prev) =>
@@ -674,7 +696,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
         // Non-fatal - continue with current slot config
       }
     }
-  }, [projectPath]);
+  }, [effectiveRepoPath]);
 
   /**
    * Toggles an MCP server for a slot.
@@ -853,6 +875,125 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     );
   }
 
+  // Handle zoom toggle for a slot
+  const handleToggleZoom = useCallback((slotId: string) => {
+    setZoomedSlotId(prev => prev === slotId ? null : slotId);
+  }, []);
+
+  // Handle Escape key to exit zoom mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && zoomedSlotId) {
+        handleToggleZoom(zoomedSlotId);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [zoomedSlotId, handleToggleZoom]);
+
+  // If a terminal is zoomed, show only that one at full screen with navigation bar
+  if (zoomedSlotId) {
+    const zoomedSlot = slots.find(s => s.id === zoomedSlotId);
+    if (!zoomedSlot) {
+      setZoomedSlotId(null);
+    } else {
+      const zoomedIndex = slots.findIndex(s => s.id === zoomedSlotId);
+
+      return (
+        <div className="relative flex h-full flex-col bg-maestro-bg">
+          {/* Top Navigation Bar */}
+          <div className="flex shrink-0 items-center gap-2 border-b border-maestro-border bg-maestro-surface px-4 py-2 animate-in fade-in slide-in-from-top duration-200">
+            <span className="text-xs font-semibold uppercase tracking-wider text-maestro-muted">
+              Zoom View - Terminal {zoomedIndex + 1}/{slots.length}
+            </span>
+            <div className="h-4 w-px bg-maestro-border" />
+            <div className="flex gap-1">
+              {slots.map((slot, index) => {
+                const isActive = slot.id === zoomedSlotId;
+                const hasSession = slot.sessionId !== null;
+
+                return (
+                  <button
+                    key={slot.id}
+                    onClick={() => handleToggleZoom(slot.id)}
+                    className={`
+                      relative flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all duration-200
+                      ${isActive
+                        ? 'bg-maestro-card text-white scale-110'
+                        : 'bg-maestro-card text-maestro-muted hover:bg-maestro-card/80 hover:text-maestro-text hover:scale-105'
+                      }
+                    `}
+                    title={isActive ? 'Current terminal (click to exit zoom)' : `Switch to terminal ${index + 1}`}
+                  >
+                    {isActive && (
+                      <span className="absolute inset-0 rounded-lg border-2 border-blue-500 animate-pulse shadow-lg shadow-blue-500/50"></span>
+                    )}
+                    <span className="font-mono text-base">{index + 1}</span>
+                    {hasSession && (
+                      <span className="h-2 w-2 rounded-full bg-maestro-green shadow-lg shadow-maestro-green/50" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex-1" />
+            <button
+              onClick={() => handleToggleZoom(zoomedSlotId)}
+              className="rounded p-1.5 text-maestro-muted transition-colors hover:bg-maestro-card hover:text-maestro-text"
+              title="Exit zoom (Esc)"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Zoomed Terminal Content */}
+          <div className="flex-1 p-2 animate-in zoom-in-95 duration-300">
+            {zoomedSlot.sessionId !== null ? (
+              <TerminalView
+                key={zoomedSlot.id}
+                sessionId={zoomedSlot.sessionId}
+                isFocused={true}
+                onFocus={() => setFocusedSlotId(zoomedSlot.id)}
+                onKill={handleKill}
+                terminalCount={slots.length}
+                isZoomed={true}
+                onToggleZoom={() => handleToggleZoom(zoomedSlot.id)}
+              />
+            ) : (
+              <PreLaunchCard
+                key={zoomedSlot.id}
+                slot={zoomedSlot}
+                projectPath={projectPath ?? ""}
+                branches={branches}
+                isLoadingBranches={isLoadingBranches}
+                isGitRepo={isGitRepo}
+                mcpServers={mcpServers}
+                skills={skills}
+                plugins={plugins}
+                onModeChange={(mode) => updateSlotMode(zoomedSlot.id, mode)}
+                onBranchChange={(branch) => updateSlotBranch(zoomedSlot.id, branch)}
+                onMcpToggle={(serverName) => toggleSlotMcp(zoomedSlot.id, serverName)}
+                onSkillToggle={(skillId) => toggleSlotSkill(zoomedSlot.id, skillId)}
+                onPluginToggle={(pluginId) => toggleSlotPlugin(zoomedSlot.id, pluginId)}
+                onMcpSelectAll={() => selectAllMcp(zoomedSlot.id)}
+                onMcpUnselectAll={() => unselectAllMcp(zoomedSlot.id)}
+                onPluginsSelectAll={() => selectAllPlugins(zoomedSlot.id)}
+                onPluginsUnselectAll={() => unselectAllPlugins(zoomedSlot.id)}
+                onLaunch={() => launchSlot(zoomedSlot.id)}
+                onRemove={() => removeSlot(zoomedSlot.id)}
+                isZoomed={true}
+                onToggleZoom={() => handleToggleZoom(zoomedSlot.id)}
+              />
+            )}
+          </div>
+        </div>
+      );
+    }
+  }
+
   return (
     <div className={`grid h-full ${gridClass(slots.length)} gap-2 bg-maestro-bg p-2`}>
       {slots.map((slot) =>
@@ -863,6 +1004,9 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             isFocused={focusedSlotId === slot.id}
             onFocus={() => setFocusedSlotId(slot.id)}
             onKill={handleKill}
+            terminalCount={slots.length}
+            isZoomed={false}
+            onToggleZoom={() => handleToggleZoom(slot.id)}
           />
         ) : (
           <PreLaunchCard
@@ -872,6 +1016,11 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             branches={branches}
             isLoadingBranches={isLoadingBranches}
             isGitRepo={isGitRepo}
+            repositories={repositories}
+            workspaceType={workspaceType}
+            selectedRepoPath={effectiveRepoPath}
+            onRepoChange={onRepoChange}
+            fetchBranchesForRepo={getBranchesWithWorktreeStatus}
             mcpServers={mcpServers}
             skills={skills}
             plugins={plugins}
@@ -886,6 +1035,8 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             onPluginsUnselectAll={() => unselectAllPlugins(slot.id)}
             onLaunch={() => launchSlot(slot.id)}
             onRemove={() => removeSlot(slot.id)}
+            isZoomed={false}
+            onToggleZoom={() => handleToggleZoom(slot.id)}
           />
         )
       )}

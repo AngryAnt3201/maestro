@@ -1,6 +1,8 @@
 import {
   Check,
   Edit2,
+  FolderSearch,
+  GitBranch,
   Loader2,
   Mail,
   Plus,
@@ -10,11 +12,14 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useGitStore } from "@/stores/useGitStore";
+import { useWorkspaceStore, type RepositoryInfo } from "@/stores/useWorkspaceStore";
 import { RemoteStatusIndicator } from "./RemoteStatusIndicator";
 
 interface GitSettingsModalProps {
   repoPath: string;
+  tabId: string;
   onClose: () => void;
 }
 
@@ -24,7 +29,7 @@ interface GitSettingsModalProps {
  * - Remotes (add/edit/delete with connection testing)
  * - Default Branch configuration
  */
-export function GitSettingsModal({ repoPath, onClose }: GitSettingsModalProps) {
+export function GitSettingsModal({ repoPath, tabId, onClose }: GitSettingsModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click
@@ -70,6 +75,7 @@ export function GitSettingsModal({ repoPath, onClose }: GitSettingsModalProps) {
         {/* Content */}
         <div className="max-h-[70vh] space-y-4 overflow-y-auto p-4">
           <UserIdentitySection repoPath={repoPath} />
+          <RepositoryDiscoverySection repoPath={repoPath} tabId={tabId} />
           <RemotesSection repoPath={repoPath} />
           <DefaultBranchSection repoPath={repoPath} />
         </div>
@@ -163,6 +169,116 @@ function UserIdentitySection({ repoPath }: { repoPath: string }) {
             Save
           </button>
         </div>
+      </div>
+    </section>
+  );
+}
+
+/* ── Repository Discovery Section ── */
+
+function RepositoryDiscoverySection({ repoPath, tabId }: { repoPath: string; tabId: string }) {
+  const [scanning, setScanning] = useState(false);
+  const [repositories, setRepositories] = useState<RepositoryInfo[]>([]);
+  const [hasScanned, setHasScanned] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const updateRepositories = useWorkspaceStore((s) => s.updateRepositories);
+
+  // Format remote URL for display (shorten GitHub URLs)
+  const formatRemoteUrl = (url: string) => {
+    // git@github.com:user/repo.git -> github.com/user/repo
+    // https://github.com/user/repo.git -> github.com/user/repo
+    const match = url.match(/github\.com[:/](.+?)(?:\.git)?$/);
+    if (match) {
+      return `github.com/${match[1]}`;
+    }
+    // For other URLs, just show the host/path
+    try {
+      const parsed = new URL(url.replace(/^git@/, "https://").replace(/:(?!\/\/)/, "/"));
+      return `${parsed.host}${parsed.pathname.replace(/\.git$/, "")}`;
+    } catch {
+      return url;
+    }
+  };
+
+  const handleScan = async () => {
+    setScanning(true);
+    setError(null);
+    try {
+      const repos = await invoke<RepositoryInfo[]>("detect_repositories", { path: repoPath });
+      setRepositories(repos);
+      setHasScanned(true);
+      // Update the workspace store with found repositories
+      if (tabId) {
+        updateRepositories(tabId, repos);
+      }
+    } catch (err) {
+      console.error("Failed to scan for repositories:", err);
+      setError(err instanceof Error ? err.message : "Failed to scan for repositories");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  return (
+    <section>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-maestro-muted">
+        Repository Discovery
+      </h3>
+      <div className="space-y-2 rounded-lg border border-maestro-border bg-maestro-card p-3">
+        <p className="text-xs text-maestro-muted">
+          Scan this workspace for nested git repositories.
+        </p>
+
+        <button
+          type="button"
+          onClick={handleScan}
+          disabled={scanning}
+          className="flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium bg-maestro-accent/10 text-maestro-accent hover:bg-maestro-accent/20 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {scanning ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <FolderSearch size={14} />
+          )}
+          {scanning ? "Scanning..." : "Scan for Repositories"}
+        </button>
+
+        {error && (
+          <p className="text-xs text-maestro-red">{error}</p>
+        )}
+
+        {hasScanned && !error && (
+          <div className="pt-2 border-t border-maestro-border">
+            <p className="text-xs font-medium text-maestro-text mb-2">
+              Found {repositories.length} {repositories.length === 1 ? "repository" : "repositories"}:
+            </p>
+            {repositories.length === 0 ? (
+              <p className="text-xs text-maestro-muted">No git repositories found in this directory.</p>
+            ) : (
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {repositories.map((repo) => (
+                  <div
+                    key={repo.path}
+                    className="text-xs text-maestro-text py-1"
+                  >
+                    <div className="flex items-center gap-2">
+                      <GitBranch size={12} className="text-maestro-green shrink-0" />
+                      <span className="font-medium truncate">{repo.name}</span>
+                      {repo.currentBranch && (
+                        <span className="text-maestro-muted">({repo.currentBranch})</span>
+                      )}
+                    </div>
+                    {repo.remoteUrl && (
+                      <div className="pl-5 text-[11px] text-maestro-muted truncate" title={repo.remoteUrl}>
+                        {formatRemoteUrl(repo.remoteUrl)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </section>
   );

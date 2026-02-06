@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { isMac } from "@/lib/platform";
 import { useGitStore } from "../../stores/useGitStore";
 import { BranchDropdown } from "./BranchDropdown";
 import { StatusLegend } from "./StatusLegend";
@@ -81,8 +82,11 @@ export function TopBar({
 
   return (
     <div data-tauri-drag-region className="no-select flex h-10 flex-1 items-center bg-maestro-bg">
-      {/* Left: collapse toggle (3D button) + branch area */}
-      <div className="flex items-center gap-2 px-2">
+      {/* Left: collapse toggle + branch area (inset from CSS var for macOS traffic lights) */}
+      <div
+        className="flex items-center gap-2 pr-2"
+        style={{ paddingLeft: "max(var(--mac-title-bar-inset, 0px), 8px)" }}
+      >
         {/* Sidebar toggle - only shown when ProjectTabs isn't providing it */}
         {!hideWindowControls && (
           <button
@@ -160,8 +164,8 @@ export function TopBar({
         </button>
       </div>
 
-      {/* Window controls (scaled down ~15%) - only shown when not hidden */}
-      {!hideWindowControls && (
+      {/* Window controls - hidden on macOS (custom traffic lights in row) or when hideWindowControls */}
+      {!hideWindowControls && !isMac() && (
         <div className="flex items-center border-l border-maestro-border">
           <button
             type="button"

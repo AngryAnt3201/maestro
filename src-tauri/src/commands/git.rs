@@ -2,6 +2,21 @@ use std::path::PathBuf;
 
 use crate::git::{BranchInfo, CommitInfo, FileChange, Git, GitError, GitUserConfig, RemoteInfo, WorktreeInfo};
 
+/// Information about a detected git repository within a workspace.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RepositoryInfo {
+    /// Absolute path to the repository root.
+    pub path: String,
+    /// Display name (folder name).
+    pub name: String,
+    /// Current branch name (if available).
+    #[serde(rename = "currentBranch")]
+    pub current_branch: Option<String>,
+    /// Primary remote URL (origin, or first remote if no origin).
+    #[serde(rename = "remoteUrl")]
+    pub remote_url: Option<String>,
+}
+
 /// Returns `Err(GitError::NotARepo)` if the given path string is empty.
 fn validate_repo_path(repo_path: &str) -> Result<(), GitError> {
     if repo_path.is_empty() {
@@ -227,4 +242,115 @@ pub async fn git_set_default_branch(
     validate_repo_path(&repo_path)?;
     let git = Git::new(&repo_path);
     git.set_default_branch(&branch, global).await
+}
+
+/// Checks if a path is a git repository root.
+/// Returns true if the path contains a .git directory or file (could be a worktree).
+#[tauri::command]
+pub async fn is_git_repository(path: String) -> Result<bool, GitError> {
+    let git_path = std::path::Path::new(&path).join(".git");
+    Ok(git_path.exists())
+}
+
+/// Recursively scans a directory for nested git repositories.
+/// Skips common non-project directories (node_modules, .git, etc.) and
+/// limits depth to avoid performance issues.
+#[tauri::command]
+pub async fn detect_repositories(path: String) -> Result<Vec<RepositoryInfo>, GitError> {
+    let mut repos = Vec::new();
+    let root = std::path::Path::new(&path);
+
+    // Directories to skip during recursive scan
+    let skip_dirs = [
+        "node_modules",
+        ".git",
+        "target",
+        "build",
+        "dist",
+        ".next",
+        "vendor",
+        "__pycache__",
+        ".venv",
+        "venv",
+        ".cargo",
+    ];
+
+    // Walk directory recursively (max depth 5 to avoid performance issues)
+    detect_repos_recursive(root, &mut repos, &skip_dirs, 0, 5).await;
+
+    Ok(repos)
+}
+
+/// Internal recursive helper for detect_repositories.
+/// Uses Box::pin for async recursion.
+fn detect_repos_recursive<'a>(
+    dir: &'a std::path::Path,
+    repos: &'a mut Vec<RepositoryInfo>,
+    skip_dirs: &'a [&'a str],
+    depth: usize,
+    max_depth: usize,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+    Box::pin(async move {
+        if depth > max_depth {
+            return;
+        }
+
+        // Check if this directory is a git repo
+        let git_path = dir.join(".git");
+        let is_git_repo = git_path.exists();
+
+        if is_git_repo {
+            // Get current branch and remotes (best effort)
+            let git = Git::new(dir.to_str().unwrap_or_default());
+            let current_branch = git.current_branch().await.ok();
+
+            // Get primary remote URL (prefer "origin", fall back to first remote)
+            let remote_url = match git.list_remotes().await {
+                Ok(remotes) => {
+                    remotes
+                        .iter()
+                        .find(|r| r.name == "origin")
+                        .or_else(|| remotes.first())
+                        .map(|r| r.url.clone())
+                }
+                Err(_) => None,
+            };
+
+            repos.push(RepositoryInfo {
+                path: dir.to_string_lossy().to_string(),
+                name: dir
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| dir.to_string_lossy().to_string()),
+                current_branch,
+                remote_url,
+            });
+            // Continue scanning - there may be nested repos (submodules, monorepo packages, etc.)
+        }
+
+        // Read directory entries
+        let entries = match std::fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            // Skip hidden and excluded directories
+            if name.starts_with('.') || skip_dirs.contains(&name.as_str()) {
+                continue;
+            }
+
+            detect_repos_recursive(&path, repos, skip_dirs, depth + 1, max_depth).await;
+        }
+    })
 }

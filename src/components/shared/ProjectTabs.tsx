@@ -2,6 +2,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Minus, PanelLeft, Plus, Square, X } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import { useProjectStatus, STATUS_COLORS } from "@/hooks/useProjectStatus";
+import { isMac } from "@/lib/platform";
 
 export type ProjectTab = {
   id: string;
@@ -114,8 +115,11 @@ export function ProjectTabs({
       data-tauri-drag-region
       className="theme-transition no-select flex h-9 items-center border-b border-maestro-border bg-maestro-surface"
     >
-      {/* Left: sidebar toggle + tabs */}
-      <div className="flex items-center gap-0.5 px-1.5">
+      {/* Left: sidebar toggle + tabs (inset from CSS var for macOS traffic lights) */}
+      <div
+        className="flex items-center gap-0.5 pr-1.5"
+        style={{ paddingLeft: "max(var(--mac-title-bar-inset, 0px), 6px)" }}
+      >
         <button
           type="button"
           onClick={onToggleSidebar}
@@ -180,33 +184,35 @@ export function ProjectTabs({
       {/* Center: drag region fills remaining space */}
       <div data-tauri-drag-region className="flex-1" />
 
-      {/* Right: window controls */}
-      <div className="flex items-center">
-        <button
-          type="button"
-          onClick={() => appWindow.minimize()}
-          className="flex h-9 w-11 items-center justify-center text-maestro-muted transition-colors hover:bg-maestro-muted/10 hover:text-maestro-text"
-          aria-label="Minimize"
-        >
-          <Minus size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => appWindow.toggleMaximize()}
-          className="flex h-9 w-11 items-center justify-center text-maestro-muted transition-colors hover:bg-maestro-muted/10 hover:text-maestro-text"
-          aria-label="Maximize"
-        >
-          <Square size={12} />
-        </button>
-        <button
-          type="button"
-          onClick={() => appWindow.close()}
-          className="flex h-9 w-11 items-center justify-center text-maestro-muted transition-colors hover:bg-maestro-red/80 hover:text-white"
-          aria-label="Close"
-        >
-          <X size={14} />
-        </button>
-      </div>
+      {/* Right: window controls (hidden on macOS — custom traffic lights in row instead) */}
+      {!isMac() && (
+        <div className="flex items-center">
+          <button
+            type="button"
+            onClick={() => appWindow.minimize()}
+            className="flex h-9 w-11 items-center justify-center text-maestro-muted transition-colors hover:bg-maestro-muted/10 hover:text-maestro-text"
+            aria-label="Minimize"
+          >
+            <Minus size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={() => appWindow.toggleMaximize()}
+            className="flex h-9 w-11 items-center justify-center text-maestro-muted transition-colors hover:bg-maestro-muted/10 hover:text-maestro-text"
+            aria-label="Maximize"
+          >
+            <Square size={12} />
+          </button>
+          <button
+            type="button"
+            onClick={() => appWindow.close()}
+            className="flex h-9 w-11 items-center justify-center text-maestro-muted transition-colors hover:bg-maestro-red/80 hover:text-white"
+            aria-label="Close"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

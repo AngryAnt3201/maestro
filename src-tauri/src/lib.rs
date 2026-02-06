@@ -1,6 +1,7 @@
 mod commands;
 mod core;
 mod git;
+mod github;
 
 use std::sync::Arc;
 
@@ -111,6 +112,8 @@ pub fn run() {
             commands::git::git_set_remote_url,
             commands::git::git_get_default_branch,
             commands::git::git_set_default_branch,
+            commands::git::is_git_repository,
+            commands::git::detect_repositories,
             // Session commands (new)
             commands::session::get_sessions,
             commands::session::create_session,
@@ -182,6 +185,24 @@ pub fn run() {
             // Font detection commands
             commands::fonts::get_available_fonts,
             commands::fonts::check_font_available,
+            // Usage tracking commands
+            commands::usage::get_claude_usage,
+            // GitHub commands
+            commands::github::github_auth_status,
+            commands::github::github_list_prs,
+            commands::github::github_get_pr,
+            commands::github::github_create_pr,
+            commands::github::github_merge_pr,
+            commands::github::github_close_pr,
+            commands::github::github_comment_pr,
+            commands::github::github_list_issues,
+            commands::github::github_list_discussions,
+            commands::github::github_get_issue,
+            commands::github::github_comment_issue,
+            commands::github::github_close_issue,
+            commands::github::github_reopen_issue,
+            commands::github::github_get_discussion,
+            commands::github::github_comment_discussion,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Maestro");
