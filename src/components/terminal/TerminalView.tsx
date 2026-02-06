@@ -1,7 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 
 import { QuickActionsManager } from "@/components/quickactions/QuickActionsManager";
@@ -12,6 +12,7 @@ import { DEFAULT_THEME, LIGHT_THEME, toXtermTheme } from "@/lib/terminalTheme";
 import { useMcpStore } from "@/stores/useMcpStore";
 import { type AiMode, type BackendSessionStatus, useSessionStore } from "@/stores/useSessionStore";
 import { useTerminalSettingsStore } from "@/stores/useTerminalSettingsStore";
+import { useShallow } from "zustand/react/shallow";
 import { QuickActionPills } from "./QuickActionPills";
 import { type AIProvider, type SessionStatus, TerminalHeader } from "./TerminalHeader";
 
@@ -96,17 +97,33 @@ function cellStatusClass(status: SessionStatus): string {
  * ResizeObserver, disposes xterm listeners, unsubscribes the Tauri event listener
  * (even if the listener promise hasn't resolved yet), and destroys the Terminal.
  */
-export function TerminalView({ sessionId, status = "idle", isFocused = false, onFocus, onKill }: TerminalViewProps) {
-  const sessionConfig = useSessionStore((s) => s.sessions.find((sess) => sess.id === sessionId));
-  const effectiveStatus = sessionConfig ? mapStatus(sessionConfig.status) : status;
-  const effectiveProvider = sessionConfig ? mapAiMode(sessionConfig.mode) : "claude";
-  const isWorktree = Boolean(sessionConfig?.worktree_path);
-  const projectPath = sessionConfig?.project_path ?? "";
-  const liveBranch = useSessionBranch(projectPath, isWorktree, sessionConfig?.branch ?? null);
+export const TerminalView = memo(function TerminalView({ sessionId, status = "idle", isFocused = false, onFocus, onKill }: TerminalViewProps) {
+  const sessionData = useSessionStore(
+    useShallow((s) => {
+      const sess = s.sessions.find((x) => x.id === sessionId);
+      if (!sess) return null;
+      return {
+        status: sess.status,
+        mode: sess.mode,
+        projectPath: sess.project_path,
+        worktreePath: sess.worktree_path,
+        branch: sess.branch,
+        statusMessage: sess.statusMessage,
+        needsInputPrompt: sess.needsInputPrompt,
+      };
+    })
+  );
+  const effectiveStatus = sessionData ? mapStatus(sessionData.status) : status;
+  const effectiveProvider = sessionData ? mapAiMode(sessionData.mode) : "claude";
+  const isWorktree = Boolean(sessionData?.worktreePath);
+  const projectPath = sessionData?.projectPath ?? "";
+  const liveBranch = useSessionBranch(projectPath, isWorktree, sessionData?.branch ?? null);
   const effectiveBranch = liveBranch ?? "...";
 
-  // Get terminal settings from store
-  const terminalSettings = useTerminalSettingsStore((s) => s.settings);
+  // Get terminal settings from store (select individual primitives for granular updates)
+  const fontSize = useTerminalSettingsStore((s) => s.settings.fontSize);
+  const fontFamily = useTerminalSettingsStore((s) => s.settings.fontFamily);
+  const lineHeight = useTerminalSettingsStore((s) => s.settings.lineHeight);
   const getEffectiveFontFamily = useTerminalSettingsStore((s) => s.getEffectiveFontFamily);
 
   // Get MCP count for this session (primitive values are stable, no reference issues)
@@ -121,6 +138,7 @@ export function TerminalView({ sessionId, status = "idle", isFocused = false, on
 
   // Quick actions manager modal state
   const [showQuickActionsManager, setShowQuickActionsManager] = useState(false);
+  const handleManageClick = useCallback(() => setShowQuickActionsManager(true), []);
 
   // Backend capabilities (for future enhanced features like terminal state queries)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -165,11 +183,11 @@ export function TerminalView({ sessionId, status = "idle", isFocused = false, on
   useEffect(() => {
     if (termRef.current && fitAddonRef.current) {
       const effectiveFont = getEffectiveFontFamily();
-      const fontFamily = buildFontFamily(effectiveFont);
+      const builtFontFamily = buildFontFamily(effectiveFont);
 
-      termRef.current.options.fontSize = terminalSettings.fontSize;
-      termRef.current.options.fontFamily = fontFamily;
-      termRef.current.options.lineHeight = terminalSettings.lineHeight;
+      termRef.current.options.fontSize = fontSize;
+      termRef.current.options.fontFamily = builtFontFamily;
+      termRef.current.options.lineHeight = lineHeight;
 
       // Refit terminal to recalculate cell dimensions
       requestAnimationFrame(() => {
@@ -180,7 +198,7 @@ export function TerminalView({ sessionId, status = "idle", isFocused = false, on
         }
       });
     }
-  }, [terminalSettings.fontSize, terminalSettings.fontFamily, terminalSettings.lineHeight, getEffectiveFontFamily]);
+  }, [fontSize, fontFamily, lineHeight, getEffectiveFontFamily]);
 
   /**
    * Immediately removes the terminal from UI (optimistic update),
@@ -361,7 +379,7 @@ export function TerminalView({ sessionId, status = "idle", isFocused = false, on
         sessionId={sessionId}
         provider={effectiveProvider}
         status={effectiveStatus}
-        statusMessage={sessionConfig?.statusMessage || sessionConfig?.needsInputPrompt}
+        statusMessage={sessionData?.statusMessage || sessionData?.needsInputPrompt}
         mcpCount={mcpCount}
         branchName={effectiveBranch}
         isWorktree={isWorktree}
@@ -374,7 +392,7 @@ export function TerminalView({ sessionId, status = "idle", isFocused = false, on
       {/* Quick action pills */}
       <QuickActionPills
         onAction={handleQuickAction}
-        onManageClick={() => setShowQuickActionsManager(true)}
+        onManageClick={handleManageClick}
       />
 
       {/* Quick actions manager modal */}
@@ -383,4 +401,4 @@ export function TerminalView({ sessionId, status = "idle", isFocused = false, on
       )}
     </div>
   );
-}
+});

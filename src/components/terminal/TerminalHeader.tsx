@@ -1,3 +1,4 @@
+import { memo } from "react";
 import {
   BrainCircuit,
   CheckCircle,
@@ -55,7 +56,7 @@ const providerConfig: Record<AIProvider, { icon: typeof BrainCircuit; label: str
   plain: { icon: Terminal, label: "Terminal" },
 };
 
-export function TerminalHeader({
+export const TerminalHeader = memo(function TerminalHeader({
   sessionId,
   provider = "claude",
   status = "idle",
@@ -180,4 +181,4 @@ export function TerminalHeader({
       </div>
     </div>
   );
-}
+});

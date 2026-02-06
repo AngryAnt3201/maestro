@@ -191,6 +191,18 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
   // Track debounce timers for saving branch config (keyed by slot ID)
   const branchConfigSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
+  // Stable per-slot focus callbacks — avoids creating new arrow functions on every render,
+  // which would defeat React.memo on TerminalView.
+  const focusCallbacksRef = useRef(new Map<string, () => void>());
+  const getFocusCallback = useCallback((slotId: string) => {
+    let cb = focusCallbacksRef.current.get(slotId);
+    if (!cb) {
+      cb = () => setFocusedSlotId(slotId);
+      focusCallbacksRef.current.set(slotId, cb);
+    }
+    return cb;
+  }, []);
+
   // Compute launched slots for keyboard navigation
   const launchedSlots = useMemo(
     () => slots.filter((s) => s.sessionId !== null),
@@ -595,6 +607,11 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     const worktreePath = slot?.worktreePath;
     const workingDir = worktreePath || projectPath;
 
+    // Clean up cached focus callback for this slot
+    if (slot) {
+      focusCallbacksRef.current.delete(slot.id);
+    }
+
     setSlots((prev) => prev.filter((s) => s.sessionId !== sessionId));
 
     // Remove session from the session store
@@ -625,6 +642,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
    * Removes a pre-launch slot (before it's launched).
    */
   const removeSlot = useCallback((slotId: string) => {
+    focusCallbacksRef.current.delete(slotId);
     setSlots((prev) => prev.filter((s) => s.id !== slotId));
   }, []);
 
@@ -861,7 +879,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             key={slot.id}
             sessionId={slot.sessionId}
             isFocused={focusedSlotId === slot.id}
-            onFocus={() => setFocusedSlotId(slot.id)}
+            onFocus={getFocusCallback(slot.id)}
             onKill={handleKill}
           />
         ) : (

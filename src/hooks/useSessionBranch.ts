@@ -1,7 +1,7 @@
 import { getCurrentBranch } from "@/lib/git";
 import { useEffect, useRef, useState } from "react";
 
-const POLL_INTERVAL_MS = 5_000;
+const POLL_INTERVAL_MS = 15_000;
 
 /**
  * Hook that returns the live branch name for a terminal session.

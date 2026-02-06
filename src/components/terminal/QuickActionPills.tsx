@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { DynamicIcon } from "@/components/quickactions/DynamicIcon";
 import { useQuickActionStore } from "@/stores/useQuickActionStore";
 
@@ -10,7 +10,7 @@ interface QuickActionPillsProps {
   onManageClick?: () => void;
 }
 
-export function QuickActionPills({ onAction, onManageClick }: QuickActionPillsProps) {
+export const QuickActionPills = memo(function QuickActionPills({ onAction, onManageClick }: QuickActionPillsProps) {
   // Select raw actions array (stable reference) instead of calling getSortedActions()
   // which creates a new array on every call and causes infinite re-renders
   const actions = useQuickActionStore((s) => s.actions);
@@ -53,4 +53,4 @@ export function QuickActionPills({ onAction, onManageClick }: QuickActionPillsPr
       </button>
     </div>
   );
-}
+});
