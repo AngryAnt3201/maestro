@@ -95,19 +95,19 @@ impl McpServer {
         Ok(())
     }
 
-    /// Handle a single JSON-RPC request.
+    /// Handle a single JSON-RPC request or notification.
     async fn handle_request(&self, request: &JsonRpcRequest) -> Option<JsonRpcResponse> {
-        // Notifications (no id) don't get responses
-        let id = request.id.clone()?;
+        // Notifications have no id — handle them first, then return None (no response)
+        if request.id.is_none() {
+            self.handle_notification(request).await;
+            return None;
+        }
+
+        // Safe: we just checked that id is Some
+        let id = request.id.clone().unwrap();
 
         let (result, error) = match request.method.as_str() {
             "initialize" => (Some(self.handle_initialize()), None),
-            "notifications/initialized" => {
-                // Auto-report "idle" status when Claude connects
-                eprintln!("[maestro-mcp-server] Initialized - reporting idle status");
-                let _ = self.status_reporter.report_status("idle", "Ready", None).await;
-                return None;
-            }
             "tools/list" => (Some(self.handle_tools_list()), None),
             "tools/call" => match self.handle_tools_call(&request.params).await {
                 Ok(result) => (Some(result), None),
@@ -135,6 +135,20 @@ impl McpServer {
             result,
             error,
         })
+    }
+
+    /// Handle a JSON-RPC notification (no id, no response).
+    async fn handle_notification(&self, request: &JsonRpcRequest) {
+        match request.method.as_str() {
+            "notifications/initialized" => {
+                // Auto-report "idle" status when Claude connects
+                eprintln!("[maestro-mcp-server] Initialized - reporting idle status");
+                let _ = self.status_reporter.report_status("idle", "Ready", None).await;
+            }
+            _ => {
+                eprintln!("[maestro-mcp-server] Unknown notification: {}", request.method);
+            }
+        }
     }
 
     /// Handle the initialize request.
@@ -232,5 +246,90 @@ impl McpServer {
                 "isError": true
             })),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper: create an McpServer with no status URL (won't make HTTP calls).
+    fn test_server() -> McpServer {
+        McpServer::new(None, Some(1), Some("test-instance".to_string()))
+    }
+
+    /// Helper: deserialize a JsonRpcRequest from JSON.
+    fn make_request(json: Value) -> JsonRpcRequest {
+        serde_json::from_value(json).expect("invalid test request JSON")
+    }
+
+    #[tokio::test]
+    async fn test_notification_without_id_returns_none() {
+        let server = test_server();
+        let request = make_request(json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        }));
+        let response = server.handle_request(&request).await;
+        assert!(response.is_none(), "notifications should not produce a response");
+    }
+
+    #[tokio::test]
+    async fn test_initialize_returns_capabilities() {
+        let server = test_server();
+        let request = make_request(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+        }));
+        let response = server.handle_request(&request).await.expect("should return response");
+        let result = response.result.expect("should have result");
+        assert_eq!(result["protocolVersion"], "2024-11-05");
+        assert!(result["capabilities"]["tools"].is_object());
+        assert_eq!(result["serverInfo"]["name"], "maestro-mcp-server");
+    }
+
+    #[tokio::test]
+    async fn test_tools_list_returns_maestro_status() {
+        let server = test_server();
+        let request = make_request(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list"
+        }));
+        let response = server.handle_request(&request).await.expect("should return response");
+        let result = response.result.expect("should have result");
+        let tools = result["tools"].as_array().expect("tools should be array");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0]["name"], "maestro_status");
+    }
+
+    #[tokio::test]
+    async fn test_unknown_method_returns_error() {
+        let server = test_server();
+        let request = make_request(json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "nonexistent/method"
+        }));
+        let response = server.handle_request(&request).await.expect("should return response");
+        assert!(response.result.is_none());
+        let error = response.error.expect("should have error");
+        assert_eq!(error.code, -32601);
+        assert!(error.message.contains("nonexistent/method"));
+    }
+
+    #[tokio::test]
+    async fn test_ping_returns_empty_object() {
+        let server = test_server();
+        let request = make_request(json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "ping"
+        }));
+        let response = server.handle_request(&request).await.expect("should return response");
+        let result = response.result.expect("should have result");
+        assert_eq!(result, json!({}));
     }
 }

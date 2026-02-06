@@ -17,8 +17,11 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::RwLock;
 
+/// Maximum number of pending statuses to buffer per session (prevents memory leaks).
+const MAX_PENDING_STATUSES: usize = 100;
+
 /// Status payload received from MCP server.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct StatusRequest {
     pub session_id: u32,
     pub instance_id: String,
@@ -45,13 +48,17 @@ struct ServerState {
     instance_id: String,
     /// Maps session_id -> project_path for routing status updates
     session_projects: Arc<RwLock<std::collections::HashMap<u32, String>>>,
+    /// Buffers status requests that arrive before session registration
+    pending_statuses: Arc<RwLock<std::collections::HashMap<u32, StatusRequest>>>,
 }
 
 /// HTTP status server that receives status updates from MCP servers.
 pub struct StatusServer {
     port: u16,
     instance_id: String,
+    app_handle: AppHandle,
     session_projects: Arc<RwLock<std::collections::HashMap<u32, String>>>,
+    pending_statuses: Arc<RwLock<std::collections::HashMap<u32, StatusRequest>>>,
 }
 
 impl StatusServer {
@@ -84,11 +91,13 @@ impl StatusServer {
         // process grabs the port between checking and binding
         let (port, listener) = Self::find_and_bind_port(9900, 9999).await?;
         let session_projects = Arc::new(RwLock::new(std::collections::HashMap::new()));
+        let pending_statuses = Arc::new(RwLock::new(std::collections::HashMap::new()));
 
         let state = Arc::new(ServerState {
-            app_handle,
+            app_handle: app_handle.clone(),
             instance_id: instance_id.clone(),
             session_projects: session_projects.clone(),
+            pending_statuses: pending_statuses.clone(),
         });
 
         let app = Router::new()
@@ -109,7 +118,9 @@ impl StatusServer {
         Some(Self {
             port,
             instance_id,
+            app_handle,
             session_projects,
+            pending_statuses,
         })
     }
 
@@ -130,14 +141,31 @@ impl StatusServer {
 
     /// Register a session with its project path.
     /// This allows routing status updates to the correct project.
+    /// Also flushes any buffered status that arrived before registration.
     pub async fn register_session(&self, session_id: u32, project_path: &str) {
-        let mut projects = self.session_projects.write().await;
-        projects.insert(session_id, project_path.to_string());
+        {
+            let mut projects = self.session_projects.write().await;
+            projects.insert(session_id, project_path.to_string());
+        }
         eprintln!(
             "[STATUS SERVER] Registered session {} for project '{}'",
             session_id,
             project_path
         );
+
+        // Check for and flush any buffered status for this session
+        let buffered = {
+            let mut pending = self.pending_statuses.write().await;
+            pending.remove(&session_id)
+        };
+
+        if let Some(payload) = buffered {
+            eprintln!(
+                "[STATUS SERVER] Flushing buffered status for session {}: state={}",
+                session_id, payload.state
+            );
+            emit_status(&self.app_handle, session_id, project_path, &payload);
+        }
     }
 
     /// Unregister a session when it's killed.
@@ -146,12 +174,55 @@ impl StatusServer {
         if projects.remove(&session_id).is_some() {
             log::debug!("Unregistered session {}", session_id);
         }
+        // Also clean up any buffered status
+        drop(projects);
+        let mut pending = self.pending_statuses.write().await;
+        pending.remove(&session_id);
     }
 
     /// Get list of registered session IDs (for debugging).
     pub async fn registered_sessions(&self) -> Vec<u32> {
         let projects = self.session_projects.read().await;
         projects.keys().copied().collect()
+    }
+}
+
+/// Map MCP state string to session status string and emit a Tauri event.
+fn emit_status(
+    app_handle: &AppHandle,
+    session_id: u32,
+    project_path: &str,
+    payload: &StatusRequest,
+) {
+    let status = match payload.state.as_str() {
+        "idle" => "Idle",
+        "working" => "Working",
+        "needs_input" => "NeedsInput",
+        "finished" => "Done",
+        "error" => "Error",
+        other => {
+            log::warn!("Unknown status state: {}", other);
+            "Unknown"
+        }
+    };
+
+    eprintln!(
+        "[STATUS] EMITTING: session={} status={} project={}",
+        session_id, status, project_path
+    );
+
+    let event_payload = SessionStatusPayload {
+        session_id,
+        project_path: project_path.to_string(),
+        status: status.to_string(),
+        message: payload.message.clone(),
+        needs_input_prompt: payload.needs_input_prompt.clone(),
+    };
+
+    if let Err(e) = app_handle.emit("session-status-changed", &event_payload) {
+        eprintln!("[STATUS] EMIT FAILED: {}", e);
+    } else {
+        eprintln!("[STATUS] EMIT SUCCESS");
     }
 }
 
@@ -174,7 +245,7 @@ async fn handle_status(
             state.instance_id,
             payload.instance_id
         );
-        return StatusCode::OK;
+        return StatusCode::FORBIDDEN;
     }
 
     // Get the project path for this session
@@ -190,48 +261,26 @@ async fn handle_status(
     let project_path = match project_path {
         Some(p) => p,
         None => {
+            // Session not registered yet — buffer the status for later
             eprintln!(
-                "[STATUS] REJECTED - unknown session {}",
+                "[STATUS] BUFFERED - unknown session {}, will flush on registration",
                 payload.session_id
             );
-            return StatusCode::OK;
+            let mut pending = state.pending_statuses.write().await;
+            // Enforce bounded buffer size
+            if pending.len() < MAX_PENDING_STATUSES {
+                pending.insert(payload.session_id, payload);
+            } else {
+                eprintln!(
+                    "[STATUS] WARNING - pending buffer full ({}), dropping status for session {}",
+                    MAX_PENDING_STATUSES, payload.session_id
+                );
+            }
+            return StatusCode::ACCEPTED;
         }
     };
 
-    // Map MCP state to session status string
-    let status = match payload.state.as_str() {
-        "idle" => "Idle",
-        "working" => "Working",
-        "needs_input" => "NeedsInput",
-        "finished" => "Done",
-        "error" => "Error",
-        other => {
-            log::warn!("Unknown status state: {}", other);
-            "Unknown"
-        }
-    };
-
-    eprintln!(
-        "[STATUS] EMITTING: session={} status={} project={}",
-        payload.session_id,
-        status,
-        &project_path
-    );
-
-    let event_payload = SessionStatusPayload {
-        session_id: payload.session_id,
-        project_path,
-        status: status.to_string(),
-        message: payload.message,
-        needs_input_prompt: payload.needs_input_prompt,
-    };
-
-    // Emit Tauri event immediately - no polling delay!
-    if let Err(e) = state.app_handle.emit("session-status-changed", &event_payload) {
-        eprintln!("[STATUS] EMIT FAILED: {}", e);
-    } else {
-        eprintln!("[STATUS] EMIT SUCCESS");
-    }
+    emit_status(&state.app_handle, payload.session_id, &project_path, &payload);
 
     StatusCode::OK
 }
