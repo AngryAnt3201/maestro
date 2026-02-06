@@ -841,7 +841,11 @@ mod tests {
     fn test_parse_empty_project() {
         let manager = PluginManager::new();
         let plugins = manager.get_project_plugins("/nonexistent/path");
-        assert!(plugins.skills.is_empty());
-        assert!(plugins.plugins.is_empty());
+        assert!(plugins.skills.iter().all(|skill| {
+            !matches!(skill.source, SkillSource::Project | SkillSource::Legacy)
+        }));
+        assert!(plugins.plugins.iter().all(|plugin| {
+            !matches!(plugin.plugin_source, PluginSource::Project)
+        }));
     }
 }

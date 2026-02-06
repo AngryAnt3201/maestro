@@ -728,6 +728,7 @@ mod tests {
     #[test]
     fn test_add_remove_source() {
         let manager = MarketplaceManager::new();
+        let initial_len = manager.get_sources().len();
 
         let source = manager.add_source(
             "Test Marketplace".to_string(),
@@ -735,16 +736,22 @@ mod tests {
             false,
         );
 
-        assert_eq!(manager.get_sources().len(), 1);
-        assert_eq!(manager.get_sources()[0].name, "Test Marketplace");
+        assert_eq!(manager.get_sources().len(), initial_len + 1);
+        let added = manager
+            .get_sources()
+            .into_iter()
+            .find(|s| s.id == source.id)
+            .expect("expected added source to exist");
+        assert_eq!(added.name, "Test Marketplace");
 
         manager.remove_source(&source.id).unwrap();
-        assert_eq!(manager.get_sources().len(), 0);
+        assert_eq!(manager.get_sources().len(), initial_len);
     }
 
     #[test]
     fn test_toggle_source() {
         let manager = MarketplaceManager::new();
+        let initial_len = manager.get_sources().len();
 
         let source = manager.add_source(
             "Test".to_string(),
@@ -752,11 +759,22 @@ mod tests {
             false,
         );
 
-        assert!(manager.get_sources()[0].is_enabled);
+        assert_eq!(manager.get_sources().len(), initial_len + 1);
+        let added = manager
+            .get_sources()
+            .into_iter()
+            .find(|s| s.id == source.id)
+            .expect("expected added source to exist");
+        assert!(added.is_enabled);
 
         let new_state = manager.toggle_source(&source.id).unwrap();
         assert!(!new_state);
-        assert!(!manager.get_sources()[0].is_enabled);
+        let toggled = manager
+            .get_sources()
+            .into_iter()
+            .find(|s| s.id == source.id)
+            .expect("expected toggled source to exist");
+        assert!(!toggled.is_enabled);
     }
 
     #[test]
