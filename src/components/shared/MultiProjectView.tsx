@@ -115,6 +115,7 @@ export const MultiProjectView = forwardRef<MultiProjectViewHandle, MultiProjectV
               tabId={tab.id}
               projectPath={tab.projectPath}
               preserveOnHide={true}
+              isActive={tab.active}
               onSessionCountChange={sessionCountChangeCallbacks.get(tab.id)}
             />
           ) : (

@@ -1,4 +1,4 @@
-import { getCurrentBranch } from "@/lib/git";
+import { getDeduplicatedCurrentBranch } from "@/lib/git";
 import { useEffect, useRef, useState } from "react";
 
 const POLL_INTERVAL_MS = 5_000;
@@ -16,6 +16,7 @@ export function useSessionBranch(
   projectPath: string,
   isWorktree: boolean,
   initialBranch: string | null,
+  isActive: boolean = true,
 ): string | null {
   const [branch, setBranch] = useState<string | null>(
     isWorktree ? initialBranch : null,
@@ -35,10 +36,18 @@ export function useSessionBranch(
 
     if (isWorktree || !projectPath) return;
 
-    setBranch(null);
+    // Only reset if we don't have a value yet (initial mount)
+    if (branch === null) {
+      setBranch(null);
+    }
 
-    const fetchBranch = () => {
-      getCurrentBranch(projectPath)
+    const fetchBranch = (force = false) => {
+      // Skip if window is blurred or tab is inactive to avoid annoying
+      // macOS permission pop-ups in the background.
+      // On mount (force=true), we STILL respect isActive to prevent boot barrage.
+      if (!isActive || (!force && !document.hasFocus())) return;
+
+      getDeduplicatedCurrentBranch(projectPath)
         .then((name) => {
           if (mountedRef.current) setBranch(name);
         })
@@ -47,16 +56,16 @@ export function useSessionBranch(
         });
     };
 
-    // Initial fetch
-    fetchBranch();
+    // Initial fetch - no longer "forced" if inactive
+    fetchBranch(true);
 
-    const id = setInterval(fetchBranch, POLL_INTERVAL_MS);
+    const id = setInterval(() => fetchBranch(false), POLL_INTERVAL_MS);
 
     return () => {
       clearInterval(id);
       mountedRef.current = false;
     };
-  }, [isWorktree, projectPath]);
+  }, [isWorktree, projectPath, isActive]);
 
   return branch;
 }

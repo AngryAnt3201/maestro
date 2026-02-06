@@ -135,6 +135,7 @@ interface TerminalGridProps {
   projectPath?: string;
   tabId?: string;
   preserveOnHide?: boolean;
+  isActive?: boolean;
   onSessionCountChange?: (slotCount: number, launchedCount: number) => void;
 }
 
@@ -152,7 +153,7 @@ interface TerminalGridProps {
  *   a fresh slot so the user is never left with an empty grid.
  */
 export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(function TerminalGrid(
-  { projectPath, tabId, preserveOnHide = false, onSessionCountChange },
+  { projectPath, tabId, preserveOnHide = false, isActive = true, onSessionCountChange },
   ref,
 ) {
   const addSessionToProject = useWorkspaceStore((s) => s.addSessionToProject);
@@ -237,8 +238,10 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
   // Fetch branches and MCP servers when projectPath is available
   useEffect(() => {
-    if (!projectPath) {
-      setIsGitRepo(false);
+    // Lazy Load: Only fetch project metadata if the tab is active.
+    // This prevents background projects from triggering macOS permission prompts on boot.
+    if (!projectPath || !isActive) {
+      if (!projectPath) setIsGitRepo(false);
       return;
     }
 
@@ -260,7 +263,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
     // Fetch plugins/skills
     fetchPlugins(projectPath).catch(console.error);
-  }, [projectPath, fetchMcpServers, fetchPlugins]);
+  }, [projectPath, isActive, fetchMcpServers, fetchPlugins]);
 
   // Update slot enabled MCP servers when servers are fetched
   useEffect(() => {
@@ -861,6 +864,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             key={slot.id}
             sessionId={slot.sessionId}
             isFocused={focusedSlotId === slot.id}
+            isActive={isActive}
             onFocus={() => setFocusedSlotId(slot.id)}
             onKill={handleKill}
           />

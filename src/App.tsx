@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { GitFork, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getDeduplicatedCurrentBranch } from "@/lib/git";
 import { killSession } from "@/lib/terminal";
 import { useOpenProject } from "@/lib/useOpenProject";
 import { useSessionStore } from "@/stores/useSessionStore";
@@ -116,7 +117,7 @@ function App() {
       setCurrentBranch(undefined);
       return () => {};
     }
-    invoke<string>("git_current_branch", { repoPath: activeProjectPath })
+    getDeduplicatedCurrentBranch(activeProjectPath)
       .then((branch) => {
         if (!cancelled) setCurrentBranch(branch);
       })
