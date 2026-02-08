@@ -18,7 +18,7 @@ export function SessionPodGrid({ sessionCount = 6 }: SessionPodGridProps) {
           {pods.map((n) => (
             <div
               key={n}
-              className="group flex w-24 flex-col items-center gap-2 rounded-xl border border-maestro-border bg-maestro-card p-5 shadow-[0_2px_8px_rgb(0_0_0/0.2)] transition-all hover:border-maestro-muted/40 hover:shadow-[0_4px_16px_rgb(0_0_0/0.3)]"
+              className="pod-grid-card group flex w-24 flex-col items-center gap-2 rounded-xl border border-maestro-border bg-maestro-card p-5 shadow-[0_2px_8px_rgb(0_0_0/0.2)] transition-all hover:border-maestro-muted/40 hover:shadow-[0_4px_16px_rgb(0_0_0/0.3)]"
             >
               <BrainCircuit
                 size={28}

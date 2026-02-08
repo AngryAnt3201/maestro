@@ -450,22 +450,65 @@
   }
 }
 
-/*
- * On Linux (WebKitGTK), box-shadow is not GPU-accelerated and infinite
- * box-shadow animations trigger full repaints every frame, including the
- * xterm.js terminal content. This kills typing responsiveness.
- * Detect non-macOS/non-Windows via the absence of platform-specific glyphs
- * and disable the expensive animations. We use a class-based approach set
- * by the app at runtime instead.
- */
+/* ── Linux (WebKitGTK) Performance Overrides ──
+   WebKitGTK cannot GPU-accelerate box-shadows, backdrop-blur, drop-shadow
+   filters, or CSS animations. All of these trigger expensive CPU repaints
+   that make the terminal unusable. These overrides disable the costly
+   effects while keeping border-color status indicators intact. */
+
+/* Remove ALL box-shadows on terminal cells */
+.platform-linux .terminal-cell {
+  box-shadow: none;
+  will-change: auto;
+  transition: border-color 200ms ease;
+}
+
+.platform-linux .terminal-cell-starting,
+.platform-linux .terminal-cell-working,
+.platform-linux .terminal-cell-needs-input,
+.platform-linux .terminal-cell-done,
+.platform-linux .terminal-cell-error {
+  box-shadow: none;
+}
+
+/* Disable starting-glow animation */
 .platform-linux .terminal-cell-starting {
   animation: none;
 }
+
+/* Disable breathe/glow animations */
 .platform-linux .animate-breathe,
 .platform-linux .animate-glow {
   animation: none;
 }
-.platform-linux .terminal-cell {
-  transition: border-color 200ms ease;
-  /* Remove box-shadow transition — static shadows only on Linux */
+
+/* Disable tamagotchi animations */
+.platform-linux .animate-tama-bounce,
+.platform-linux .animate-tama-float,
+.platform-linux .animate-tama-droop,
+.platform-linux .animate-tama-hungry {
+  animation: none;
+}
+
+/* Remove backdrop-blur on modal overlays */
+.platform-linux .backdrop-blur-sm {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Remove drop-shadow filters */
+.platform-linux [class*="drop-shadow"] {
+  filter: none;
+}
+
+/* Sidebar card shadows */
+.platform-linux .sidebar-card-link {
+  box-shadow: none !important;
+  transition: border-color 200ms ease !important;
+}
+
+/* Pod grid card shadows */
+.platform-linux .pod-grid-card {
+  box-shadow: none !important;
+  transition: border-color 200ms ease !important;
 }
