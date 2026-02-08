@@ -6,7 +6,6 @@ use tauri::{AppHandle, State};
 
 use crate::core::session_manager::SessionManager;
 use crate::core::status_server::StatusServer;
-use crate::core::windows_process::TokioCommandExt;
 use crate::core::{BackendCapabilities, BackendType, ProcessManager, PtyError, SessionProcessTree};
 
 /// Backend information returned to the frontend.
@@ -308,5 +307,60 @@ pub async fn check_cli_available(command: String) -> Result<bool, String> {
             .await
             .map_err(|e| format!("Failed to check CLI: {}", e))?;
         Ok(output.status.success())
+    }
+}
+
+/// Returns the full path to a CLI tool if available in the user's PATH.
+///
+/// Similar to check_cli_available but returns the absolute path instead of a boolean.
+#[tauri::command]
+pub async fn get_cli_path(command: String) -> Result<Option<String>, String> {
+    #[cfg(unix)]
+    {
+        let mut paths: Vec<String> = Vec::new();
+        if let Ok(env_path) = std::env::var("PATH") {
+            paths.extend(env_path.split(':').map(String::from));
+        }
+        if let Ok(home) = std::env::var("HOME") {
+            paths.push("/opt/homebrew/bin".to_string());
+            paths.push("/opt/homebrew/sbin".to_string());
+            paths.push("/usr/local/bin".to_string());
+            paths.push("/usr/local/sbin".to_string());
+            paths.push(format!("{}/.npm-global/bin", home));
+            paths.push(format!("{}/node_modules/.bin", home));
+            paths.push(format!("{}/.cargo/bin", home));
+            paths.push(format!("{}/go/bin", home));
+            paths.push(format!("{}/.local/bin", home));
+            paths.push(format!("{}/.pyenv/shims", home));
+            paths.push(format!("{}/.rbenv/shims", home));
+        }
+
+        for dir in &paths {
+            let cmd_path = format!("{}/{}", dir, command);
+            if std::path::Path::new(&cmd_path).exists() {
+                return Ok(Some(cmd_path));
+            }
+        }
+        Ok(None)
+    }
+
+    #[cfg(windows)]
+    {
+        use crate::core::windows_process::TokioCommandExt;
+        let output = tokio::process::Command::new("where.exe")
+            .arg(&command)
+            .hide_console_window()
+            .output()
+            .await
+            .map_err(|e| format!("Failed to check CLI: {}", e))?;
+        
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            // where.exe might return multiple paths separated by newlines, take the first one
+            let first_path = path.lines().next().unwrap_or("").to_string();
+            Ok(Some(first_path))
+        } else {
+            Ok(None)
+        }
     }
 }
