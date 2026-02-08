@@ -221,7 +221,16 @@ export function PreLaunchCard({
 
   // Separate local and remote branches
   const localBranches = branches.filter((b) => !b.isRemote);
-  const remoteBranches = branches.filter((b) => b.isRemote);
+  // Filter out remote branches that already have a local counterpart
+  // e.g., hide "origin/feature/foo" when "feature/foo" exists locally
+  const localBranchNames = new Set(localBranches.map((b) => b.name));
+  const remoteBranches = branches.filter((b) => {
+    if (!b.isRemote) return false;
+    const slashIndex = b.name.indexOf("/");
+    if (slashIndex === -1) return true;
+    const localName = b.name.substring(slashIndex + 1);
+    return !localBranchNames.has(localName);
+  });
 
   // Check if this is a multi-repo workspace
   const isMultiRepo = workspaceType === "multi-repo" && repositories && repositories.length > 0;

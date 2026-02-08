@@ -48,8 +48,18 @@ export function BranchDropdown({
     try {
       const result = await invoke<BranchInfo[]>("git_branches", { repoPath });
       if (!mountedRef.current) return;
-      setBranches(result);
-      const currentIdx = result.findIndex((b) => b.is_current);
+      // Filter out remote branches that already have a local counterpart
+      // e.g., hide "origin/feature/foo" when "feature/foo" exists locally
+      const localNames = new Set(result.filter((b) => !b.is_remote).map((b) => b.name));
+      const deduped = result.filter((b) => {
+        if (!b.is_remote) return true;
+        const slashIndex = b.name.indexOf("/");
+        if (slashIndex === -1) return true;
+        const localName = b.name.substring(slashIndex + 1);
+        return !localNames.has(localName);
+      });
+      setBranches(deduped);
+      const currentIdx = deduped.findIndex((b) => b.is_current);
       setFocusIndex(currentIdx >= 0 ? currentIdx : 0);
       setLoading(false);
     } catch (err) {

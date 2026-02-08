@@ -4,7 +4,7 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::core::worktree_manager::WorktreeManager;
-use crate::git::Git;
+use crate::git::{BranchInfo, Git};
 
 /// Result of preparing a worktree for a session.
 #[derive(Debug, Clone, Serialize)]
@@ -64,9 +64,14 @@ pub(crate) async fn prepare_worktree_inner(
     let repo_path = PathBuf::from(&project_path);
     let git = Git::new(&repo_path);
 
+    // Fetch branches early so we can correctly resolve local branch names
+    // (e.g., distinguish "feature/foo" local branch from "origin/feature-x" remote ref).
+    let branches = git.list_branches().await.unwrap_or_default();
+
     // Resolve the effective local branch name.
     // For remote refs like "origin/feature-x", the local name is "feature-x".
-    let local_branch = resolve_local_branch_name(&branch);
+    // For local branches with slashes like "feature/foo", returns as-is.
+    let local_branch = resolve_local_branch_name(&branch, &branches);
 
     // Check if a *managed* worktree already exists for this branch.
     // We skip the main worktree to avoid incorrectly "reusing" the main repo
@@ -143,7 +148,7 @@ pub(crate) async fn prepare_worktree_inner(
     }
 
     // Ensure the branch exists locally, handling remote branches correctly
-    if let Err(e) = ensure_local_branch(&git, &branch, &local_branch).await {
+    if let Err(e) = ensure_local_branch(&git, &branch, &local_branch, &branches).await {
         log::error!("Failed to ensure branch {}: {}", local_branch, e);
         return Ok(WorktreePreparationResult {
             working_directory: project_path,
@@ -256,15 +261,20 @@ pub(crate) async fn get_fallback_branch(git: &Git, avoid_branch: &str) -> Option
 
 /// Resolves a branch reference to the local branch name.
 ///
-/// For remote refs like `origin/feature-x`, returns `feature-x`.
-/// For local branches, returns the name as-is.
-fn resolve_local_branch_name(branch: &str) -> String {
-    if branch.contains('/') {
-        // Looks like a remote ref (e.g., "origin/feature-x")
-        // Extract everything after the first `/`
-        if let Some(pos) = branch.find('/') {
-            return branch[pos + 1..].to_string();
-        }
+/// If the branch exists as a local branch (even with slashes like `feature/foo`),
+/// returns it as-is. Otherwise, treats it as a remote ref (e.g., `origin/feature-x`)
+/// and strips the first segment.
+fn resolve_local_branch_name(branch: &str, local_branches: &[BranchInfo]) -> String {
+    // If it exists as a local branch, use as-is (handles feature/foo, fix/bar/baz)
+    if local_branches
+        .iter()
+        .any(|b| !b.is_remote && b.name == branch)
+    {
+        return branch.to_string();
+    }
+    // Otherwise strip first segment as remote name (origin/feature-x → feature-x)
+    if let Some(pos) = branch.find('/') {
+        return branch[pos + 1..].to_string();
     }
     branch.to_string()
 }
@@ -279,9 +289,8 @@ async fn ensure_local_branch(
     git: &Git,
     original_branch: &str,
     local_branch: &str,
+    branches: &[BranchInfo],
 ) -> Result<(), String> {
-    let branches = git.list_branches().await.map_err(|e| e.to_string())?;
-
     // Check if the local branch already exists
     let local_exists = branches.iter().any(|b| !b.is_remote && b.name == local_branch);
     if local_exists {
@@ -354,20 +363,50 @@ mod tests {
         git.run(&["branch", name]).await.unwrap();
     }
 
+    /// Helper: creates a BranchInfo for testing resolve_local_branch_name.
+    fn local_branch(name: &str) -> BranchInfo {
+        BranchInfo {
+            name: name.to_string(),
+            is_remote: false,
+            is_current: false,
+        }
+    }
+
     #[test]
     fn test_resolve_local_branch_name_local() {
-        assert_eq!(resolve_local_branch_name("main"), "main");
-        assert_eq!(resolve_local_branch_name("feature-x"), "feature-x");
+        let branches = vec![local_branch("main"), local_branch("feature-x")];
+        assert_eq!(resolve_local_branch_name("main", &branches), "main");
+        assert_eq!(resolve_local_branch_name("feature-x", &branches), "feature-x");
     }
 
     #[test]
     fn test_resolve_local_branch_name_remote() {
-        assert_eq!(resolve_local_branch_name("origin/feature-x"), "feature-x");
-        assert_eq!(resolve_local_branch_name("origin/main"), "main");
+        let branches = vec![local_branch("main")];
+        assert_eq!(resolve_local_branch_name("origin/feature-x", &branches), "feature-x");
+        assert_eq!(resolve_local_branch_name("origin/main", &branches), "main");
         assert_eq!(
-            resolve_local_branch_name("upstream/fix/nested"),
+            resolve_local_branch_name("upstream/fix/nested", &branches),
             "fix/nested"
         );
+    }
+
+    #[test]
+    fn test_resolve_local_branch_name_slash_branch_exists_locally() {
+        // feature/foo exists as a local branch — should NOT be stripped
+        let branches = vec![
+            local_branch("main"),
+            local_branch("feature/foo"),
+            local_branch("fix/bar/baz"),
+        ];
+        assert_eq!(resolve_local_branch_name("feature/foo", &branches), "feature/foo");
+        assert_eq!(resolve_local_branch_name("fix/bar/baz", &branches), "fix/bar/baz");
+    }
+
+    #[test]
+    fn test_resolve_local_branch_name_slash_branch_not_local() {
+        // feature/foo does NOT exist locally — treat as remote ref, strip first segment
+        let branches = vec![local_branch("main")];
+        assert_eq!(resolve_local_branch_name("origin/feature-x", &branches), "feature-x");
     }
 
     #[tokio::test]

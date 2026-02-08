@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useGitStore } from "../../stores/useGitStore";
+import { useSessionStore } from "../../stores/useSessionStore";
 import { BranchDropdown } from "./BranchDropdown";
 import { StatusLegend } from "./StatusLegend";
 
@@ -48,6 +49,21 @@ export function TopBar({
       if (!repoPath || branch === branchName) {
         setBranchDropdownOpen(false);
         return;
+      }
+
+      // Warn if there are active non-worktree sessions that share the main checkout
+      const activeSessions = useSessionStore.getState().sessions.filter(
+        (s) => s.project_path === repoPath && !s.worktree_path
+      );
+      if (activeSessions.length > 0) {
+        const proceed = window.confirm(
+          `Switching branches will affect ${activeSessions.length} active session(s) ` +
+          `that share the main repository checkout.\n\nContinue?`
+        );
+        if (!proceed) {
+          setBranchDropdownOpen(false);
+          return;
+        }
       }
 
       setIsSwitching(true);

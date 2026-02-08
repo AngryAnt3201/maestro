@@ -10,6 +10,7 @@ interface MultiProjectViewProps {
 export interface MultiProjectViewHandle {
   addSessionToActiveProject: () => void;
   launchAllInActiveProject: () => Promise<void>;
+  refreshBranchesInActiveProject: () => void;
 }
 
 /**
@@ -41,6 +42,13 @@ export const MultiProjectView = forwardRef<MultiProjectViewHandle, MultiProjectV
       if (activeTab) {
         const gridRef = gridRefs.current.get(activeTab.id);
         await gridRef?.launchAll();
+      }
+    },
+    refreshBranchesInActiveProject: () => {
+      const activeTab = tabs.find((t) => t.active);
+      if (activeTab) {
+        const gridRef = gridRefs.current.get(activeTab.id);
+        gridRef?.refreshBranches();
       }
     },
   }), [tabs]);

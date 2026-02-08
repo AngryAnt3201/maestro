@@ -43,7 +43,7 @@ export function useSessionBranch(
           if (mountedRef.current) setBranch(name);
         })
         .catch(() => {
-          // Non-git dir or other error — leave current value
+          if (mountedRef.current) setBranch(null);
         });
     };
 
