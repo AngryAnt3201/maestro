@@ -51,6 +51,10 @@ claude.md
 plan.md
 reddit-post.md
 
+# Tool artifacts
+.claude-flow/
+.swarm/
+
 # Jekyll docs site
 website/_site/
 website/.jekyll-cache/

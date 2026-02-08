@@ -11,6 +11,12 @@ export type AiModeCliFlags = {
   skipPermissions: boolean;
   /** Space-separated additional custom flags. */
   customFlags: string;
+  /** Optional host (for Ollama). */
+  host?: string;
+  /** Optional port (for Ollama). */
+  port?: string;
+  /** Optional model name (for Ollama). */
+  model?: string;
 };
 
 /** CLI flags configuration for all AI modes. */
@@ -27,6 +33,12 @@ type CliSettingsActions = {
   setSkipPermissions: (mode: Exclude<AiMode, "Plain">, value: boolean) => void;
   /** Update the custom flags for a mode. */
   setCustomFlags: (mode: Exclude<AiMode, "Plain">, value: string) => void;
+  /** Update the host for a mode. */
+  setHost: (mode: Exclude<AiMode, "Plain">, value: string) => void;
+  /** Update the port for a mode. */
+  setPort: (mode: Exclude<AiMode, "Plain">, value: string) => void;
+  /** Update the model for a mode. */
+  setModel: (mode: Exclude<AiMode, "Plain">, value: string) => void;
   /** Reset all settings for a specific mode to defaults. */
   resetModeToDefaults: (mode: Exclude<AiMode, "Plain">) => void;
   /** Reset all settings to defaults. */
@@ -40,12 +52,16 @@ type CliSettingsActions = {
 const DEFAULT_MODE_FLAGS: AiModeCliFlags = {
   skipPermissions: false,
   customFlags: "",
+  host: "",
+  port: "",
+  model: "",
 };
 
 const DEFAULT_FLAGS: CliFlagsConfig = {
   Claude: { ...DEFAULT_MODE_FLAGS },
   Gemini: { ...DEFAULT_MODE_FLAGS },
   Codex: { ...DEFAULT_MODE_FLAGS },
+  Ollama: { ...DEFAULT_MODE_FLAGS },
 };
 
 // --- Tauri LazyStore-backed StateStorage adapter ---
@@ -126,6 +142,42 @@ export const useCliSettingsStore = create<CliSettingsState & CliSettingsActions>
         });
       },
 
+      setHost: (mode, value) => {
+        set({
+          flags: {
+            ...get().flags,
+            [mode]: {
+              ...get().flags[mode],
+              host: value,
+            },
+          },
+        });
+      },
+
+      setPort: (mode, value) => {
+        set({
+          flags: {
+            ...get().flags,
+            [mode]: {
+              ...get().flags[mode],
+              port: value,
+            },
+          },
+        });
+      },
+
+      setModel: (mode, value) => {
+        set({
+          flags: {
+            ...get().flags,
+            [mode]: {
+              ...get().flags[mode],
+              model: value,
+            },
+          },
+        });
+      },
+
       resetModeToDefaults: (mode) => {
         set({
           flags: {
@@ -141,6 +193,7 @@ export const useCliSettingsStore = create<CliSettingsState & CliSettingsActions>
             Claude: { ...DEFAULT_MODE_FLAGS },
             Gemini: { ...DEFAULT_MODE_FLAGS },
             Codex: { ...DEFAULT_MODE_FLAGS },
+            Ollama: { ...DEFAULT_MODE_FLAGS },
           },
         });
       },

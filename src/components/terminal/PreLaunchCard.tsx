@@ -1,4 +1,5 @@
 import {
+  Bot,
   BrainCircuit,
   Check,
   ChevronDown,
@@ -25,6 +26,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import type { BranchWithWorktreeStatus } from "@/lib/git";
+import { fetchInstalledModels, type OllamaModel } from "@/lib/ollama";
 import type { McpServerConfig } from "@/lib/mcp";
 import type { PluginConfig, SkillConfig } from "@/lib/plugins";
 import type { AiMode } from "@/stores/useSessionStore";
@@ -35,6 +37,8 @@ export interface SessionSlot {
   id: string;
   mode: AiMode;
   branch: string | null;
+  /** Optional model name (e.g. for Ollama). */
+  model?: string;
   sessionId: number | null;
   /** Path to the worktree if one was created for this session. */
   worktreePath: string | null;
@@ -73,6 +77,7 @@ interface PreLaunchCardProps {
   onMcpToggle: (serverName: string) => void;
   onSkillToggle: (skillId: string) => void;
   onPluginToggle: (pluginId: string) => void;
+  onModelChange: (model: string) => void;
   onMcpSelectAll: () => void;
   onMcpUnselectAll: () => void;
   onPluginsSelectAll: () => void;
@@ -87,6 +92,7 @@ const AI_MODES: { mode: AiMode; icon: typeof BrainCircuit; label: string; color:
   { mode: "Claude", icon: BrainCircuit, label: "Claude Code", color: "text-violet-500" },
   { mode: "Gemini", icon: Sparkles, label: "Gemini CLI", color: "text-blue-400" },
   { mode: "Codex", icon: Code2, label: "Codex", color: "text-green-400" },
+  { mode: "Ollama", icon: Bot, label: "Ollama", color: "text-blue-500" },
   { mode: "Plain", icon: Terminal, label: "Terminal", color: "text-maestro-muted" },
 ];
 
@@ -113,6 +119,7 @@ export function PreLaunchCard({
   onMcpToggle,
   onSkillToggle,
   onPluginToggle,
+  onModelChange,
   onMcpSelectAll,
   onMcpUnselectAll,
   onPluginsSelectAll,
@@ -126,6 +133,9 @@ export function PreLaunchCard({
   const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
   const [mcpDropdownOpen, setMcpDropdownOpen] = useState(false);
   const [pluginsSkillsDropdownOpen, setPluginsSkillsDropdownOpen] = useState(false);
+  const [ollamaDropdownOpen, setOllamaDropdownOpen] = useState(false);
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+  const [isLoadingOllama, setIsLoadingOllama] = useState(false);
   const [expandedPlugins, setExpandedPlugins] = useState<Set<string>>(new Set());
   const [mcpSearchQuery, setMcpSearchQuery] = useState("");
   const [pluginsSearchQuery, setPluginsSearchQuery] = useState("");
@@ -135,6 +145,7 @@ export function PreLaunchCard({
   const [isCreatingBranch, setIsCreatingBranch] = useState(false);
   const [branchCreateError, setBranchCreateError] = useState<string | null>(null);
   const branchCreateInputRef = useRef<HTMLInputElement>(null);
+  const [ollamaSearchQuery, setOllamaSearchQuery] = useState("");
 
   // Multi-repo state: track expanded repos and cached branches per repo
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
@@ -152,9 +163,26 @@ export function PreLaunchCard({
   const branchDropdownRef = useRef<HTMLDivElement>(null);
   const mcpDropdownRef = useRef<HTMLDivElement>(null);
   const pluginsSkillsDropdownRef = useRef<HTMLDivElement>(null);
+  const ollamaDropdownRef = useRef<HTMLDivElement>(null);
 
   const modeConfig = getModeConfig(slot.mode);
   const ModeIcon = modeConfig.icon;
+
+  // Fetch Ollama models if Ollama mode is selected
+  useEffect(() => {
+    if (slot.mode === "Ollama") {
+      setIsLoadingOllama(true);
+      fetchInstalledModels()
+        .then((models) => {
+          setOllamaModels(models);
+          // Auto-select first model if none selected
+          if (!slot.model && models.length > 0) {
+            onModelChange(models[0].name);
+          }
+        })
+        .finally(() => setIsLoadingOllama(false));
+    }
+  }, [slot.mode, slot.model, onModelChange]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -170,6 +198,9 @@ export function PreLaunchCard({
       }
       if (pluginsSkillsDropdownRef.current && !pluginsSkillsDropdownRef.current.contains(event.target as Node)) {
         setPluginsSkillsDropdownOpen(false);
+      }
+      if (ollamaDropdownRef.current && !ollamaDropdownRef.current.contains(event.target as Node)) {
+        setOllamaDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -408,6 +439,78 @@ export function PreLaunchCard({
             </div>
           )}
         </div>
+
+        {/* Ollama Model Selector */}
+        {slot.mode === "Ollama" && (
+          <div className="relative" ref={ollamaDropdownRef}>
+            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-maestro-muted">
+              Ollama Model
+            </label>
+            <button
+              type="button"
+              onClick={() => setOllamaDropdownOpen(!ollamaDropdownOpen)}
+              disabled={isLoadingOllama}
+              className="flex w-full items-center justify-between gap-2 rounded border border-maestro-border bg-maestro-card px-3 py-2 text-left text-sm text-maestro-text transition-colors hover:border-maestro-accent/50 disabled:opacity-50"
+            >
+              <div className="flex items-center gap-2">
+                <Bot size={16} className="text-blue-500" />
+                <span>{isLoadingOllama ? "Loading models..." : slot.model || "Select a model"}</span>
+              </div>
+              <ChevronDown size={14} className="text-maestro-muted" />
+            </button>
+
+            {ollamaDropdownOpen && (
+              <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded border border-maestro-border bg-maestro-card shadow-lg">
+                {/* Search input */}
+                <div className="border-b border-maestro-border p-2">
+                  <div className="relative">
+                    <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-maestro-muted" />
+                    <input
+                      type="text"
+                      placeholder="Search models..."
+                      value={ollamaSearchQuery}
+                      onChange={(e) => setOllamaSearchQuery(e.target.value)}
+                      className="w-full rounded border border-maestro-border bg-maestro-surface py-1.5 pl-7 pr-2 text-xs text-maestro-text placeholder:text-maestro-muted focus:border-maestro-accent focus:outline-none"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                </div>
+                {/* Model list */}
+                <div className="max-h-48 overflow-y-auto">
+                  {ollamaModels
+                    .filter((m) => m.name.toLowerCase().includes(ollamaSearchQuery.toLowerCase()))
+                    .map((model) => (
+                      <button
+                        key={model.digest}
+                        type="button"
+                        onClick={() => {
+                          onModelChange(model.name);
+                          setOllamaDropdownOpen(false);
+                          setOllamaSearchQuery("");
+                        }}
+                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                          slot.model === model.name
+                            ? "bg-maestro-accent/10 text-maestro-text"
+                            : "text-maestro-muted hover:bg-maestro-surface hover:text-maestro-text"
+                        }`}
+                      >
+                        <Bot size={14} className="text-blue-500" />
+                        <span className="flex-1 truncate">{model.name}</span>
+                        <span className="text-[10px] text-maestro-muted">
+                          {(model.size / (1024 * 1024 * 1024)).toFixed(1)} GB
+                        </span>
+                      </button>
+                    ))}
+                  {ollamaModels.filter((m) => m.name.toLowerCase().includes(ollamaSearchQuery.toLowerCase())).length === 0 && (
+                    <div className="px-3 py-4 text-center text-xs text-maestro-muted">
+                      No models found
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Repository & Branch Selector */}
         <div className="relative" ref={branchDropdownRef}>

@@ -37,7 +37,7 @@ export async function killSession(sessionId: number): Promise<void> {
 }
 
 /** AI mode variants matching the backend enum. */
-export type AiMode = "Claude" | "Gemini" | "Codex" | "Plain";
+export type AiMode = "Claude" | "Gemini" | "Codex" | "Ollama" | "Plain";
 
 /** CLI modes that support flags (excludes Plain). */
 export type CliAiMode = Exclude<AiMode, "Plain">;
@@ -62,6 +62,11 @@ export const AI_CLI_CONFIG: Record<AiMode, {
     command: "codex",
     installHint: "npm install -g codex",
     skipPermissionsFlag: "--dangerously-bypass-approvals-and-sandbox",
+  },
+  Ollama: {
+    command: "ollama",
+    installHint: "brew install ollama",
+    skipPermissionsFlag: null,
   },
   Plain: {
     command: null,
@@ -210,6 +215,10 @@ export function waitForTerminalReady(sessionId: number, timeoutMs = 5000): Promi
 export type CliFlags = {
   skipPermissions: boolean;
   customFlags: string;
+  endpoint?: string;
+  host?: string;
+  port?: string;
+  model?: string;
 };
 
 /**
@@ -239,7 +248,16 @@ export function buildCliCommand(mode: AiMode, flags?: CliFlags): string | null {
     if (flags.skipPermissions && config.skipPermissionsFlag) {
       parts.push(config.skipPermissionsFlag);
     }
-    if (flags.customFlags.trim()) {
+    // Provider-specific flags
+    if (mode === "Ollama") {
+      parts.push("run");
+      if (flags.model) {
+        parts.push(flags.model);
+      }
+    }
+
+    // Custom flags at the end
+    if (flags.customFlags && flags.customFlags.trim()) {
       parts.push(flags.customFlags.trim());
     }
   }
