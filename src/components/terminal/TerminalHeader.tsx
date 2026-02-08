@@ -1,5 +1,6 @@
 import { memo } from "react";
 import {
+  Bot,
   BrainCircuit,
   CheckCircle,
   ChevronDown,
@@ -15,7 +16,7 @@ import {
 
 export type SessionStatus = "idle" | "starting" | "working" | "needs-input" | "done" | "error" | "timeout";
 
-export type AIProvider = "claude" | "gemini" | "codex" | "plain";
+export type AIProvider = "claude" | "gemini" | "codex" | "ollama" | "plain";
 
 interface TerminalHeaderProps {
   sessionId: number;
@@ -58,6 +59,7 @@ const providerConfig: Record<AIProvider, { icon: typeof BrainCircuit; label: str
   claude: { icon: BrainCircuit, label: "Claude Code" },
   gemini: { icon: Sparkles, label: "Gemini CLI" },
   codex: { icon: Code2, label: "Codex" },
+  ollama: { icon: Bot, label: "Ollama" },
   plain: { icon: Terminal, label: "Terminal" },
 };
 

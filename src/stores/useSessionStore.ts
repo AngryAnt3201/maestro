@@ -3,7 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { create } from "zustand";
 
 /** AI provider variants supported by the backend orchestrator. */
-export type AiMode = "Claude" | "Gemini" | "Codex" | "Plain";
+export type AiMode = "Claude" | "Gemini" | "Codex" | "Ollama" | "Plain";
 
 /**
  * Backend-emitted session lifecycle states.

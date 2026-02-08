@@ -611,7 +611,7 @@ function SessionsSection() {
 
 /* ── 4. Status ── */
 
-const AI_MODES: AiMode[] = ["Claude", "Gemini", "Codex", "Plain"];
+const AI_MODES: AiMode[] = ["Claude", "Gemini", "Codex", "Ollama", "Plain"];
 const SESSION_STATUSES: BackendSessionStatus[] = [
   "Starting",
   "Idle",
@@ -625,6 +625,7 @@ const MODE_ICON: Record<AiMode, React.ElementType> = {
   Claude: Bot,
   Gemini: Sparkles,
   Codex: Cpu,
+  Ollama: Bot,
   Plain: Globe,
 };
 

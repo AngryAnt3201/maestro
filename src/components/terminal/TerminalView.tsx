@@ -45,6 +45,7 @@ function mapAiMode(mode: AiMode): AIProvider {
     Claude: "claude",
     Gemini: "gemini",
     Codex: "codex",
+    Ollama: "ollama",
     Plain: "plain",
   };
   const provider = map[mode];

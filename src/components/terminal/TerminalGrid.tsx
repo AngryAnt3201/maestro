@@ -590,9 +590,13 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             // Brief delay for shell to initialize
             await new Promise((resolve) => setTimeout(resolve, 100));
 
-            // Build CLI command with user-configured flags
-            const cliFlags = useCliSettingsStore.getState().getFlags(slot.mode);
-            const cliCommand = buildCliCommand(slot.mode, cliFlags);
+            // Build CLI command with user-configured flags, overriding with session-specific model if set
+            const globalFlags = useCliSettingsStore.getState().getFlags(slot.mode);
+            const finalCliFlags = {
+              ...globalFlags,
+              model: slot.model || globalFlags.model
+            };
+            const cliCommand = buildCliCommand(slot.mode, finalCliFlags);
 
             // Send CLI launch command
             await writeStdin(sessionId, `${cliCommand}\r`);
@@ -702,6 +706,17 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     setSlots((prev) =>
       prev.map((s) =>
         s.id === slotId ? { ...s, mode } : s
+      )
+    );
+  }, []);
+
+  /**
+   * Updates the AI model for a slot (Ollama).
+   */
+  const updateSlotModel = useCallback((slotId: string, model: string) => {
+    setSlots((prev) =>
+      prev.map((s) =>
+        s.id === slotId ? { ...s, model } : s
       )
     );
   }, []);
@@ -1025,6 +1040,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
                 onMcpToggle={(serverName) => toggleSlotMcp(zoomedSlot.id, serverName)}
                 onSkillToggle={(skillId) => toggleSlotSkill(zoomedSlot.id, skillId)}
                 onPluginToggle={(pluginId) => toggleSlotPlugin(zoomedSlot.id, pluginId)}
+                onModelChange={(model) => updateSlotModel(zoomedSlot.id, model)}
                 onMcpSelectAll={() => selectAllMcp(zoomedSlot.id)}
                 onMcpUnselectAll={() => unselectAllMcp(zoomedSlot.id)}
                 onPluginsSelectAll={() => selectAllPlugins(zoomedSlot.id)}
@@ -1077,6 +1093,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             onMcpToggle={(serverName) => toggleSlotMcp(slot.id, serverName)}
             onSkillToggle={(skillId) => toggleSlotSkill(slot.id, skillId)}
             onPluginToggle={(pluginId) => toggleSlotPlugin(slot.id, pluginId)}
+            onModelChange={(model) => updateSlotModel(slot.id, model)}
             onMcpSelectAll={() => selectAllMcp(slot.id)}
             onMcpUnselectAll={() => unselectAllMcp(slot.id)}
             onPluginsSelectAll={() => selectAllPlugins(slot.id)}
