@@ -25,6 +25,7 @@ import {
   waitForTerminalReady,
   writeStdin,
 } from "@/lib/terminal";
+import { getPlatform, getUpdateCommand, resolveInstallSource } from "@/lib/updates";
 import { useCliSettingsStore } from "@/stores/useCliSettingsStore";
 import { cleanupSessionWorktree, prepareSessionWorktree } from "@/lib/worktreeManager";
 import { useTerminalKeyboard } from "@/hooks/useTerminalKeyboard";
@@ -587,15 +588,37 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
               console.warn("Terminal ready timeout, proceeding anyway:", err);
             }
 
+            // --- Pre-launch Auto-Update Hook ---
+            const cliFlags = useCliSettingsStore.getState().getFlags(slot.mode);
+            let updateCommandPrefix = "";
+            
+            if (cliFlags.autoUpdate) {
+              console.log(`[Updates] Running pre-launch update for ${slot.mode}...`);
+              useSessionStore.getState().updateSession(sessionId, {
+                status: "Working",
+                statusMessage: `Updating ${slot.mode} CLI...`
+              });
+
+              const platform = getPlatform();
+              const source = await resolveInstallSource(slot.mode);
+              const updateCmd = await getUpdateCommand(slot.mode, platform, source);
+              updateCommandPrefix = `${updateCmd} && `;
+
+              useCliSettingsStore.getState().setLastUpdateCheck(slot.mode, Date.now());
+            }
+
             // Brief delay for shell to initialize
             await new Promise((resolve) => setTimeout(resolve, 100));
 
             // Build CLI command with user-configured flags
-            const cliFlags = useCliSettingsStore.getState().getFlags(slot.mode);
-            const cliCommand = buildCliCommand(slot.mode, cliFlags);
+            const finalCliFlags = useCliSettingsStore.getState().getFlags(slot.mode);
+            const cliCommand = buildCliCommand(slot.mode, finalCliFlags);
+            if (!cliCommand) {
+              throw new Error(`No CLI command configured for mode: ${slot.mode}`);
+            }
 
-            // Send CLI launch command
-            await writeStdin(sessionId, `${cliCommand}\r`);
+            // Send chained command: "update && agent"
+            await writeStdin(sessionId, `${updateCommandPrefix}${cliCommand}\r`);
 
             // Brief delay for CLI initialization.
             // With session-specific MCP server names (maestro-1, maestro-2, etc.),

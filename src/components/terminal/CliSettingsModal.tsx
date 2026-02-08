@@ -37,8 +37,14 @@ export function CliSettingsModal({ onClose }: CliSettingsModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const [activeMode, setActiveMode] = useState<CliAiMode>("Claude");
 
-  const { flags, setSkipPermissions, setCustomFlags, resetModeToDefaults, resetAllToDefaults } =
-    useCliSettingsStore();
+  const {
+    getFlags,
+    setSkipPermissions,
+    setAutoUpdate,
+    setCustomFlags,
+    resetModeToDefaults,
+    resetAllToDefaults,
+  } = useCliSettingsStore();
 
   // Close on outside click
   useEffect(() => {
@@ -62,7 +68,7 @@ export function CliSettingsModal({ onClose }: CliSettingsModalProps) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  const currentFlags = flags[activeMode];
+  const currentFlags = getFlags(activeMode);
   const previewCommand = buildCliCommand(activeMode, currentFlags);
 
   return (
@@ -110,39 +116,66 @@ export function CliSettingsModal({ onClose }: CliSettingsModalProps) {
 
         {/* Content */}
         <div className="space-y-4 p-4">
-          {/* Skip Permissions Toggle */}
+          {/* Skip Permissions Toggle - only show if mode supports it */}
+          {MODE_CONFIG[activeMode].skipFlagName && (
+            <section>
+              <div className="mb-2 flex items-center gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-maestro-muted">
+                  Permissions
+                </h3>
+                <span className="rounded bg-maestro-red/20 px-1.5 py-0.5 text-[10px] font-medium text-maestro-red">
+                  Security
+                </span>
+              </div>
+              <div className="rounded-lg border border-maestro-border bg-maestro-card p-3">
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={currentFlags.skipPermissions}
+                    onChange={(e) => setSkipPermissions(activeMode, e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-maestro-border accent-maestro-accent"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-maestro-text">
+                        Skip Permission Prompts
+                      </span>
+                      {currentFlags.skipPermissions && (
+                        <span className="flex items-center gap-1 rounded bg-maestro-red/20 px-1.5 py-0.5 text-[10px] font-medium text-maestro-red">
+                          <AlertTriangle size={10} />
+                          Risk
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-xs text-maestro-muted">
+                      Adds <code className="rounded bg-maestro-border/40 px-1">{MODE_CONFIG[activeMode].skipFlagName}</code> flag.
+                      The CLI will not ask for confirmation before running commands.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </section>
+          )}
+
+          {/* Auto-Update Toggle */}
           <section>
-            <div className="mb-2 flex items-center gap-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-maestro-muted">
-                Permissions
-              </h3>
-              <span className="rounded bg-maestro-red/20 px-1.5 py-0.5 text-[10px] font-medium text-maestro-red">
-                Security
-              </span>
-            </div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-maestro-muted">
+              Updates
+            </h3>
             <div className="rounded-lg border border-maestro-border bg-maestro-card p-3">
               <label className="flex cursor-pointer items-start gap-3">
                 <input
                   type="checkbox"
-                  checked={currentFlags.skipPermissions}
-                  onChange={(e) => setSkipPermissions(activeMode, e.target.checked)}
+                  checked={currentFlags.autoUpdate}
+                  onChange={(e) => setAutoUpdate(activeMode, e.target.checked)}
                   className="mt-0.5 h-4 w-4 rounded border-maestro-border accent-maestro-accent"
                 />
                 <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-maestro-text">
-                      Skip Permission Prompts
-                    </span>
-                    {currentFlags.skipPermissions && (
-                      <span className="flex items-center gap-1 rounded bg-maestro-red/20 px-1.5 py-0.5 text-[10px] font-medium text-maestro-red">
-                        <AlertTriangle size={10} />
-                        Risk
-                      </span>
-                    )}
-                  </div>
+                  <span className="text-sm font-medium text-maestro-text">
+                    Auto-Update Agents
+                  </span>
                   <p className="mt-0.5 text-xs text-maestro-muted">
-                    Adds <code className="rounded bg-maestro-border/40 px-1">{MODE_CONFIG[activeMode].skipFlagName}</code> flag.
-                    The CLI will not ask for confirmation before running commands.
+                    Automatically check for and install updates before starting the {activeMode} CLI.
                   </p>
                 </div>
               </label>

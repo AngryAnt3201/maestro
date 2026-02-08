@@ -87,6 +87,7 @@ pub fn run() {
             commands::terminal::kill_session,
             commands::terminal::kill_all_sessions,
             commands::terminal::check_cli_available,
+            commands::terminal::get_cli_path,
             commands::terminal::get_backend_info,
             commands::terminal::get_session_process_tree,
             commands::terminal::get_all_process_trees,
