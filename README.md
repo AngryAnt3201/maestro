@@ -10,7 +10,7 @@ A cross-platform desktop application that lets you run 1-6 Claude Code (or other
 ![macOS](https://img.shields.io/badge/macOS-13%2B-blue)
 ![Windows](https://img.shields.io/badge/Windows-10%2B-blue)
 ![Linux](https://img.shields.io/badge/Linux-supported-blue)
-![Rust](https://img.shields.io/badge/Rust-1.70%2B-orange)
+![Rust](https://img.shields.io/badge/Rust-1.78%2B-orange)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 [![X (Twitter)](https://img.shields.io/badge/X-@maestro5240871-000000?style=flat&logo=x&logoColor=white)](https://x.com/maestro5240871)
@@ -162,7 +162,7 @@ A cross-platform desktop application that lets you run 1-6 Claude Code (or other
 ### Requirements
 
 - **Node.js** 18+ and npm
-- **Rust** 1.70+ (for building from source)
+- **Rust** 1.78+ (for building from source) - install via [rustup](https://rustup.rs/), not system packages
 - **Git** (for worktree operations)
 
 #### Platform-Specific Prerequisites
@@ -178,13 +178,20 @@ xcode-select --install
 - Install [Rust](https://rustup.rs/)
 - WebView2 Runtime is required (pre-installed on Windows 10 21H2+ and Windows 11; [download here](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) for older versions)
 
-**Linux** (Ubuntu/Debian):
+**Linux** (Ubuntu 24.04 LTS / Debian):
 ```bash
+# Install Rust via rustup (Ubuntu 24.04's apt packages ship Rust 1.75, which is too old)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+
 # Install required system dependencies
 sudo apt-get update
 sudo apt-get install -y build-essential pkg-config libssl-dev \
-  libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+  libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+  libfontconfig1-dev patchelf
 ```
+
+> **Note:** On Ubuntu 24.04, use `libayatana-appindicator3-dev` instead of `libappindicator3-dev` to avoid package conflicts.
 
 **Linux** (Fedora):
 ```bash

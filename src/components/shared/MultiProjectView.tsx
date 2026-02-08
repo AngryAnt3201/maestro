@@ -131,6 +131,7 @@ export const MultiProjectView = forwardRef<MultiProjectViewHandle, MultiProjectV
               workspaceType={tab.workspaceType}
               onRepoChange={repoChangeCallbacks.get(tab.id)}
               preserveOnHide={true}
+              isActive={tab.active}
               onSessionCountChange={sessionCountChangeCallbacks.get(tab.id)}
             />
           ) : (

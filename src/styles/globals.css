@@ -254,6 +254,10 @@
   transition:
     border-color 200ms ease,
     box-shadow 200ms ease;
+  /* Promote to own compositing layer so status border/shadow repaints
+     don't invalidate the xterm.js canvas inside. */
+  will-change: border-color, box-shadow;
+  contain: layout style;
 }
 
 .terminal-cell-idle {
@@ -363,7 +367,8 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-breathe,
   .animate-glow,
-  .animate-pod-wake {
+  .animate-pod-wake,
+  .terminal-cell-starting {
     animation: none;
     transform: none;
   }
@@ -443,4 +448,24 @@
   .animate-tama-hungry {
     animation: none;
   }
+}
+
+/*
+ * On Linux (WebKitGTK), box-shadow is not GPU-accelerated and infinite
+ * box-shadow animations trigger full repaints every frame, including the
+ * xterm.js terminal content. This kills typing responsiveness.
+ * Detect non-macOS/non-Windows via the absence of platform-specific glyphs
+ * and disable the expensive animations. We use a class-based approach set
+ * by the app at runtime instead.
+ */
+.platform-linux .terminal-cell-starting {
+  animation: none;
+}
+.platform-linux .animate-breathe,
+.platform-linux .animate-glow {
+  animation: none;
+}
+.platform-linux .terminal-cell {
+  transition: border-color 200ms ease;
+  /* Remove box-shadow transition — static shadows only on Linux */
 }

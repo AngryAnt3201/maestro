@@ -310,62 +310,139 @@ impl ProcessManager {
             })
             .map_err(|e| PtyError::spawn_failed(format!("Failed to spawn reader thread: {e}")))?;
 
-        // Tokio task: drain the channel and emit Tauri events
+        // Tokio task: drain the channel and emit Tauri events with time-based batching.
+        // Accumulates decoded text and flushes every 16ms (aligned with 60fps) or when
+        // the buffer exceeds 64KB, whichever comes first. This collapses bursts of small
+        // PTY chunks (e.g. during `npm install` or `cargo build`) into fewer IPC events,
+        // dramatically reducing frontend overhead while remaining imperceptible for typing.
         let event_name = format!("pty-output-{id}");
         let app = app_handle.clone();
+        #[cfg(windows)]
         let inner_ref = self.inner.clone();
         tokio::spawn(async move {
             let mut decoder = Utf8Decoder::new();
+            let mut batch_buf = String::new();
+            const FLUSH_INTERVAL: std::time::Duration = std::time::Duration::from_millis(16);
+            const MAX_BATCH_BYTES: usize = 64 * 1024; // 64KB safety valve
+
             loop {
-                tokio::select! {
-                    data = rx.recv() => {
-                        match data {
-                            Some(bytes) => {
-                                // Windows ConPTY workaround: Respond to DSR (Device Status
-                                // Report) cursor position requests (ESC[6n) from the backend.
-                                // ConPTY sends this query and BLOCKS all output until it
-                                // receives a response (ESC[{row};{col}R). Since xterm.js may
-                                // not be mounted yet, we respond immediately to unblock ConPTY.
-                                #[cfg(windows)]
-                                {
-                                    if bytes.len() >= 4 {
-                                        // Check for ESC[6n (0x1b 0x5b 0x36 0x6e) anywhere in the data
-                                        for i in 0..bytes.len().saturating_sub(3) {
-                                            if bytes[i] == 0x1b
-                                                && bytes[i + 1] == 0x5b
-                                                && bytes[i + 2] == 0x36
-                                                && bytes[i + 3] == 0x6e
-                                            {
-                                                log::info!(
-                                                    "PTY emitter {}: detected DSR request (ESC[6n), \
-                                                     responding with cursor position",
-                                                    id
-                                                );
-                                                // Respond with cursor at position 1,1
-                                                if let Some(session) = inner_ref.sessions.get(&id) {
-                                                    if let Ok(mut w) = session.writer.lock() {
-                                                        let _ = w.write_all(b"\x1b[1;1R");
-                                                        let _ = w.flush();
+                // If the buffer is empty, wait for the first chunk (no timer needed).
+                // If the buffer has data, race between more data and the flush timer.
+                if batch_buf.is_empty() {
+                    tokio::select! {
+                        data = rx.recv() => {
+                            match data {
+                                Some(bytes) => {
+                                    #[cfg(windows)]
+                                    {
+                                        if bytes.len() >= 4 {
+                                            for i in 0..bytes.len().saturating_sub(3) {
+                                                if bytes[i] == 0x1b
+                                                    && bytes[i + 1] == 0x5b
+                                                    && bytes[i + 2] == 0x36
+                                                    && bytes[i + 3] == 0x6e
+                                                {
+                                                    log::info!(
+                                                        "PTY emitter {}: detected DSR request (ESC[6n), \
+                                                         responding with cursor position",
+                                                        id
+                                                    );
+                                                    if let Some(session) = inner_ref.sessions.get(&id) {
+                                                        if let Ok(mut w) = session.writer.lock() {
+                                                            let _ = w.write_all(b"\x1b[1;1R");
+                                                            let _ = w.flush();
+                                                        }
                                                     }
+                                                    break;
                                                 }
-                                                break;
                                             }
                                         }
                                     }
+                                    let text = decoder.decode(&bytes);
+                                    if !text.is_empty() {
+                                        batch_buf.push_str(&text);
+                                    }
+                                    // Flush immediately if buffer exceeds safety valve
+                                    if batch_buf.len() >= MAX_BATCH_BYTES {
+                                        let _ = app.emit(&event_name, std::mem::take(&mut batch_buf));
+                                    }
                                 }
-
-                                let text = decoder.decode(&bytes);
-                                if !text.is_empty() {
-                                    let _ = app.emit(&event_name, text);
-                                }
+                                None => break, // Channel closed
                             }
-                            None => break, // Channel closed
+                        }
+                        _ = shutdown_clone.notified() => {
+                            break;
                         }
                     }
-                    _ = shutdown_clone.notified() => {
-                        break;
+                } else {
+                    // Buffer has data — race between more data arriving and the flush timer
+                    tokio::select! {
+                        data = rx.recv() => {
+                            match data {
+                                Some(bytes) => {
+                                    #[cfg(windows)]
+                                    {
+                                        if bytes.len() >= 4 {
+                                            for i in 0..bytes.len().saturating_sub(3) {
+                                                if bytes[i] == 0x1b
+                                                    && bytes[i + 1] == 0x5b
+                                                    && bytes[i + 2] == 0x36
+                                                    && bytes[i + 3] == 0x6e
+                                                {
+                                                    log::info!(
+                                                        "PTY emitter {}: detected DSR request (ESC[6n), \
+                                                         responding with cursor position",
+                                                        id
+                                                    );
+                                                    if let Some(session) = inner_ref.sessions.get(&id) {
+                                                        if let Ok(mut w) = session.writer.lock() {
+                                                            let _ = w.write_all(b"\x1b[1;1R");
+                                                            let _ = w.flush();
+                                                        }
+                                                    }
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    let text = decoder.decode(&bytes);
+                                    if !text.is_empty() {
+                                        batch_buf.push_str(&text);
+                                    }
+                                    // Flush immediately if buffer exceeds safety valve
+                                    if batch_buf.len() >= MAX_BATCH_BYTES {
+                                        let _ = app.emit(&event_name, std::mem::take(&mut batch_buf));
+                                    }
+                                }
+                                None => {
+                                    // Channel closed — flush remaining data and exit
+                                    if !batch_buf.is_empty() {
+                                        let _ = app.emit(&event_name, std::mem::take(&mut batch_buf));
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        _ = tokio::time::sleep(FLUSH_INTERVAL) => {
+                            // Timer fired — flush accumulated data
+                            if !batch_buf.is_empty() {
+                                let _ = app.emit(&event_name, std::mem::take(&mut batch_buf));
+                            }
+                        }
+                        _ = shutdown_clone.notified() => {
+                            // Flush remaining data before shutdown
+                            if !batch_buf.is_empty() {
+                                let _ = app.emit(&event_name, std::mem::take(&mut batch_buf));
+                            }
+                            break;
+                        }
                     }
                 }
+            }
+
+            // Final flush for any remaining buffered data
+            if !batch_buf.is_empty() {
+                let _ = app.emit(&event_name, batch_buf);
             }
             log::debug!("PTY event emitter {id} exited");
         });

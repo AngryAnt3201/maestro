@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { GitFork, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getDeduplicatedCurrentBranch } from "@/lib/git";
 import { killSession } from "@/lib/terminal";
 import { useOpenProject } from "@/lib/useOpenProject";
 import { useSessionStore } from "@/stores/useSessionStore";
@@ -53,6 +54,15 @@ function App() {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("maestro-theme", theme);
   }, [theme]);
+
+  // Tag the document with platform class so CSS can disable expensive effects
+  // (e.g. box-shadow animations) that aren't GPU-accelerated on WebKitGTK/Linux.
+  useEffect(() => {
+    const ua = navigator.userAgent.toLowerCase();
+    if (ua.includes("linux")) {
+      document.documentElement.classList.add("platform-linux");
+    }
+  }, []);
 
   // Clean up orphaned PTY sessions on mount (e.g., after page reload)
   // This ensures no stale processes remain from the previous frontend state
@@ -116,7 +126,7 @@ function App() {
       setCurrentBranch(undefined);
       return () => {};
     }
-    invoke<string>("git_current_branch", { repoPath: activeProjectPath })
+    getDeduplicatedCurrentBranch(activeProjectPath)
       .then((branch) => {
         if (!cancelled) setCurrentBranch(branch);
       })

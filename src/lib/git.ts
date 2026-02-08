@@ -17,6 +17,12 @@ export interface BranchWithWorktreeStatus {
 }
 
 /**
+ * Shared cache for in-flight branch fetches to avoid redundant IPC calls
+ * when multiple components in the same project poll or fetch simultaneously.
+ */
+const activeFetches = new Map<string, Promise<string>>();
+
+/**
  * Fetches all branches for a repository.
  * @param repoPath - Path to the git repository
  * @returns List of branch info from the backend
@@ -59,4 +65,22 @@ export async function getBranchesWithWorktreeStatus(
  */
 export async function getCurrentBranch(repoPath: string): Promise<string> {
   return invoke<string>("git_current_branch", { repoPath });
+}
+
+/**
+ * Gets the current branch name, deduplicating simultaneous requests for the same path.
+ * Useful when multiple sessions or components need the branch status at once.
+ *
+ * @param repoPath - Path to the git repository
+ * @returns Current branch name
+ */
+export async function getDeduplicatedCurrentBranch(repoPath: string): Promise<string> {
+  const existing = activeFetches.get(repoPath);
+  if (existing) return existing;
+
+  const promise = getCurrentBranch(repoPath).finally(() => {
+    activeFetches.delete(repoPath);
+  });
+  activeFetches.set(repoPath, promise);
+  return promise;
 }
