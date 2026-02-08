@@ -68,6 +68,17 @@ export const MultiProjectView = forwardRef<MultiProjectViewHandle, MultiProjectV
     return callbacks;
   }, [tabs, setSessionsLaunched]);
 
+  // Stable all-sessions-closed callbacks per tab
+  const allSessionsClosedCallbacks = useMemo(() => {
+    const callbacks = new Map<string, () => void>();
+    for (const tab of tabs) {
+      callbacks.set(tab.id, () => {
+        setSessionsLaunched(tab.id, false);
+      });
+    }
+    return callbacks;
+  }, [tabs, setSessionsLaunched]);
+
   // Stable repo change callbacks per tab
   const repoChangeCallbacks = useMemo(() => {
     const callbacks = new Map<string, (path: string) => void>();
@@ -132,6 +143,7 @@ export const MultiProjectView = forwardRef<MultiProjectViewHandle, MultiProjectV
               onRepoChange={repoChangeCallbacks.get(tab.id)}
               preserveOnHide={true}
               onSessionCountChange={sessionCountChangeCallbacks.get(tab.id)}
+              onAllSessionsClosed={allSessionsClosedCallbacks.get(tab.id)}
             />
           ) : (
             <IdleLandingView onAdd={launchCallbacks.get(tab.id)!} />
