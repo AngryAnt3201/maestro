@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
@@ -247,3 +248,19 @@ export const useTerminalSettingsStore = create<
     }
   )
 );
+
+// Listen for native menu zoom events (View > Zoom In / Zoom Out / Actual Size)
+listen<string>("terminal-zoom", (event) => {
+  const store = useTerminalSettingsStore.getState();
+  switch (event.payload) {
+    case "zoom-in":
+      store.zoomIn();
+      break;
+    case "zoom-out":
+      store.zoomOut();
+      break;
+    case "zoom-reset":
+      store.resetZoom();
+      break;
+  }
+});

@@ -381,22 +381,6 @@ export const TerminalView = memo(function TerminalView({
           return false; // Don't send to PTY
         }
 
-        // Cmd+=/Cmd+-/Cmd+0: Terminal font zoom
-        if (event.metaKey && event.type === "keydown") {
-          if (event.key === "=" || event.key === "+") {
-            useTerminalSettingsStore.getState().zoomIn();
-            return false;
-          }
-          if (event.key === "-") {
-            useTerminalSettingsStore.getState().zoomOut();
-            return false;
-          }
-          if (event.key === "0") {
-            useTerminalSettingsStore.getState().resetZoom();
-            return false;
-          }
-        }
-
         // Cmd+Left/Right (Mac): jump to beginning/end of line
         // Cmd+Delete (Mac): delete from cursor to beginning of line
         // WebView intercepts Cmd+key by default, so we manually send the escape sequences
