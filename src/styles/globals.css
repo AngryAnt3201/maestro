@@ -300,6 +300,10 @@
     0 0 24px rgba(248, 81, 73, 0.25);
 }
 
+.terminal-cell-focused {
+  border-color: rgb(var(--maestro-accent));
+}
+
 /* ── Animations ── */
 
 @keyframes subtle-breathe {

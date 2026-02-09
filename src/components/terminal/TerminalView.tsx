@@ -473,7 +473,7 @@ export const TerminalView = memo(function TerminalView({
 
   return (
     <div
-      className={`terminal-cell flex h-full flex-col bg-maestro-bg ${cellStatusClass(effectiveStatus)} ${isFocused ? "ring-2 ring-maestro-accent ring-inset" : ""}`}
+      className={`terminal-cell flex h-full flex-col bg-maestro-bg ${cellStatusClass(effectiveStatus)} ${isFocused ? "terminal-cell-focused" : ""}`}
       onClick={onFocus}
     >
       {/* Rich header bar */}
