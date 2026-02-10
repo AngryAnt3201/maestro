@@ -32,7 +32,8 @@ pub fn run() {
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
-        .plugin(tauri_plugin_dialog::init());
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build());
 
     // Register macOS permissions plugin (for Full Disk Access check)
     #[cfg(target_os = "macos")]
@@ -203,6 +204,10 @@ pub fn run() {
             commands::github::github_reopen_issue,
             commands::github::github_get_discussion,
             commands::github::github_comment_discussion,
+            // Update commands
+            commands::update::check_for_updates,
+            commands::update::download_and_install_update,
+            commands::update::get_app_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Maestro");

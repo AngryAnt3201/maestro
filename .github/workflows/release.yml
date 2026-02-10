@@ -31,7 +31,7 @@ jobs:
         with:
           tag_name: v${{ steps.get-version.outputs.version }}-${{ github.run_number }}
           release_name: Maestro v${{ steps.get-version.outputs.version }} (Build ${{ github.run_number }})
-          draft: false
+          draft: true
           prerelease: false
           body: |
             ## Maestro v${{ steps.get-version.outputs.version }}
@@ -114,6 +114,78 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
           releaseId: ${{ needs.create-release.outputs.release_id }}
+
+      - name: Upload macOS DMG
+        if: matrix.platform == 'macos-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+          asset_path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/Maestro_${{ needs.create-release.outputs.version }}_universal.dmg
+          asset_name: Maestro_${{ needs.create-release.outputs.version }}_macOS_universal.dmg
+          asset_content_type: application/octet-stream
+
+      - name: Upload Windows MSI
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+          asset_path: src-tauri/target/release/bundle/msi/Maestro_${{ needs.create-release.outputs.version }}_x64_en-US.msi
+          asset_name: Maestro_${{ needs.create-release.outputs.version }}_Windows_x64.msi
+          asset_content_type: application/octet-stream
+
+      - name: Upload Windows NSIS
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+          asset_path: src-tauri/target/release/bundle/nsis/Maestro_${{ needs.create-release.outputs.version }}_x64-setup.exe
+          asset_name: Maestro_${{ needs.create-release.outputs.version }}_Windows_x64_setup.exe
+          asset_content_type: application/octet-stream
+
+      - name: Upload Linux DEB
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+          asset_path: src-tauri/target/release/bundle/deb/maestro_${{ needs.create-release.outputs.version }}_amd64.deb
+          asset_name: Maestro_${{ needs.create-release.outputs.version }}_Linux_amd64.deb
+          asset_content_type: application/octet-stream
+
+      - name: Upload Linux AppImage
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+          asset_path: src-tauri/target/release/bundle/appimage/maestro_${{ needs.create-release.outputs.version }}_amd64.AppImage
+          asset_name: Maestro_${{ needs.create-release.outputs.version }}_Linux_amd64.AppImage
+          asset_content_type: application/octet-stream
+
+  publish-release:
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ needs.create-release.outputs.release_id }},
+              draft: false,
+            });
