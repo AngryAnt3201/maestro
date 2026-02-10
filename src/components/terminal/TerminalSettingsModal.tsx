@@ -23,6 +23,8 @@ export function TerminalSettingsModal({ onClose }: TerminalSettingsModalProps) {
     initialize,
     setSetting,
     resetToDefaults,
+    setZoomLevel,
+    getEffectiveFontSize,
   } = useTerminalSettingsStore();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -114,10 +116,42 @@ export function TerminalSettingsModal({ onClose }: TerminalSettingsModalProps) {
                       onChange={(e) => setSetting("fontSize", Number(e.target.value))}
                       className="flex-1 accent-maestro-accent"
                     />
-                    <span className="w-8 text-right text-xs font-medium text-maestro-text">
-                      {settings.fontSize}px
+                    <span className="w-16 text-right text-xs font-medium text-maestro-text">
+                      {settings.zoomLevel !== 100
+                        ? `${settings.fontSize}px @ ${settings.zoomLevel}% = ${getEffectiveFontSize()}px`
+                        : `${settings.fontSize}px`}
                     </span>
                   </div>
+                </div>
+              </section>
+
+              {/* Zoom Level Section */}
+              <section>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-maestro-muted">
+                  Zoom Level
+                </h3>
+                <div className="rounded-lg border border-maestro-border bg-maestro-card p-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {[50, 75, 100, 125, 150, 200].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setZoomLevel(preset)}
+                        className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                          settings.zoomLevel === preset
+                            ? "bg-maestro-accent text-white"
+                            : "bg-maestro-bg text-maestro-muted hover:bg-maestro-border/40 hover:text-maestro-text"
+                        }`}
+                      >
+                        {preset}%
+                      </button>
+                    ))}
+                  </div>
+                  {settings.zoomLevel !== 100 && (
+                    <p className="mt-2 text-[10px] text-maestro-muted">
+                      Effective font size: {getEffectiveFontSize()}px
+                    </p>
+                  )}
                 </div>
               </section>
 

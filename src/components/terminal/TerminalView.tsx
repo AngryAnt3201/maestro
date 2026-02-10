@@ -142,7 +142,10 @@ export const TerminalView = memo(function TerminalView({
   const fontSize = useTerminalSettingsStore((s) => s.settings.fontSize);
   const fontFamily = useTerminalSettingsStore((s) => s.settings.fontFamily);
   const lineHeight = useTerminalSettingsStore((s) => s.settings.lineHeight);
+  const zoomLevel = useTerminalSettingsStore((s) => s.settings.zoomLevel);
   const getEffectiveFontFamily = useTerminalSettingsStore((s) => s.getEffectiveFontFamily);
+  const getEffectiveFontSize = useTerminalSettingsStore((s) => s.getEffectiveFontSize);
+  const setZoomLevel = useTerminalSettingsStore((s) => s.setZoomLevel);
 
   // Get MCP count for this session (primitive values are stable, no reference issues)
   const mcpCount = useMcpStore((s) => {
@@ -203,7 +206,7 @@ export const TerminalView = memo(function TerminalView({
       const effectiveFont = getEffectiveFontFamily();
       const builtFontFamily = buildFontFamily(effectiveFont);
 
-      termRef.current.options.fontSize = fontSize;
+      termRef.current.options.fontSize = getEffectiveFontSize();
       termRef.current.options.fontFamily = builtFontFamily;
       termRef.current.options.lineHeight = lineHeight;
 
@@ -216,7 +219,7 @@ export const TerminalView = memo(function TerminalView({
         }
       });
     }
-  }, [fontSize, fontFamily, lineHeight, getEffectiveFontFamily]);
+  }, [fontSize, fontFamily, lineHeight, zoomLevel, getEffectiveFontFamily, getEffectiveFontSize]);
 
   /**
    * Immediately removes the terminal from UI (optimistic update),
@@ -309,7 +312,7 @@ export const TerminalView = memo(function TerminalView({
       const isLinux = navigator.userAgent.toLowerCase().includes("linux");
       term = new Terminal({
         cursorBlink: true,
-        fontSize: currentSettings.settings.fontSize,
+        fontSize: currentSettings.getEffectiveFontSize(),
         fontFamily: fontFamily,
         lineHeight: currentSettings.settings.lineHeight,
         theme: toXtermTheme(initialTheme),
@@ -496,6 +499,8 @@ export const TerminalView = memo(function TerminalView({
         terminalCount={terminalCount}
         isZoomed={isZoomed}
         onToggleZoom={onToggleZoom}
+        zoomLevel={zoomLevel}
+        onSetZoomLevel={setZoomLevel}
       />
 
       {/* xterm.js container */}

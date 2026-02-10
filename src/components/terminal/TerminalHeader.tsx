@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   Bot,
   BrainCircuit,
@@ -12,6 +12,7 @@ import {
   Sparkles,
   Terminal,
   X,
+  ZoomIn,
 } from "lucide-react";
 
 export type SessionStatus = "idle" | "starting" | "working" | "needs-input" | "done" | "error" | "timeout";
@@ -33,6 +34,8 @@ interface TerminalHeaderProps {
   terminalCount?: number;
   isZoomed?: boolean;
   onToggleZoom?: () => void;
+  zoomLevel?: number;
+  onSetZoomLevel?: (level: number) => void;
 }
 
 const STATUS_COLOR: Record<SessionStatus, string> = {
@@ -78,8 +81,32 @@ export const TerminalHeader = memo(function TerminalHeader({
   terminalCount = 1,
   isZoomed = false,
   onToggleZoom,
+  zoomLevel = 100,
+  onSetZoomLevel,
 }: TerminalHeaderProps) {
   const { icon: ProviderIcon, label: providerLabel } = providerConfig[provider];
+  const [showZoomMenu, setShowZoomMenu] = useState(false);
+  const zoomMenuRef = useRef<HTMLDivElement>(null);
+
+  const handleZoomPreset = useCallback(
+    (level: number) => {
+      onSetZoomLevel?.(level);
+      setShowZoomMenu(false);
+    },
+    [onSetZoomLevel],
+  );
+
+  // Close zoom menu on outside click
+  useEffect(() => {
+    if (!showZoomMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (zoomMenuRef.current && !zoomMenuRef.current.contains(e.target as Node)) {
+        setShowZoomMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showZoomMenu]);
 
   // Calculate adaptive styling based on terminal count
   const getAdaptiveClasses = () => {
@@ -274,6 +301,43 @@ export const TerminalHeader = memo(function TerminalHeader({
           >
             {isZoomed ? <Minimize size={terminalCount <= 4 ? 14 : 12} /> : <Expand size={terminalCount <= 4 ? 14 : 12} />}
           </button>
+        )}
+
+        {/* Font zoom indicator + dropdown (hidden at 100%) */}
+        {zoomLevel !== 100 && onSetZoomLevel && (
+          <div className="relative" ref={zoomMenuRef}>
+            <button
+              type="button"
+              onClick={() => setShowZoomMenu((v) => !v)}
+              className="flex items-center gap-0.5 rounded px-1 py-0.5 text-maestro-muted transition-colors hover:bg-maestro-card hover:text-maestro-accent"
+              title={`Font zoom: ${zoomLevel}%`}
+              aria-label={`Font zoom: ${zoomLevel}%`}
+            >
+              <ZoomIn size={terminalCount <= 4 ? 12 : 10} />
+              <span className={`${adaptive.badgeSize} font-medium`}>{zoomLevel}%</span>
+            </button>
+            {showZoomMenu && (
+              <div className="absolute right-0 top-full z-50 mt-1 min-w-[140px] rounded-lg border border-maestro-border bg-maestro-surface shadow-lg">
+                {[50, 75, 100, 125, 150, 200].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => handleZoomPreset(preset)}
+                    className={`flex w-full items-center justify-between px-3 py-1.5 text-xs transition-colors hover:bg-maestro-card ${
+                      zoomLevel === preset
+                        ? "font-semibold text-maestro-accent"
+                        : "text-maestro-text"
+                    }`}
+                  >
+                    <span>{preset}%</span>
+                    <span className="text-[10px] text-maestro-muted">
+                      {preset === 100 ? "\u2318 0" : ""}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Status indicator */}

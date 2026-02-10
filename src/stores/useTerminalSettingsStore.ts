@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
@@ -18,6 +19,8 @@ export type TerminalSettings = {
   fontSize: number;
   /** Line height multiplier (1.0 = 100%). */
   lineHeight: number;
+  /** Zoom level as a percentage (25–500). Default 100. */
+  zoomLevel: number;
 };
 
 /** Read-only slice of the terminal settings store; persisted to disk. */
@@ -41,6 +44,16 @@ type TerminalSettingsActions = {
   resetToDefaults: () => void;
   /** Get the current font family, falling back to embedded if needed. */
   getEffectiveFontFamily: () => string;
+  /** Increase zoom by 10%, capped at 500%. */
+  zoomIn: () => void;
+  /** Decrease zoom by 10%, floored at 25%. */
+  zoomOut: () => void;
+  /** Reset zoom to 100%. */
+  resetZoom: () => void;
+  /** Set zoom to an arbitrary level (clamped 25–500). */
+  setZoomLevel: (level: number) => void;
+  /** Returns `Math.round(fontSize * zoomLevel / 100)`. */
+  getEffectiveFontSize: () => number;
 };
 
 // --- Default Settings ---
@@ -49,6 +62,7 @@ const DEFAULT_SETTINGS: TerminalSettings = {
   fontFamily: EMBEDDED_FONT,
   fontSize: 14,
   lineHeight: 1.2,
+  zoomLevel: 100,
 };
 
 // --- Tauri LazyStore-backed StateStorage adapter ---
@@ -170,6 +184,7 @@ export const useTerminalSettingsStore = create<
           settings: {
             ...DEFAULT_SETTINGS,
             fontFamily,
+            zoomLevel: 100,
           },
         });
       },
@@ -189,12 +204,63 @@ export const useTerminalSettingsStore = create<
 
         return isAvailable ? settings.fontFamily : EMBEDDED_FONT;
       },
+
+      zoomIn: () => {
+        const { settings } = get();
+        const next = Math.min(settings.zoomLevel + 10, 500);
+        set({ settings: { ...settings, zoomLevel: next } });
+      },
+
+      zoomOut: () => {
+        const { settings } = get();
+        const next = Math.max(settings.zoomLevel - 10, 25);
+        set({ settings: { ...settings, zoomLevel: next } });
+      },
+
+      resetZoom: () => {
+        const { settings } = get();
+        set({ settings: { ...settings, zoomLevel: 100 } });
+      },
+
+      setZoomLevel: (level: number) => {
+        const { settings } = get();
+        const clamped = Math.max(25, Math.min(500, level));
+        set({ settings: { ...settings, zoomLevel: clamped } });
+      },
+
+      getEffectiveFontSize: () => {
+        const { settings } = get();
+        return Math.round(settings.fontSize * settings.zoomLevel / 100);
+      },
     }),
     {
       name: "maestro-terminal-settings",
       storage: createJSONStorage(() => tauriStorage),
       partialize: (state) => ({ settings: state.settings }),
-      version: 1,
+      version: 2,
+      migrate: (persisted, version) => {
+        const state = persisted as { settings: TerminalSettings };
+        if (version < 2) {
+          state.settings = { ...state.settings, zoomLevel: 100 };
+        }
+        return state;
+      },
     }
   )
 );
+
+// Listen for native menu zoom events (View > Zoom In / Zoom Out / Actual Size)
+listen<string>("terminal-zoom", (event) => {
+  const store = useTerminalSettingsStore.getState();
+  switch (event.payload) {
+    case "zoom-in":
+      store.zoomIn();
+      break;
+    case "zoom-out":
+      store.zoomOut();
+      break;
+    case "zoom-reset":
+      store.resetZoom();
+      break;
+  }
+});
