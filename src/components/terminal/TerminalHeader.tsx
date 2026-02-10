@@ -109,17 +109,17 @@ export const TerminalHeader = memo(function TerminalHeader({
   // Calculate adaptive styling based on terminal count
   const getAdaptiveClasses = () => {
     if (isZoomed) {
-      // When zoomed, use extra large sizes
+      // When zoomed, match the 1-2 terminal tier for consistency
       return {
-        headerHeight: "h-14",
-        providerIconSize: 32,
-        sessionLabelSize: "text-lg",
-        badgeSize: "text-sm",
-        badgePadding: "px-3 py-1",
-        branchMaxWidth: "max-w-[160px]",
-        statusSize: "text-sm",
+        headerHeight: "h-10",
+        providerIconSize: 20,
+        sessionLabelSize: "text-sm",
+        badgeSize: "text-xs",
+        badgePadding: "px-2 py-0.5",
+        branchMaxWidth: "max-w-[200px]",
+        statusSize: "text-xs",
         showAllElements: true,
-        gapSize: "gap-2.5",
+        gapSize: "gap-2",
       };
     }
 

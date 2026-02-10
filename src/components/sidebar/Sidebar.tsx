@@ -42,7 +42,6 @@ import { useProcessTreeStore, type ProcessInfo, type SessionProcessTree } from "
 import { useUsageStore } from "@/stores/useUsageStore";
 import { GitSettingsModal, RemoteStatusIndicator } from "@/components/git";
 import { QuickActionsManager } from "@/components/quickactions/QuickActionsManager";
-import { UpdateSettingsSection } from "@/components/sidebar/UpdateSettingsSection";
 import { MarketplaceBrowser } from "@/components/marketplace";
 import { McpServerEditorModal } from "@/components/mcp";
 import { ClaudeMdEditorModal } from "@/components/claudemd";
@@ -309,8 +308,6 @@ function ConfigTab({
       <PluginsSection />
       {divider}
       <QuickActionsSection />
-      {divider}
-      <UpdateSettingsSection />
       {divider}
       <AppearanceSection theme={theme} onToggle={onToggleTheme} />
     </>

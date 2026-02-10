@@ -950,12 +950,12 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       return (
         <div className="relative flex h-full flex-col bg-maestro-bg">
           {/* Top Navigation Bar */}
-          <div className="flex shrink-0 items-center gap-2 border-b border-maestro-border bg-maestro-surface px-4 py-2 animate-in fade-in slide-in-from-top duration-200">
-            <span className="text-xs font-semibold uppercase tracking-wider text-maestro-muted">
-              Zoom View - Terminal {zoomedIndex + 1}/{slots.length}
+          <div className="flex h-8 shrink-0 items-center gap-2 border-b border-maestro-border bg-maestro-surface px-3">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-maestro-muted">
+              Terminal {zoomedIndex + 1}/{slots.length}
             </span>
-            <div className="h-4 w-px bg-maestro-border" />
-            <div className="flex gap-1">
+            <div className="h-3.5 w-px bg-maestro-border" />
+            <div className="flex gap-0.5">
               {slots.map((slot, index) => {
                 const isActive = slot.id === zoomedSlotId;
                 const hasSession = slot.sessionId !== null;
@@ -965,20 +965,17 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
                     key={slot.id}
                     onClick={() => handleToggleZoom(slot.id)}
                     className={`
-                      relative flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all duration-200
+                      flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors
                       ${isActive
-                        ? 'bg-maestro-card text-white scale-110'
-                        : 'bg-maestro-card text-maestro-muted hover:bg-maestro-card/80 hover:text-maestro-text hover:scale-105'
+                        ? 'bg-maestro-accent/15 text-maestro-accent'
+                        : 'text-maestro-muted hover:bg-maestro-card hover:text-maestro-text'
                       }
                     `}
                     title={isActive ? 'Current terminal (click to exit zoom)' : `Switch to terminal ${index + 1}`}
                   >
-                    {isActive && (
-                      <span className="absolute inset-0 rounded-lg border-2 border-blue-500 animate-pulse shadow-lg shadow-blue-500/50"></span>
-                    )}
-                    <span className="font-mono text-base">{index + 1}</span>
+                    <span className="font-mono text-xs">{index + 1}</span>
                     {hasSession && (
-                      <span className="h-2 w-2 rounded-full bg-maestro-green shadow-lg shadow-maestro-green/50" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-maestro-green" />
                     )}
                   </button>
                 );
@@ -987,10 +984,10 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             <div className="flex-1" />
             <button
               onClick={() => handleToggleZoom(zoomedSlotId)}
-              className="rounded p-1.5 text-maestro-muted transition-colors hover:bg-maestro-card hover:text-maestro-text"
+              className="rounded p-0.5 text-maestro-muted transition-colors hover:bg-maestro-card hover:text-maestro-text"
               title="Exit zoom (Esc)"
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
