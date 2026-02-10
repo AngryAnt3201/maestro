@@ -10,6 +10,7 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-start-dragging",
     "store:default",
-    "dialog:default"
+    "dialog:default",
+    "updater:default"
   ]
 }

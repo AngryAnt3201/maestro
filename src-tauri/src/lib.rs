@@ -5,7 +5,8 @@ mod github;
 
 use std::sync::Arc;
 
-use tauri::Manager;
+use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
+use tauri::{Emitter, Manager};
 
 use core::marketplace_manager::MarketplaceManager;
 use core::mcp_manager::McpManager;
@@ -32,7 +33,8 @@ pub fn run() {
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
-        .plugin(tauri_plugin_dialog::init());
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build());
 
     // Register macOS permissions plugin (for Full Disk Access check)
     #[cfg(target_os = "macos")]
@@ -41,6 +43,64 @@ pub fn run() {
     }
 
     builder
+        .menu(|handle| {
+            // App submenu (macOS standard items)
+            let app_menu = SubmenuBuilder::new(handle, "Maestro")
+                .about(None)
+                .separator()
+                .services()
+                .separator()
+                .hide()
+                .hide_others()
+                .show_all()
+                .separator()
+                .quit()
+                .build()?;
+
+            // Edit submenu
+            let edit_menu = SubmenuBuilder::new(handle, "Edit")
+                .undo()
+                .redo()
+                .separator()
+                .cut()
+                .copy()
+                .paste()
+                .select_all()
+                .build()?;
+
+            // View submenu with terminal font zoom controls
+            let zoom_in = MenuItem::with_id(handle, "zoom-in", "Zoom In", true, Some("CmdOrCtrl+="))?;
+            let zoom_out = MenuItem::with_id(handle, "zoom-out", "Zoom Out", true, Some("CmdOrCtrl+-"))?;
+            let zoom_reset = MenuItem::with_id(handle, "zoom-reset", "Actual Size", true, Some("CmdOrCtrl+0"))?;
+            let view_menu = SubmenuBuilder::new(handle, "View")
+                .item(&zoom_in)
+                .item(&zoom_out)
+                .separator()
+                .item(&zoom_reset)
+                .build()?;
+
+            // Window submenu (intentionally no Zoom/maximize item)
+            let window_menu = SubmenuBuilder::new(handle, "Window")
+                .minimize()
+                .separator()
+                .close_window()
+                .build()?;
+
+            MenuBuilder::new(handle)
+                .items(&[&app_menu, &edit_menu, &view_menu, &window_menu])
+                .build()
+        })
+        .on_menu_event(|app, event| {
+            let id = event.id();
+            match id.as_ref() {
+                "zoom-in" | "zoom-out" | "zoom-reset" => {
+                    if let Err(e) = app.emit("terminal-zoom", id.as_ref()) {
+                        log::error!("Failed to emit terminal-zoom event: {}", e);
+                    }
+                }
+                _ => {}
+            }
+        })
         .manage(MarketplaceManager::new())
         .manage(McpManager::new())
         .manage(PluginManager::new())
@@ -203,6 +263,10 @@ pub fn run() {
             commands::github::github_reopen_issue,
             commands::github::github_get_discussion,
             commands::github::github_comment_discussion,
+            // Update commands
+            commands::update::check_for_updates,
+            commands::update::download_and_install_update,
+            commands::update::get_app_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Maestro");

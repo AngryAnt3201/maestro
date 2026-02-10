@@ -8,7 +8,10 @@ import { useSessionStore } from "@/stores/useSessionStore";
 import { useWorkspaceStore } from "@/stores/useWorkspaceStore";
 import { useGitStore } from "./stores/useGitStore";
 import { useTerminalSettingsStore } from "./stores/useTerminalSettingsStore";
+import { useAppKeyboard } from "./hooks/useAppKeyboard";
 import { useSwipeNavigation } from "./hooks/useSwipeNavigation";
+import { useUpdateStore } from "./stores/useUpdateStore";
+import { UpdateNotification } from "./components/update/UpdateNotification";
 import { GitGraphPanel } from "./components/git/GitGraphPanel";
 import { BottomBar } from "./components/shared/BottomBar";
 import { FDADialog } from "./components/shared/FDADialog";
@@ -103,6 +106,31 @@ function App() {
     });
   }, [initializeTerminalSettings]);
 
+  // Initialize update event listeners and auto-check
+  const initUpdateListeners = useUpdateStore((s) => s.initListeners);
+  const checkForUpdates = useUpdateStore((s) => s.checkForUpdates);
+  const autoCheckEnabled = useUpdateStore((s) => s.autoCheckEnabled);
+  const checkIntervalMinutes = useUpdateStore((s) => s.checkIntervalMinutes);
+
+  useEffect(() => {
+    const unlistenPromise = initUpdateListeners().catch((err) => {
+      console.error("Failed to initialize update listeners:", err);
+      return () => {};
+    });
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [initUpdateListeners]);
+
+  useEffect(() => {
+    if (!autoCheckEnabled) return;
+    // Check on mount
+    checkForUpdates();
+    // Then periodically
+    const interval = setInterval(checkForUpdates, checkIntervalMinutes * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [autoCheckEnabled, checkIntervalMinutes, checkForUpdates]);
+
   const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
   const activeTab = tabs.find((tab) => tab.active) ?? null;
   const activeProjectPath = activeTab?.projectPath;
@@ -164,6 +192,16 @@ function App() {
   const activeTabCounts = activeTab ? sessionCounts.get(activeTab.id) : undefined;
   const activeTabSlotCount = activeTabCounts?.slotCount ?? 0;
   const activeTabLaunchedCount = activeTabCounts?.launchedCount ?? 0;
+
+  // Cmd/Ctrl+T: add a new session slot in grid view
+  const handleAddSessionShortcut = useCallback(() => {
+    multiProjectRef.current?.addSessionToActiveProject();
+  }, []);
+
+  useAppKeyboard({
+    onAddSession: handleAddSessionShortcut,
+    canAddSession: activeTabSessionsLaunched,
+  });
 
   // Handler to enter grid view for the active project
   const handleEnterGridView = () => {
@@ -333,6 +371,8 @@ function App() {
           onRetry={retryAfterFDAGrant}
         />
       )}
+
+      <UpdateNotification />
     </div>
   );
 }

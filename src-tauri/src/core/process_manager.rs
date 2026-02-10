@@ -220,6 +220,16 @@ impl ProcessManager {
         #[cfg(unix)]
         cmd.env("TERM", "xterm-256color");
 
+        // Ensure UTF-8 locale for proper multi-byte character handling.
+        // macOS Terminal.app/iTerm2 set LANG before launching shells, but Tauri
+        // apps launched from Finder/Dock/Spotlight don't inherit that setting.
+        // Without a UTF-8 locale, zsh/bash treat CJK characters as raw bytes,
+        // causing garbled display and incorrect cursor positioning.
+        #[cfg(unix)]
+        if std::env::var("LANG").unwrap_or_default().is_empty() {
+            cmd.env("LANG", "en_US.UTF-8");
+        }
+
         // Inject MAESTRO_SESSION_ID automatically (used by MCP status server)
         cmd.env("MAESTRO_SESSION_ID", id.to_string());
 

@@ -1,6 +1,7 @@
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
@@ -141,7 +142,10 @@ export const TerminalView = memo(function TerminalView({
   const fontSize = useTerminalSettingsStore((s) => s.settings.fontSize);
   const fontFamily = useTerminalSettingsStore((s) => s.settings.fontFamily);
   const lineHeight = useTerminalSettingsStore((s) => s.settings.lineHeight);
+  const zoomLevel = useTerminalSettingsStore((s) => s.settings.zoomLevel);
   const getEffectiveFontFamily = useTerminalSettingsStore((s) => s.getEffectiveFontFamily);
+  const getEffectiveFontSize = useTerminalSettingsStore((s) => s.getEffectiveFontSize);
+  const setZoomLevel = useTerminalSettingsStore((s) => s.setZoomLevel);
 
   // Get MCP count for this session (primitive values are stable, no reference issues)
   const mcpCount = useMcpStore((s) => {
@@ -202,7 +206,7 @@ export const TerminalView = memo(function TerminalView({
       const effectiveFont = getEffectiveFontFamily();
       const builtFontFamily = buildFontFamily(effectiveFont);
 
-      termRef.current.options.fontSize = fontSize;
+      termRef.current.options.fontSize = getEffectiveFontSize();
       termRef.current.options.fontFamily = builtFontFamily;
       termRef.current.options.lineHeight = lineHeight;
 
@@ -215,7 +219,7 @@ export const TerminalView = memo(function TerminalView({
         }
       });
     }
-  }, [fontSize, fontFamily, lineHeight, getEffectiveFontFamily]);
+  }, [fontSize, fontFamily, lineHeight, zoomLevel, getEffectiveFontFamily, getEffectiveFontSize]);
 
   /**
    * Immediately removes the terminal from UI (optimistic update),
@@ -308,7 +312,7 @@ export const TerminalView = memo(function TerminalView({
       const isLinux = navigator.userAgent.toLowerCase().includes("linux");
       term = new Terminal({
         cursorBlink: true,
-        fontSize: currentSettings.settings.fontSize,
+        fontSize: currentSettings.getEffectiveFontSize(),
         fontFamily: fontFamily,
         lineHeight: currentSettings.settings.lineHeight,
         theme: toXtermTheme(initialTheme),
@@ -320,8 +324,11 @@ export const TerminalView = memo(function TerminalView({
       fitAddon = new FitAddon();
       const webLinksAddon = new WebLinksAddon();
 
+      const unicode11Addon = new Unicode11Addon();
       term.loadAddon(fitAddon);
       term.loadAddon(webLinksAddon);
+      term.loadAddon(unicode11Addon);
+      term.unicode.activeVersion = "11";
       term.open(container);
 
       // GPU-accelerated rendering (must be loaded after open())
@@ -353,7 +360,30 @@ export const TerminalView = memo(function TerminalView({
         }
       });
 
+      // Workaround for xterm.js CompositionHelper bug on WebKit (Tauri/WKWebView):
+      // The hidden textarea accumulates text across compositions, but CompositionHelper
+      // uses textarea.value.length at compositionstart as the extraction offset. When
+      // prior text remains in the textarea, it extracts the wrong substring — e.g.
+      // sending "測試" instead of "這是". We capture the correct text from the
+      // compositionend event and replace whatever xterm sends via onData.
+      const textarea = term.textarea!;
+      let pendingCompositionData: string | null = null;
+
+      textarea.addEventListener("compositionend", (e) => {
+        pendingCompositionData = (e as CompositionEvent).data;
+      });
+
       dataDisposable = term.onData((data) => {
+        if (pendingCompositionData !== null) {
+          const correctData = pendingCompositionData;
+          pendingCompositionData = null;
+          // Clear textarea to prevent accumulation that corrupts future compositions
+          textarea.value = "";
+          if (correctData.length > 0) {
+            writeStdin(sessionId, correctData).catch(console.error);
+          }
+          return;
+        }
         writeStdin(sessionId, data).catch(console.error);
       });
 
@@ -363,10 +393,16 @@ export const TerminalView = memo(function TerminalView({
 
       // Handle special keyboard shortcuts
       term.attachCustomKeyEventHandler((event) => {
-        // Shift+Enter: insert literal newline without submitting
-        if (event.key === "Enter" && event.shiftKey && event.type === "keydown") {
-          writeStdin(sessionId, "\n").catch(console.error);
-          return false; // Don't let xterm process it
+        // Shift+Enter: send Kitty keyboard protocol sequence for Shift+Enter
+        // so Claude Code inserts a newline in its input buffer instead of executing.
+        // Raw "\n" would be treated as a command terminator by the CLI.
+        // Block all event types (keydown, keypress, keyup) to prevent xterm.js
+        // from also sending "\r" on the keypress event.
+        if (event.key === "Enter" && event.shiftKey) {
+          if (event.type === "keydown") {
+            writeStdin(sessionId, "\x1b[13;2u").catch(console.error);
+          }
+          return false;
         }
 
         // Cmd+C (Mac) or Ctrl+C (Linux/Windows): copy selection to clipboard
@@ -376,6 +412,12 @@ export const TerminalView = memo(function TerminalView({
           const selection = term.getSelection();
           navigator.clipboard.writeText(selection).catch(console.error);
           return false; // Don't send to PTY
+        }
+
+        // Cmd/Ctrl+T: add new session — block xterm so 't' isn't sent to PTY.
+        // The DOM event still bubbles to window where useAppKeyboard handles it.
+        if (event.key === "t" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.type === "keydown") {
+          return false;
         }
 
         // Cmd+Left/Right (Mac): jump to beginning/end of line
@@ -473,7 +515,7 @@ export const TerminalView = memo(function TerminalView({
 
   return (
     <div
-      className={`terminal-cell flex h-full flex-col bg-maestro-bg ${cellStatusClass(effectiveStatus)} ${isFocused ? "ring-2 ring-maestro-accent ring-inset" : ""}`}
+      className={`terminal-cell flex h-full flex-col bg-maestro-bg ${cellStatusClass(effectiveStatus)} ${isFocused ? "terminal-cell-focused" : ""}`}
       onClick={onFocus}
     >
       {/* Rich header bar */}
@@ -489,6 +531,8 @@ export const TerminalView = memo(function TerminalView({
         terminalCount={terminalCount}
         isZoomed={isZoomed}
         onToggleZoom={onToggleZoom}
+        zoomLevel={zoomLevel}
+        onSetZoomLevel={setZoomLevel}
       />
 
       {/* xterm.js container */}
