@@ -388,7 +388,6 @@ export const TerminalHeader = memo(function TerminalHeader({
           </button>
         )}
 
-<<<<<<< HEAD
         {/* Font zoom indicator + dropdown (hidden at 100%) */}
         {zoomLevel !== 100 && onSetZoomLevel && (
           <div className="relative" ref={zoomMenuRef}>

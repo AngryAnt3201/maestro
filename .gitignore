@@ -44,6 +44,9 @@ claude.md
 *.zip
 *.app
 
+# Git worktrees
+.worktrees/
+
 # Notes
 plan.md
 reddit-post.md
