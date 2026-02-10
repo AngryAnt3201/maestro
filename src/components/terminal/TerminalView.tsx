@@ -393,10 +393,16 @@ export const TerminalView = memo(function TerminalView({
 
       // Handle special keyboard shortcuts
       term.attachCustomKeyEventHandler((event) => {
-        // Shift+Enter: insert literal newline without submitting
-        if (event.key === "Enter" && event.shiftKey && event.type === "keydown") {
-          writeStdin(sessionId, "\n").catch(console.error);
-          return false; // Don't let xterm process it
+        // Shift+Enter: send Kitty keyboard protocol sequence for Shift+Enter
+        // so Claude Code inserts a newline in its input buffer instead of executing.
+        // Raw "\n" would be treated as a command terminator by the CLI.
+        // Block all event types (keydown, keypress, keyup) to prevent xterm.js
+        // from also sending "\r" on the keypress event.
+        if (event.key === "Enter" && event.shiftKey) {
+          if (event.type === "keydown") {
+            writeStdin(sessionId, "\x1b[13;2u").catch(console.error);
+          }
+          return false;
         }
 
         // Cmd+C (Mac) or Ctrl+C (Linux/Windows): copy selection to clipboard
