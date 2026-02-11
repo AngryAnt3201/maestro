@@ -88,6 +88,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
+      - name: Build MCP server (needed by Tauri build script)
+        run: cargo build --release -p maestro-mcp-server
+
       - name: Run Rust tests
         run: cargo test --workspace
         working-directory: src-tauri
