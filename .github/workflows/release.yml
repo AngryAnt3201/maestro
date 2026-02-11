@@ -228,7 +228,7 @@ jobs:
             const version = '${{ needs.preflight.outputs.version }}';
             const releaseId = ${{ needs.create-release.outputs.release_id }};
 
-            const dmgDir = 'src-tauri/target/universal-apple-darwin/release/bundle/dmg';
+            const dmgDir = 'target/universal-apple-darwin/release/bundle/dmg';
             const dmgFiles = fs.readdirSync(dmgDir).filter(f => f.endsWith('.dmg'));
             if (dmgFiles.length === 0) throw new Error('No .dmg found');
 
@@ -241,29 +241,6 @@ jobs:
               data: fs.readFileSync(dmgPath),
             });
 
-      - name: Upload Windows MSI
-        if: matrix.platform == 'windows-latest'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-            const version = '${{ needs.preflight.outputs.version }}';
-            const releaseId = ${{ needs.create-release.outputs.release_id }};
-
-            const msiDir = 'src-tauri/target/release/bundle/msi';
-            const msiFiles = fs.readdirSync(msiDir).filter(f => f.endsWith('.msi'));
-            if (msiFiles.length === 0) throw new Error('No .msi found');
-
-            const msiPath = path.join(msiDir, msiFiles[0]);
-            await github.rest.repos.uploadReleaseAsset({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: releaseId,
-              name: `Maestro_${version}_Windows_x64.msi`,
-              data: fs.readFileSync(msiPath),
-            });
-
       - name: Upload Windows NSIS
         if: matrix.platform == 'windows-latest'
         uses: actions/github-script@v7
@@ -274,7 +251,7 @@ jobs:
             const version = '${{ needs.preflight.outputs.version }}';
             const releaseId = ${{ needs.create-release.outputs.release_id }};
 
-            const nsisDir = 'src-tauri/target/release/bundle/nsis';
+            const nsisDir = 'target/release/bundle/nsis';
             const exeFiles = fs.readdirSync(nsisDir).filter(f => f.endsWith('.exe'));
             if (exeFiles.length === 0) throw new Error('No .exe found');
 
@@ -297,7 +274,7 @@ jobs:
             const version = '${{ needs.preflight.outputs.version }}';
             const releaseId = ${{ needs.create-release.outputs.release_id }};
 
-            const debDir = 'src-tauri/target/release/bundle/deb';
+            const debDir = 'target/release/bundle/deb';
             const debFiles = fs.readdirSync(debDir).filter(f => f.endsWith('.deb'));
             if (debFiles.length === 0) throw new Error('No .deb found');
 
@@ -320,7 +297,7 @@ jobs:
             const version = '${{ needs.preflight.outputs.version }}';
             const releaseId = ${{ needs.create-release.outputs.release_id }};
 
-            const appDir = 'src-tauri/target/release/bundle/appimage';
+            const appDir = 'target/release/bundle/appimage';
             const appFiles = fs.readdirSync(appDir).filter(f => f.endsWith('.AppImage') && !f.endsWith('.sig'));
             if (appFiles.length === 0) throw new Error('No .AppImage found');
 
@@ -344,7 +321,7 @@ jobs:
             const path = require('path');
             const releaseId = ${{ needs.create-release.outputs.release_id }};
 
-            const bundleDir = 'src-tauri/target/universal-apple-darwin/release/bundle/macos';
+            const bundleDir = 'target/universal-apple-darwin/release/bundle/macos';
             const tgzFiles = fs.readdirSync(bundleDir).filter(f => f.endsWith('.tar.gz') && !f.endsWith('.sig'));
             if (tgzFiles.length === 0) throw new Error('No macOS updater .tar.gz found');
 
@@ -367,7 +344,7 @@ jobs:
             const version = '${{ needs.preflight.outputs.version }}';
             const releaseId = ${{ needs.create-release.outputs.release_id }};
 
-            const nsisDir = 'src-tauri/target/release/bundle/nsis';
+            const nsisDir = 'target/release/bundle/nsis';
             const zipFiles = fs.readdirSync(nsisDir).filter(f => f.endsWith('.nsis.zip'));
             if (zipFiles.length === 0) throw new Error('No Windows updater .nsis.zip found');
 
@@ -390,7 +367,7 @@ jobs:
             const version = '${{ needs.preflight.outputs.version }}';
             const releaseId = ${{ needs.create-release.outputs.release_id }};
 
-            const appDir = 'src-tauri/target/release/bundle/appimage';
+            const appDir = 'target/release/bundle/appimage';
             const tgzFiles = fs.readdirSync(appDir).filter(f => f.endsWith('.AppImage.tar.gz'));
             if (tgzFiles.length === 0) throw new Error('No Linux updater .AppImage.tar.gz found');
 
@@ -410,21 +387,21 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sig-macos
-          path: src-tauri/target/universal-apple-darwin/release/bundle/macos/*.sig
+          path: target/universal-apple-darwin/release/bundle/macos/*.sig
 
       - name: Upload Windows signature
         if: matrix.platform == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: sig-windows
-          path: src-tauri/target/release/bundle/nsis/*.sig
+          path: target/release/bundle/nsis/*.sig
 
       - name: Upload Linux signature
         if: matrix.platform == 'ubuntu-22.04'
         uses: actions/upload-artifact@v4
         with:
           name: sig-linux
-          path: src-tauri/target/release/bundle/appimage/*.sig
+          path: target/release/bundle/appimage/*.sig
 
   generate-updater:
     needs: [preflight, create-release, build]
@@ -446,16 +423,16 @@ jobs:
             const version = '${{ needs.preflight.outputs.version }}';
             const releaseId = ${{ needs.create-release.outputs.release_id }};
 
-            // Read signatures
-            function readSig(dir) {
-              const files = fs.readdirSync(dir).filter(f => f.endsWith('.sig'));
-              if (files.length === 0) throw new Error(`No .sig file in ${dir}`);
+            // Read the updater bundle signature (not the installer sig)
+            function readSig(dir, pattern) {
+              const files = fs.readdirSync(dir).filter(f => f.endsWith('.sig') && f.includes(pattern));
+              if (files.length === 0) throw new Error(`No .sig file matching '${pattern}' in ${dir}: ${fs.readdirSync(dir)}`);
               return fs.readFileSync(path.join(dir, files[0]), 'utf8').trim();
             }
 
-            const macSig = readSig('signatures/sig-macos');
-            const winSig = readSig('signatures/sig-windows');
-            const linuxSig = readSig('signatures/sig-linux');
+            const macSig = readSig('signatures/sig-macos', '.tar.gz.sig');
+            const winSig = readSig('signatures/sig-windows', '.nsis.zip.sig');
+            const linuxSig = readSig('signatures/sig-linux', '.tar.gz.sig');
 
             // Get release notes
             const notes = decodeURIComponent(
