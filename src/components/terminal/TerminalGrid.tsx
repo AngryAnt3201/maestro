@@ -886,16 +886,17 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
    * Passed to PreLaunchCard for inline branch creation.
    */
   const handleCreateBranch = useCallback(
-    async (name: string, andCheckout: boolean) => {
-      if (!effectiveRepoPath) return;
+    async (name: string, andCheckout: boolean, repoPath?: string) => {
+      const targetRepo = repoPath ?? effectiveRepoPath;
+      if (!targetRepo) return;
       await invoke("git_create_branch", {
-        repoPath: effectiveRepoPath,
+        repoPath: targetRepo,
         branchName: name,
         startPoint: null,
       });
       if (andCheckout) {
         await invoke("git_checkout_branch", {
-          repoPath: effectiveRepoPath,
+          repoPath: targetRepo,
           branchName: name,
         });
       }

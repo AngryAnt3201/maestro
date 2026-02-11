@@ -67,7 +67,7 @@ interface PreLaunchCardProps {
   mcpServers: McpServerConfig[];
   skills: SkillConfig[];
   plugins: PluginConfig[];
-  onCreateBranch?: (name: string, andCheckout: boolean) => Promise<void>;
+  onCreateBranch?: (name: string, andCheckout: boolean, repoPath?: string) => Promise<void>;
   onModeChange: (mode: AiMode) => void;
   onBranchChange: (branch: string | null) => void;
   onMcpToggle: (serverName: string) => void;
@@ -141,6 +141,13 @@ export function PreLaunchCard({
   const [repoBranchesCache, setRepoBranchesCache] = useState<Map<string, BranchWithWorktreeStatus[]>>(new Map());
   const [loadingRepos, setLoadingRepos] = useState<Set<string>>(new Set());
 
+  // Per-repo branch creation state (for multi-repo mode)
+  const [repoCreateBranch, setRepoCreateBranch] = useState<string | null>(null); // repo path showing create input
+  const [repoNewBranchName, setRepoNewBranchName] = useState("");
+  const [repoCreatingBranch, setRepoCreatingBranch] = useState(false);
+  const [repoCreateError, setRepoCreateError] = useState<string | null>(null);
+  const repoCreateInputRef = useRef<HTMLInputElement>(null);
+
   const modeDropdownRef = useRef<HTMLDivElement>(null);
   const branchDropdownRef = useRef<HTMLDivElement>(null);
   const mcpDropdownRef = useRef<HTMLDivElement>(null);
@@ -175,6 +182,13 @@ export function PreLaunchCard({
       branchCreateInputRef.current.focus();
     }
   }, [showBranchCreate]);
+
+  // Focus per-repo branch create input when shown
+  useEffect(() => {
+    if (repoCreateBranch && repoCreateInputRef.current) {
+      repoCreateInputRef.current.focus();
+    }
+  }, [repoCreateBranch]);
 
   // MCP server display info
   const enabledCount = slot.enabledMcpServers.length;
@@ -459,15 +473,15 @@ export function PreLaunchCard({
                     </div>
                   </div>
 
-                  {/* Create new branch section */}
-                  {onCreateBranch && (
+                  {/* Create new branch section (single-repo only — multi-repo has per-repo creation) */}
+                  {onCreateBranch && !isMultiRepo && (
                     <div className="border-b border-maestro-border">
                       {showBranchCreate ? (
                         <div className="p-2">
                           <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-maestro-muted/70">
                             New Branch Name
                           </div>
-                          <div className="flex gap-1.5">
+                          <div className="space-y-1.5">
                             <input
                               ref={branchCreateInputRef}
                               type="text"
@@ -507,69 +521,71 @@ export function PreLaunchCard({
                                 }
                               }}
                               placeholder="feature/my-branch"
-                              className="flex-1 rounded border border-maestro-border bg-maestro-surface px-2 py-1 text-xs text-maestro-text placeholder:text-maestro-muted/50 focus:border-maestro-accent focus:outline-none"
+                              className="w-full rounded border border-maestro-border bg-maestro-surface px-2 py-1 text-xs text-maestro-text placeholder:text-maestro-muted/50 focus:border-maestro-accent focus:outline-none"
                               disabled={isCreatingBranch}
                               onClick={(e) => e.stopPropagation()}
                             />
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const trimmed = newBranchName.trim();
-                                if (!trimmed || isCreatingBranch) return;
-                                if (!/^[a-zA-Z0-9._/-]+$/.test(trimmed)) {
-                                  setBranchCreateError("Invalid name. Use letters, numbers, dots, dashes, slashes.");
-                                  return;
-                                }
-                                setIsCreatingBranch(true);
-                                setBranchCreateError(null);
-                                onCreateBranch(trimmed, false)
-                                  .then(() => {
-                                    setNewBranchName("");
-                                    setShowBranchCreate(false);
-                                  })
-                                  .catch((err) => {
-                                    setBranchCreateError(err instanceof Error ? err.message : "Failed to create branch");
-                                  })
-                                  .finally(() => setIsCreatingBranch(false));
-                              }}
-                              disabled={!newBranchName.trim() || isCreatingBranch}
-                              className="rounded border border-maestro-border bg-maestro-surface px-2 py-1 text-xs font-medium text-maestro-text disabled:opacity-50 hover:bg-maestro-border/40"
-                              title="Create branch without selecting"
-                            >
-                              {isCreatingBranch ? "..." : "Create"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const trimmed = newBranchName.trim();
-                                if (!trimmed || isCreatingBranch) return;
-                                if (!/^[a-zA-Z0-9._/-]+$/.test(trimmed)) {
-                                  setBranchCreateError("Invalid name. Use letters, numbers, dots, dashes, slashes.");
-                                  return;
-                                }
-                                setIsCreatingBranch(true);
-                                setBranchCreateError(null);
-                                onCreateBranch(trimmed, false)
-                                  .then(() => {
-                                    onBranchChange(trimmed);
-                                    setNewBranchName("");
-                                    setShowBranchCreate(false);
-                                    setBranchDropdownOpen(false);
-                                    setBranchSearchQuery("");
-                                  })
-                                  .catch((err) => {
-                                    setBranchCreateError(err instanceof Error ? err.message : "Failed to create branch");
-                                  })
-                                  .finally(() => setIsCreatingBranch(false));
-                              }}
-                              disabled={!newBranchName.trim() || isCreatingBranch}
-                              className="rounded bg-maestro-accent px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
-                              title="Create branch and select it"
-                            >
-                              {isCreatingBranch ? "..." : "Create & Select"}
-                            </button>
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const trimmed = newBranchName.trim();
+                                  if (!trimmed || isCreatingBranch) return;
+                                  if (!/^[a-zA-Z0-9._/-]+$/.test(trimmed)) {
+                                    setBranchCreateError("Invalid name. Use letters, numbers, dots, dashes, slashes.");
+                                    return;
+                                  }
+                                  setIsCreatingBranch(true);
+                                  setBranchCreateError(null);
+                                  onCreateBranch(trimmed, false)
+                                    .then(() => {
+                                      setNewBranchName("");
+                                      setShowBranchCreate(false);
+                                    })
+                                    .catch((err) => {
+                                      setBranchCreateError(err instanceof Error ? err.message : "Failed to create branch");
+                                    })
+                                    .finally(() => setIsCreatingBranch(false));
+                                }}
+                                disabled={!newBranchName.trim() || isCreatingBranch}
+                                className="rounded border border-maestro-border bg-maestro-surface px-2 py-1 text-xs font-medium text-maestro-text disabled:opacity-50 hover:bg-maestro-border/40"
+                                title="Create branch without selecting"
+                              >
+                                {isCreatingBranch ? "..." : "Create"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const trimmed = newBranchName.trim();
+                                  if (!trimmed || isCreatingBranch) return;
+                                  if (!/^[a-zA-Z0-9._/-]+$/.test(trimmed)) {
+                                    setBranchCreateError("Invalid name. Use letters, numbers, dots, dashes, slashes.");
+                                    return;
+                                  }
+                                  setIsCreatingBranch(true);
+                                  setBranchCreateError(null);
+                                  onCreateBranch(trimmed, false)
+                                    .then(() => {
+                                      onBranchChange(trimmed);
+                                      setNewBranchName("");
+                                      setShowBranchCreate(false);
+                                      setBranchDropdownOpen(false);
+                                      setBranchSearchQuery("");
+                                    })
+                                    .catch((err) => {
+                                      setBranchCreateError(err instanceof Error ? err.message : "Failed to create branch");
+                                    })
+                                    .finally(() => setIsCreatingBranch(false));
+                                }}
+                                disabled={!newBranchName.trim() || isCreatingBranch}
+                                className="rounded bg-maestro-accent px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                                title="Create branch and select it"
+                              >
+                                {isCreatingBranch ? "..." : "Create & Select"}
+                              </button>
+                            </div>
                           </div>
                           {branchCreateError && (
                             <div className="mt-1 text-[10px] text-maestro-red">{branchCreateError}</div>
@@ -709,6 +725,133 @@ export function PreLaunchCard({
                                   <div className="px-2 py-1 text-[10px] text-maestro-muted">
                                     No matching branches
                                   </div>
+                                )}
+
+                                {/* Per-repo branch creation */}
+                                {onCreateBranch && (
+                                  repoCreateBranch === repo.path ? (
+                                    <div className="border-t border-maestro-border/40 px-2 py-1.5">
+                                      <div className="space-y-1.5">
+                                        <input
+                                          ref={repoCreateInputRef}
+                                          type="text"
+                                          value={repoNewBranchName}
+                                          onChange={(e) => {
+                                            setRepoNewBranchName(e.target.value);
+                                            setRepoCreateError(null);
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              e.preventDefault();
+                                              const trimmed = repoNewBranchName.trim();
+                                              if (!trimmed || repoCreatingBranch) return;
+                                              if (!/^[a-zA-Z0-9._/-]+$/.test(trimmed)) {
+                                                setRepoCreateError("Invalid name.");
+                                                return;
+                                              }
+                                              setRepoCreatingBranch(true);
+                                              setRepoCreateError(null);
+                                              onCreateBranch(trimmed, false, repo.path)
+                                                .then(() => {
+                                                  handleSelectRepoBranch(repo.path, trimmed);
+                                                  setRepoNewBranchName("");
+                                                  setRepoCreateBranch(null);
+                                                })
+                                                .catch((err) => {
+                                                  setRepoCreateError(err instanceof Error ? err.message : "Failed to create branch");
+                                                })
+                                                .finally(() => setRepoCreatingBranch(false));
+                                            } else if (e.key === "Escape") {
+                                              e.preventDefault();
+                                              setRepoCreateBranch(null);
+                                              setRepoNewBranchName("");
+                                              setRepoCreateError(null);
+                                            }
+                                          }}
+                                          placeholder="feature/my-branch"
+                                          className="w-full rounded border border-maestro-border bg-maestro-surface px-2 py-1 text-xs text-maestro-text placeholder:text-maestro-muted/50 focus:border-maestro-accent focus:outline-none"
+                                          disabled={repoCreatingBranch}
+                                          onClick={(e) => e.stopPropagation()}
+                                        />
+                                        <div className="flex justify-end gap-1.5">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const trimmed = repoNewBranchName.trim();
+                                              if (!trimmed || repoCreatingBranch) return;
+                                              if (!/^[a-zA-Z0-9._/-]+$/.test(trimmed)) {
+                                                setRepoCreateError("Invalid name.");
+                                                return;
+                                              }
+                                              setRepoCreatingBranch(true);
+                                              setRepoCreateError(null);
+                                              onCreateBranch(trimmed, false, repo.path)
+                                                .then(() => {
+                                                  setRepoNewBranchName("");
+                                                  setRepoCreateBranch(null);
+                                                })
+                                                .catch((err) => {
+                                                  setRepoCreateError(err instanceof Error ? err.message : "Failed to create branch");
+                                                })
+                                                .finally(() => setRepoCreatingBranch(false));
+                                            }}
+                                            disabled={!repoNewBranchName.trim() || repoCreatingBranch}
+                                            className="rounded border border-maestro-border bg-maestro-surface px-2 py-1 text-xs font-medium text-maestro-text disabled:opacity-50 hover:bg-maestro-border/40"
+                                            title="Create branch without selecting"
+                                          >
+                                            {repoCreatingBranch ? "..." : "Create"}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const trimmed = repoNewBranchName.trim();
+                                              if (!trimmed || repoCreatingBranch) return;
+                                              if (!/^[a-zA-Z0-9._/-]+$/.test(trimmed)) {
+                                                setRepoCreateError("Invalid name.");
+                                                return;
+                                              }
+                                              setRepoCreatingBranch(true);
+                                              setRepoCreateError(null);
+                                              onCreateBranch(trimmed, false, repo.path)
+                                                .then(() => {
+                                                  handleSelectRepoBranch(repo.path, trimmed);
+                                                  setRepoNewBranchName("");
+                                                  setRepoCreateBranch(null);
+                                                })
+                                                .catch((err) => {
+                                                  setRepoCreateError(err instanceof Error ? err.message : "Failed to create branch");
+                                                })
+                                                .finally(() => setRepoCreatingBranch(false));
+                                            }}
+                                            disabled={!repoNewBranchName.trim() || repoCreatingBranch}
+                                            className="rounded bg-maestro-accent px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                                            title="Create branch and select it"
+                                          >
+                                            {repoCreatingBranch ? "..." : "Create & Select"}
+                                          </button>
+                                        </div>
+                                      </div>
+                                      {repoCreateError && (
+                                        <div className="mt-1 text-[10px] text-maestro-red">{repoCreateError}</div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setRepoCreateBranch(repo.path);
+                                        setRepoNewBranchName("");
+                                        setRepoCreateError(null);
+                                      }}
+                                      className="flex w-full items-center gap-2 border-t border-maestro-border/40 px-2 py-1.5 text-xs text-maestro-accent transition-colors hover:bg-maestro-accent/10"
+                                    >
+                                      <Plus size={11} />
+                                      <span>Create branch</span>
+                                    </button>
+                                  )
                                 )}
                               </div>
                             )}
