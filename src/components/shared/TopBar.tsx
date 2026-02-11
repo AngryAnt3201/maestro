@@ -85,12 +85,13 @@ export function TopBar({
   );
 
   const handleCreateBranch = useCallback(
-    async (name: string) => {
+    async (name: string, andCheckout: boolean) => {
       if (!repoPath) return;
 
       await createBranch(repoPath, name);
-      // After creation, switch to the new branch
-      await handleBranchSelect(name);
+      if (andCheckout) {
+        await handleBranchSelect(name);
+      }
     },
     [repoPath, createBranch, handleBranchSelect]
   );

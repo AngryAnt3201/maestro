@@ -12,7 +12,7 @@ interface BranchDropdownProps {
   repoPath: string;
   currentBranch: string;
   onSelect: (branch: string) => void;
-  onCreateBranch: (name: string) => void;
+  onCreateBranch: (name: string, andCheckout: boolean) => void;
   onClose: () => void;
 }
 
@@ -157,7 +157,7 @@ export function BranchDropdown({
     }
   }, [showCreateInput]);
 
-  const handleCreateBranch = async () => {
+  const handleCreateBranch = async (andCheckout: boolean) => {
     const trimmedName = newBranchName.trim();
     if (!trimmedName || isCreating) return;
 
@@ -169,7 +169,7 @@ export function BranchDropdown({
 
     setIsCreating(true);
     try {
-      await onCreateBranch(trimmedName);
+      await onCreateBranch(trimmedName, andCheckout);
       setNewBranchName("");
       setShowCreateInput(false);
       // Refresh branches
@@ -199,7 +199,7 @@ export function BranchDropdown({
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-maestro-muted/70">
             New Branch Name
           </div>
-          <div className="flex gap-2">
+          <div className="space-y-2">
             <input
               ref={inputRef}
               type="text"
@@ -211,7 +211,7 @@ export function BranchDropdown({
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  handleCreateBranch();
+                  handleCreateBranch(true);
                 } else if (e.key === "Escape") {
                   e.preventDefault();
                   setShowCreateInput(false);
@@ -219,17 +219,29 @@ export function BranchDropdown({
                 }
               }}
               placeholder="feature/my-branch"
-              className="flex-1 rounded border border-maestro-border bg-maestro-surface px-2 py-1 text-sm text-maestro-text placeholder:text-maestro-muted/50 focus:border-maestro-accent focus:outline-none"
+              className="w-full rounded border border-maestro-border bg-maestro-surface px-2 py-1 text-sm text-maestro-text placeholder:text-maestro-muted/50 focus:border-maestro-accent focus:outline-none"
               disabled={isCreating}
             />
-            <button
-              type="button"
-              onClick={handleCreateBranch}
-              disabled={!newBranchName.trim() || isCreating}
-              className="rounded bg-maestro-accent px-3 py-1 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {isCreating ? "..." : "Create"}
-            </button>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => handleCreateBranch(false)}
+                disabled={!newBranchName.trim() || isCreating}
+                className="rounded border border-maestro-border bg-maestro-surface px-2 py-1 text-sm font-medium text-maestro-text disabled:opacity-50 hover:bg-maestro-border/40"
+                title="Create branch without switching"
+              >
+                {isCreating ? "..." : "Create"}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCreateBranch(true)}
+                disabled={!newBranchName.trim() || isCreating}
+                className="rounded bg-maestro-accent px-2 py-1 text-sm font-medium text-white disabled:opacity-50"
+                title="Create branch and switch to it"
+              >
+                {isCreating ? "..." : "Create & Switch"}
+              </button>
+            </div>
           </div>
         </div>
       ) : (
