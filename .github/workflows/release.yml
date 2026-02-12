@@ -222,6 +222,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
+          # Unset password if empty — empty string != no password for minisign
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
+            unset TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+          fi
+
           if [ "${{ matrix.platform }}" = "macos-latest" ]; then
             BUNDLE_DIR="target/universal-apple-darwin/release/bundle"
             # .app.tar.gz already created by tauri-action
