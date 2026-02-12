@@ -2,19 +2,18 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    branches: [latest-release]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  create-release:
+  preflight:
     runs-on: ubuntu-latest
     outputs:
-      release_id: ${{ steps.create-release.outputs.id }}
-      release_upload_url: ${{ steps.create-release.outputs.upload_url }}
       version: ${{ steps.get-version.outputs.version }}
+      release_notes: ${{ steps.get-notes.outputs.release_notes }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,28 +22,129 @@ jobs:
         id: get-version
         run: echo "version=$(jq -r .version package.json)" >> $GITHUB_OUTPUT
 
-      - name: Create Release
-        id: create-release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Get release notes from merged PR
+        id: get-notes
+        uses: actions/github-script@v7
         with:
-          tag_name: v${{ steps.get-version.outputs.version }}-${{ github.run_number }}
-          release_name: Maestro v${{ steps.get-version.outputs.version }} (Build ${{ github.run_number }})
-          draft: true
-          prerelease: false
-          body: |
-            ## Maestro v${{ steps.get-version.outputs.version }}
+          script: |
+            // Find the most recent merged PR to latest-release
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed',
+              base: 'latest-release',
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 1,
+            });
 
-            Automated release from main branch.
+            let notes = '';
+            if (prs.length > 0 && prs[0].merged_at) {
+              notes = prs[0].body || '';
+            }
 
-            ### Downloads
-            - **macOS**: Download the `.dmg` file
-            - **Windows**: Download the `.msi` or `.exe` installer
-            - **Linux**: Download the `.deb` or `.AppImage` file
+            if (!notes) {
+              notes = `## Maestro v${process.env.VERSION}\n\nRelease from latest-release branch.`;
+            }
+
+            // Escape for GitHub Actions output
+            const escaped = notes.replace(/%/g, '%25').replace(/\n/g, '%0A').replace(/\r/g, '%0D');
+            core.setOutput('release_notes', escaped);
+        env:
+          VERSION: ${{ steps.get-version.outputs.version }}
+
+  test:
+    needs: preflight
+    runs-on: ubuntu-22.04
+    name: Test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend dependencies
+        run: |
+          rm -f package-lock.json
+          npm install
+
+      - name: Run frontend tests
+        run: npm run test
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Build MCP server (needed by Tauri build script)
+        run: cargo build --release -p maestro-mcp-server
+
+      - name: Run Rust tests
+        run: cargo test --workspace
+        working-directory: src-tauri
+
+  create-release:
+    needs: [preflight, test]
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create-release.outputs.result }}
+    steps:
+      - name: Create draft release
+        id: create-release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ needs.preflight.outputs.version }}';
+            const tag = `v${version}`;
+
+            // Check if tag already exists
+            try {
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${tag}`,
+              });
+              core.setFailed(`Tag ${tag} already exists. Bump the version in package.json before releasing.`);
+              return;
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              // Tag doesn't exist, good to proceed
+            }
+
+            const notes = decodeURIComponent(
+              '${{ needs.preflight.outputs.release_notes }}'
+                .replace(/%0A/g, '\n')
+                .replace(/%0D/g, '\r')
+                .replace(/%25/g, '%')
+            );
+
+            const { data: release } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              target_commitish: 'latest-release',
+              name: `Maestro v${version}`,
+              body: notes,
+              draft: true,
+              prerelease: false,
+            });
+
+            return release.id;
 
   build:
-    needs: create-release
+    needs: [preflight, create-release]
     strategy:
       fail-fast: false
       matrix:
@@ -97,16 +197,13 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.platform }}" = "macos-latest" ]; then
-            # Build for both architectures
             cargo build --release -p maestro-mcp-server --target aarch64-apple-darwin
             cargo build --release -p maestro-mcp-server --target x86_64-apple-darwin
-            # Create universal binary in workspace target directory
             mkdir -p target/release
             lipo -create -output target/release/maestro-mcp-server \
               target/aarch64-apple-darwin/release/maestro-mcp-server \
               target/x86_64-apple-darwin/release/maestro-mcp-server
           else
-            # Linux and Windows: binary goes to target/release/ automatically
             cargo build --release -p maestro-mcp-server
           fi
 
@@ -118,68 +215,261 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
-          releaseId: ${{ needs.create-release.outputs.release_id }}
 
-      - name: Upload macOS DMG
-        if: matrix.platform == 'macos-latest'
-        uses: actions/upload-release-asset@v1
+      - name: Create updater archives and sign
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
-          asset_path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/Maestro_${{ needs.create-release.outputs.version }}_universal.dmg
-          asset_name: Maestro_${{ needs.create-release.outputs.version }}_macOS_universal.dmg
-          asset_content_type: application/octet-stream
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # Unset password if empty — empty string != no password for minisign
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
+            unset TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+          fi
 
-      - name: Upload Windows MSI
-        if: matrix.platform == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
-          asset_path: src-tauri/target/release/bundle/msi/Maestro_${{ needs.create-release.outputs.version }}_x64_en-US.msi
-          asset_name: Maestro_${{ needs.create-release.outputs.version }}_Windows_x64.msi
-          asset_content_type: application/octet-stream
+          if [ "${{ matrix.platform }}" = "macos-latest" ]; then
+            BUNDLE_DIR="target/universal-apple-darwin/release/bundle"
+            # .app.tar.gz already created by tauri-action
+            echo "Signing macOS updater bundle..."
+            npx tauri signer sign "$BUNDLE_DIR/macos/Maestro.app.tar.gz"
+            ls -la "$BUNDLE_DIR/macos/"
+          fi
 
-      - name: Upload Windows NSIS
-        if: matrix.platform == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
-          asset_path: src-tauri/target/release/bundle/nsis/Maestro_${{ needs.create-release.outputs.version }}_x64-setup.exe
-          asset_name: Maestro_${{ needs.create-release.outputs.version }}_Windows_x64_setup.exe
-          asset_content_type: application/octet-stream
+          if [ "${{ matrix.platform }}" = "windows-latest" ]; then
+            BUNDLE_DIR="target/release/bundle"
+            EXE_FILE=$(find "$BUNDLE_DIR/nsis" -name "*-setup.exe" -type f | head -1)
+            ZIP_FILE="${EXE_FILE%.exe}.nsis.zip"
+            echo "Creating Windows updater archive: $(basename $ZIP_FILE)"
+            # Use PowerShell for zip on Windows
+            powershell -Command "Compress-Archive -Path '$EXE_FILE' -DestinationPath '$ZIP_FILE'"
+            echo "Signing Windows updater bundle..."
+            npx tauri signer sign "$ZIP_FILE"
+            ls -la "$BUNDLE_DIR/nsis/"
+          fi
 
-      - name: Upload Linux DEB
-        if: matrix.platform == 'ubuntu-22.04'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
-          asset_path: src-tauri/target/release/bundle/deb/maestro_${{ needs.create-release.outputs.version }}_amd64.deb
-          asset_name: Maestro_${{ needs.create-release.outputs.version }}_Linux_amd64.deb
-          asset_content_type: application/octet-stream
+          if [ "${{ matrix.platform }}" = "ubuntu-22.04" ]; then
+            BUNDLE_DIR="target/release/bundle"
+            APPIMAGE_FILE=$(find "$BUNDLE_DIR/appimage" -name "*.AppImage" -type f | head -1)
+            TGZ_FILE="$APPIMAGE_FILE.tar.gz"
+            APPIMAGE_NAME=$(basename "$APPIMAGE_FILE")
+            echo "Creating Linux updater archive: $(basename $TGZ_FILE)"
+            tar czf "$TGZ_FILE" -C "$(dirname $APPIMAGE_FILE)" "$APPIMAGE_NAME"
+            echo "Signing Linux updater bundle..."
+            npx tauri signer sign "$TGZ_FILE"
+            ls -la "$BUNDLE_DIR/appimage/"
+          fi
 
-      - name: Upload Linux AppImage
-        if: matrix.platform == 'ubuntu-22.04'
-        uses: actions/upload-release-asset@v1
+      - name: Upload release assets
+        uses: actions/github-script@v7
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+          PLATFORM: ${{ matrix.platform }}
         with:
-          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
-          asset_path: src-tauri/target/release/bundle/appimage/maestro_${{ needs.create-release.outputs.version }}_amd64.AppImage
-          asset_name: Maestro_${{ needs.create-release.outputs.version }}_Linux_amd64.AppImage
-          asset_content_type: application/octet-stream
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const releaseId = parseInt(process.env.RELEASE_ID);
+            const platform = process.env.PLATFORM;
+
+            const bundleDir = platform === 'macos-latest'
+              ? 'target/universal-apple-darwin/release/bundle'
+              : 'target/release/bundle';
+
+            // Only upload actual distributable artifacts
+            const artifactPatterns = [
+              /\.dmg$/,
+              /\.exe$/,
+              /\.msi$/,
+              /\.deb$/,
+              /\.rpm$/,
+              /\.AppImage$/,
+              /\.app\.tar\.gz$/,
+              /\.app\.tar\.gz\.sig$/,
+              /\.nsis\.zip$/,
+              /\.nsis\.zip\.sig$/,
+              /\.AppImage\.tar\.gz$/,
+              /\.AppImage\.tar\.gz\.sig$/,
+            ];
+
+            function isArtifact(filename) {
+              return artifactPatterns.some(p => p.test(filename));
+            }
+
+            // Collect files from known bundle subdirectories (one level deep)
+            function findArtifacts(dir) {
+              const results = [];
+              if (!fs.existsSync(dir)) return results;
+              const entries = fs.readdirSync(dir, { withFileTypes: true });
+              for (const entry of entries) {
+                const fullPath = path.join(dir, entry.name);
+                if (entry.isDirectory()) {
+                  const subEntries = fs.readdirSync(fullPath, { withFileTypes: true });
+                  for (const sub of subEntries) {
+                    if (!sub.isDirectory() && isArtifact(sub.name)) {
+                      results.push(path.join(fullPath, sub.name));
+                    }
+                  }
+                } else if (isArtifact(entry.name)) {
+                  results.push(fullPath);
+                }
+              }
+              return results;
+            }
+
+            const files = findArtifacts(bundleDir);
+            core.info(`Found ${files.length} artifacts to upload:`);
+            for (const f of files) {
+              const stats = fs.statSync(f);
+              core.info(`  ${path.basename(f)} (${(stats.size / 1024 / 1024).toFixed(1)} MB)`);
+            }
+
+            if (files.length === 0) {
+              core.setFailed('No artifacts found in ' + bundleDir);
+              return;
+            }
+
+            for (const filePath of files) {
+              const name = path.basename(filePath);
+              const data = fs.readFileSync(filePath);
+
+              core.info(`Uploading ${name} (${(data.length / 1024 / 1024).toFixed(1)} MB)...`);
+              try {
+                await github.rest.repos.uploadReleaseAsset({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  release_id: releaseId,
+                  name: name,
+                  data: data,
+                  headers: {
+                    'content-type': 'application/octet-stream',
+                    'content-length': data.length,
+                  },
+                });
+                core.info(`  Uploaded ${name}`);
+              } catch (e) {
+                if (e.status === 422) {
+                  core.warning(`  ${name} already exists, skipping`);
+                } else {
+                  throw e;
+                }
+              }
+            }
+
+  generate-updater:
+    needs: [preflight, create-release, build]
+    runs-on: ubuntu-latest
+    name: Generate latest.json
+
+    steps:
+      - name: Build latest.json
+        uses: actions/github-script@v7
+        env:
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+          RELEASE_NOTES: ${{ needs.preflight.outputs.release_notes }}
+        with:
+          script: |
+            const fs = require('fs');
+            const releaseId = parseInt(process.env.RELEASE_ID);
+            const version = process.env.VERSION;
+
+            // Fetch all release assets
+            const { data: assets } = await github.rest.repos.listReleaseAssets({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: releaseId,
+              per_page: 100,
+            });
+
+            core.info('Release assets (' + assets.length + '):');
+            for (const a of assets) {
+              core.info(`  ${a.name} (${(a.size / 1024 / 1024).toFixed(1)} MB)`);
+            }
+
+            // Download a .sig asset and return its text content
+            async function getSig(namePattern) {
+              const asset = assets.find(a => a.name.endsWith('.sig') && a.name.includes(namePattern));
+              if (!asset) {
+                core.info('Available .sig assets: ' + assets.filter(a => a.name.endsWith('.sig')).map(a => a.name).join(', '));
+                throw new Error(`No .sig asset matching '${namePattern}' found in release`);
+              }
+              // Download the asset content
+              const { data } = await github.rest.repos.getReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                asset_id: asset.id,
+                headers: { Accept: 'application/octet-stream' },
+              });
+              return Buffer.from(data).toString('utf8').trim();
+            }
+
+            const macSig = await getSig('.app.tar.gz');
+            const winSig = await getSig('.nsis.zip');
+            const linuxSig = await getSig('.AppImage.tar.gz');
+
+            // Decode release notes
+            const notes = decodeURIComponent(
+              (process.env.RELEASE_NOTES || '')
+                .replace(/%0A/g, '\n')
+                .replace(/%0D/g, '\r')
+                .replace(/%25/g, '%')
+            );
+
+            const baseUrl = `https://github.com/its-maestro-baby/maestro/releases/download/v${version}`;
+
+            // Find updater bundle asset names
+            const macBundle = assets.find(a => a.name.endsWith('.app.tar.gz') && !a.name.endsWith('.sig'));
+            const winBundle = assets.find(a => a.name.endsWith('.nsis.zip') && !a.name.endsWith('.sig'));
+            const linuxBundle = assets.find(a => a.name.endsWith('.AppImage.tar.gz') && !a.name.endsWith('.sig'));
+
+            if (!macBundle) throw new Error('macOS updater bundle (.app.tar.gz) not found in release assets');
+            if (!winBundle) throw new Error('Windows updater bundle (.nsis.zip) not found in release assets');
+            if (!linuxBundle) throw new Error('Linux updater bundle (.AppImage.tar.gz) not found in release assets');
+
+            const latest = {
+              version: version,
+              notes: notes,
+              pub_date: new Date().toISOString(),
+              platforms: {
+                'darwin-universal': {
+                  signature: macSig,
+                  url: `${baseUrl}/${macBundle.name}`,
+                },
+                'linux-x86_64': {
+                  signature: linuxSig,
+                  url: `${baseUrl}/${linuxBundle.name}`,
+                },
+                'windows-x86_64': {
+                  signature: winSig,
+                  url: `${baseUrl}/${winBundle.name}`,
+                },
+              },
+            };
+
+            fs.writeFileSync('latest.json', JSON.stringify(latest, null, 2));
+            core.info('Generated latest.json:');
+            core.info(JSON.stringify(latest, null, 2));
+
+            // Upload latest.json to the release
+            await github.rest.repos.uploadReleaseAsset({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: releaseId,
+              name: 'latest.json',
+              data: fs.readFileSync('latest.json'),
+              headers: {
+                'content-type': 'application/json',
+                'content-length': fs.statSync('latest.json').size,
+              },
+            });
 
   publish-release:
-    needs: [create-release, build]
+    needs: [create-release, generate-updater]
     runs-on: ubuntu-latest
+    name: Publish Release
+
     steps:
-      - name: Publish release
+      - name: Un-draft release
         uses: actions/github-script@v7
         with:
           script: |
@@ -189,3 +479,4 @@ jobs:
               release_id: ${{ needs.create-release.outputs.release_id }},
               draft: false,
             });
+            core.info('Release published successfully!');

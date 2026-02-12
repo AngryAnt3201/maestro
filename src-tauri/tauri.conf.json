@@ -31,7 +31,7 @@
       "endpoints": [
         "https://github.com/its-maestro-baby/maestro/releases/latest/download/latest.json"
       ],
-      "pubkey": ""
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQxRUZCMzQ2Rjk5NzUxNjQKUldSa1VaZjVSclB2UWJFSEIrYmxEU0tpb2RGZTRsc0p1SGxFdmViN293MDFOd1VWOWtKdkZ2MXkK"
     }
   },
   "bundle": {
