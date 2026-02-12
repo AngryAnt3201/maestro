@@ -94,6 +94,18 @@ function getModeConfig(mode: AiMode) {
   return AI_MODES.find((m) => m.mode === mode) ?? AI_MODES[0];
 }
 
+/** Validate a git branch name (simplified check). */
+function isValidBranchName(name: string): boolean {
+  if (!name || name.length === 0) return false;
+  // Disallow spaces, ~, ^, :, ?, *, [, \, consecutive dots, @{ sequences, trailing dot/slash/lock
+  if (/[\s~^:?*[\]\\]/.test(name)) return false;
+  if (name.includes("..")) return false;
+  if (name.includes("@{")) return false;
+  if (name.startsWith("-") || name.startsWith(".")) return false;
+  if (name.endsWith(".") || name.endsWith("/") || name.endsWith(".lock")) return false;
+  return /^[a-zA-Z0-9._/-]+$/.test(name);
+}
+
 export function PreLaunchCard({
   slot,
   branches,
@@ -452,6 +464,11 @@ export function PreLaunchCard({
                       current
                     </span>
                   )}
+                  {slot.branch && !selectedBranchInfo && (
+                    <span className="shrink-0 rounded bg-maestro-accent/20 px-1 text-[9px] text-maestro-accent">
+                      new
+                    </span>
+                  )}
                 </div>
                 <ChevronDown size={14} className="shrink-0 text-maestro-muted" />
               </button>
@@ -721,7 +738,24 @@ export function PreLaunchCard({
                                   );
                                 })}
 
-                                {filteredBranches.length === 0 && repoBranches.length > 0 && branchSearchQuery && (
+                                {/* Create new branch option in multi-repo */}
+                                {branchSearchQuery.trim() &&
+                                  isValidBranchName(branchSearchQuery.trim()) &&
+                                  !repoBranches.some((b) => b.name === branchSearchQuery.trim()) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSelectRepoBranch(repo.path, branchSearchQuery.trim())}
+                                      className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs text-maestro-accent transition-colors hover:bg-maestro-accent/10"
+                                    >
+                                      <Plus size={11} />
+                                      <span className="truncate">
+                                        Create <span className="font-medium">{branchSearchQuery.trim()}</span>
+                                      </span>
+                                    </button>
+                                  )}
+
+                                {filteredBranches.length === 0 && repoBranches.length > 0 && branchSearchQuery &&
+                                  !isValidBranchName(branchSearchQuery.trim()) && (
                                   <div className="px-2 py-1 text-[10px] text-maestro-muted">
                                     No matching branches
                                   </div>
@@ -973,8 +1007,34 @@ export function PreLaunchCard({
                         </>
                       )}
 
+                      {/* Create new branch option - show when query doesn't exactly match any branch */}
+                      {branchSearchQuery.trim() &&
+                        isValidBranchName(branchSearchQuery.trim()) &&
+                        !branches.some((b) => b.name === branchSearchQuery.trim()) && (
+                          <>
+                            <div className="border-t border-maestro-border px-3 py-1 text-[9px] font-medium uppercase tracking-wide text-maestro-muted">
+                              Create
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onBranchChange(branchSearchQuery.trim());
+                                setBranchDropdownOpen(false);
+                                setBranchSearchQuery("");
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-maestro-accent transition-colors hover:bg-maestro-accent/10"
+                            >
+                              <Plus size={14} />
+                              <span className="truncate">
+                                Create <span className="font-medium">{branchSearchQuery.trim()}</span>
+                              </span>
+                            </button>
+                          </>
+                        )}
+
                       {/* No results message */}
                       {branchSearchQuery &&
+                        !isValidBranchName(branchSearchQuery.trim()) &&
                         localBranches.filter((b) => b.name.toLowerCase().includes(branchSearchQuery.toLowerCase())).length === 0 &&
                         remoteBranches.filter((b) => b.name.toLowerCase().includes(branchSearchQuery.toLowerCase())).length === 0 &&
                         !"use current branch".includes(branchSearchQuery.toLowerCase()) && (
