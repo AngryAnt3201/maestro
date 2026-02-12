@@ -217,59 +217,44 @@ jobs:
           args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
           releaseId: ${{ needs.create-release.outputs.release_id }}
 
-      # --- Upload .sig files as build artifacts for generate-updater ---
-
-      - name: Upload macOS signature
-        if: matrix.platform == 'macos-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: sig-macos
-          path: target/universal-apple-darwin/release/bundle/macos/*.sig
-
-      - name: Upload Windows signature
-        if: matrix.platform == 'windows-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: sig-windows
-          path: target/release/bundle/nsis/*.sig
-
-      - name: Upload Linux signature
-        if: matrix.platform == 'ubuntu-22.04'
-        uses: actions/upload-artifact@v4
-        with:
-          name: sig-linux
-          path: target/release/bundle/appimage/*.sig
-
   generate-updater:
     needs: [preflight, create-release, build]
     runs-on: ubuntu-latest
     name: Generate latest.json
 
     steps:
-      - name: Download all signature artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: signatures
-
       - name: Build latest.json
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const path = require('path');
             const version = '${{ needs.preflight.outputs.version }}';
             const releaseId = ${{ needs.create-release.outputs.release_id }};
 
-            // Read the updater bundle signature (not the installer sig)
-            function readSig(dir, pattern) {
-              const files = fs.readdirSync(dir).filter(f => f.endsWith('.sig') && f.includes(pattern));
-              if (files.length === 0) throw new Error(`No .sig file matching '${pattern}' in ${dir}: ${fs.readdirSync(dir)}`);
-              return fs.readFileSync(path.join(dir, files[0]), 'utf8').trim();
+            // Fetch release assets to find .sig files
+            const { data: assets } = await github.rest.repos.listReleaseAssets({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: releaseId,
+              per_page: 100,
+            });
+
+            core.info('Release assets: ' + assets.map(a => a.name).join(', '));
+
+            // Download a .sig asset and return its text content
+            async function getSig(namePattern) {
+              const asset = assets.find(a => a.name.endsWith('.sig') && a.name.includes(namePattern));
+              if (!asset) throw new Error(`No .sig asset matching '${namePattern}' found in release`);
+              const { data } = await github.request('GET ' + asset.url, {
+                headers: { Accept: 'application/octet-stream' },
+              });
+              // data comes back as ArrayBuffer, convert to string
+              return Buffer.from(data).toString('utf8').trim();
             }
 
-            const macSig = readSig('signatures/sig-macos', '.tar.gz.sig');
-            const winSig = readSig('signatures/sig-windows', '.nsis.zip.sig');
-            const linuxSig = readSig('signatures/sig-linux', '.tar.gz.sig');
+            const macSig = await getSig('.app.tar.gz');
+            const winSig = await getSig('.nsis.zip');
+            const linuxSig = await getSig('.AppImage.tar.gz');
 
             // Get release notes
             const notes = decodeURIComponent(
@@ -281,6 +266,11 @@ jobs:
 
             const baseUrl = `https://github.com/its-maestro-baby/maestro/releases/download/v${version}`;
 
+            // Find the actual updater bundle asset names
+            const macBundle = assets.find(a => a.name.endsWith('.app.tar.gz'));
+            const winBundle = assets.find(a => a.name.endsWith('.nsis.zip'));
+            const linuxBundle = assets.find(a => a.name.endsWith('.AppImage.tar.gz'));
+
             const latest = {
               version: version,
               notes: notes,
@@ -288,15 +278,15 @@ jobs:
               platforms: {
                 'darwin-universal': {
                   signature: macSig,
-                  url: `${baseUrl}/Maestro.app.tar.gz`,
+                  url: `${baseUrl}/${macBundle.name}`,
                 },
                 'linux-x86_64': {
                   signature: linuxSig,
-                  url: `${baseUrl}/maestro_${version}_amd64.AppImage.tar.gz`,
+                  url: `${baseUrl}/${linuxBundle.name}`,
                 },
                 'windows-x86_64': {
                   signature: winSig,
-                  url: `${baseUrl}/Maestro_${version}_x64-setup.nsis.zip`,
+                  url: `${baseUrl}/${winBundle.name}`,
                 },
               },
             };
