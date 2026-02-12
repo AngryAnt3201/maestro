@@ -420,6 +420,12 @@ export const TerminalView = memo(function TerminalView({
           return false;
         }
 
+        // Cmd+K (Mac) or Ctrl+K (Linux/Windows): clear terminal scrollback + viewport
+        if (event.key === "k" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.type === "keydown") {
+          term?.clear();
+          return false;
+        }
+
         // Cmd+Left/Right (Mac): jump to beginning/end of line
         // Cmd+Delete (Mac): delete from cursor to beginning of line
         // WebView intercepts Cmd+key by default, so we manually send the escape sequences
