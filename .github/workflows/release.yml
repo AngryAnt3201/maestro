@@ -207,7 +207,7 @@ jobs:
             cargo build --release -p maestro-mcp-server
           fi
 
-      - name: Build Tauri app and upload to release
+      - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -215,7 +215,84 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
-          releaseId: ${{ needs.create-release.outputs.release_id }}
+
+      - name: List bundle artifacts
+        shell: bash
+        run: |
+          echo "=== Bundle directory contents ==="
+          if [ "${{ matrix.platform }}" = "macos-latest" ]; then
+            find target/universal-apple-darwin/release/bundle -type f 2>/dev/null || echo "No macOS bundle dir"
+          else
+            find target/release/bundle -type f 2>/dev/null || echo "No bundle dir"
+          fi
+
+      - name: Upload release assets
+        uses: actions/github-script@v7
+        env:
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+          PLATFORM: ${{ matrix.platform }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const releaseId = parseInt(process.env.RELEASE_ID);
+            const platform = process.env.PLATFORM;
+
+            const bundleDir = platform === 'macos-latest'
+              ? 'target/universal-apple-darwin/release/bundle'
+              : 'target/release/bundle';
+
+            // Recursively find all files, skipping .app directories (macOS bundles)
+            function findFiles(dir) {
+              const results = [];
+              if (!fs.existsSync(dir)) return results;
+              const entries = fs.readdirSync(dir, { withFileTypes: true });
+              for (const entry of entries) {
+                const fullPath = path.join(dir, entry.name);
+                if (entry.isDirectory()) {
+                  if (!entry.name.endsWith('.app')) {
+                    results.push(...findFiles(fullPath));
+                  }
+                } else {
+                  results.push(fullPath);
+                }
+              }
+              return results;
+            }
+
+            const files = findFiles(bundleDir);
+            core.info(`Found ${files.length} artifacts in ${bundleDir}:`);
+            for (const f of files) {
+              const stats = fs.statSync(f);
+              core.info(`  ${path.basename(f)} (${(stats.size / 1024 / 1024).toFixed(1)} MB)`);
+            }
+
+            for (const filePath of files) {
+              const name = path.basename(filePath);
+              const data = fs.readFileSync(filePath);
+
+              core.info(`Uploading ${name} (${(data.length / 1024 / 1024).toFixed(1)} MB)...`);
+              try {
+                await github.rest.repos.uploadReleaseAsset({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  release_id: releaseId,
+                  name: name,
+                  data: data,
+                  headers: {
+                    'content-type': 'application/octet-stream',
+                    'content-length': data.length,
+                  },
+                });
+                core.info(`  Uploaded ${name}`);
+              } catch (e) {
+                if (e.status === 422) {
+                  core.warning(`  ${name} already exists, skipping`);
+                } else {
+                  throw e;
+                }
+              }
+            }
 
   generate-updater:
     needs: [preflight, create-release, build]
@@ -225,13 +302,17 @@ jobs:
     steps:
       - name: Build latest.json
         uses: actions/github-script@v7
+        env:
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+          RELEASE_NOTES: ${{ needs.preflight.outputs.release_notes }}
         with:
           script: |
             const fs = require('fs');
-            const version = '${{ needs.preflight.outputs.version }}';
-            const releaseId = ${{ needs.create-release.outputs.release_id }};
+            const releaseId = parseInt(process.env.RELEASE_ID);
+            const version = process.env.VERSION;
 
-            // Fetch release assets to find .sig files
+            // Fetch all release assets
             const { data: assets } = await github.rest.repos.listReleaseAssets({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -239,16 +320,25 @@ jobs:
               per_page: 100,
             });
 
-            core.info('Release assets: ' + assets.map(a => a.name).join(', '));
+            core.info('Release assets (' + assets.length + '):');
+            for (const a of assets) {
+              core.info(`  ${a.name} (${(a.size / 1024 / 1024).toFixed(1)} MB)`);
+            }
 
             // Download a .sig asset and return its text content
             async function getSig(namePattern) {
               const asset = assets.find(a => a.name.endsWith('.sig') && a.name.includes(namePattern));
-              if (!asset) throw new Error(`No .sig asset matching '${namePattern}' found in release`);
-              const { data } = await github.request('GET ' + asset.url, {
+              if (!asset) {
+                core.info('Available .sig assets: ' + assets.filter(a => a.name.endsWith('.sig')).map(a => a.name).join(', '));
+                throw new Error(`No .sig asset matching '${namePattern}' found in release`);
+              }
+              // Download the asset content
+              const { data } = await github.rest.repos.getReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                asset_id: asset.id,
                 headers: { Accept: 'application/octet-stream' },
               });
-              // data comes back as ArrayBuffer, convert to string
               return Buffer.from(data).toString('utf8').trim();
             }
 
@@ -256,9 +346,9 @@ jobs:
             const winSig = await getSig('.nsis.zip');
             const linuxSig = await getSig('.AppImage.tar.gz');
 
-            // Get release notes
+            // Decode release notes
             const notes = decodeURIComponent(
-              '${{ needs.preflight.outputs.release_notes }}'
+              (process.env.RELEASE_NOTES || '')
                 .replace(/%0A/g, '\n')
                 .replace(/%0D/g, '\r')
                 .replace(/%25/g, '%')
@@ -266,10 +356,14 @@ jobs:
 
             const baseUrl = `https://github.com/its-maestro-baby/maestro/releases/download/v${version}`;
 
-            // Find the actual updater bundle asset names
-            const macBundle = assets.find(a => a.name.endsWith('.app.tar.gz'));
-            const winBundle = assets.find(a => a.name.endsWith('.nsis.zip'));
-            const linuxBundle = assets.find(a => a.name.endsWith('.AppImage.tar.gz'));
+            // Find updater bundle asset names
+            const macBundle = assets.find(a => a.name.endsWith('.app.tar.gz') && !a.name.endsWith('.sig'));
+            const winBundle = assets.find(a => a.name.endsWith('.nsis.zip') && !a.name.endsWith('.sig'));
+            const linuxBundle = assets.find(a => a.name.endsWith('.AppImage.tar.gz') && !a.name.endsWith('.sig'));
+
+            if (!macBundle) throw new Error('macOS updater bundle (.app.tar.gz) not found in release assets');
+            if (!winBundle) throw new Error('Windows updater bundle (.nsis.zip) not found in release assets');
+            if (!linuxBundle) throw new Error('Linux updater bundle (.AppImage.tar.gz) not found in release assets');
 
             const latest = {
               version: version,
@@ -302,6 +396,10 @@ jobs:
               release_id: releaseId,
               name: 'latest.json',
               data: fs.readFileSync('latest.json'),
+              headers: {
+                'content-type': 'application/json',
+                'content-length': fs.statSync('latest.json').size,
+              },
             });
 
   publish-release:
