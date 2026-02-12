@@ -55,3 +55,6 @@ reddit-post.md
 website/_site/
 website/.jekyll-cache/
 website/.jekyll-metadata
+
+# Oh My ClaudeCode
+.omc/
