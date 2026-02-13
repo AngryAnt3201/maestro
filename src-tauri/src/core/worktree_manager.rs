@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 
 use crate::git::{Git, GitError, WorktreeInfo};
 
-fn worktree_base_dir() -> PathBuf {
+pub(crate) fn worktree_base_dir() -> PathBuf {
     directories::ProjectDirs::from("com", "maestro", "maestro")
         .map(|p| p.data_dir().to_path_buf())
         .unwrap_or_else(|| {
@@ -53,6 +53,14 @@ fn sanitize_branch(branch: &str) -> String {
     sanitized
 }
 
+/// Returns the override path if provided, otherwise falls back to the default
+/// XDG-based worktree base directory.
+fn effective_base_dir(base_override: Option<&Path>) -> PathBuf {
+    base_override
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(worktree_base_dir)
+}
+
 /// Manages Maestro-owned git worktrees under a deterministic, repo-specific
 /// directory inside XDG data dirs.
 ///
@@ -76,9 +84,19 @@ impl WorktreeManager {
 
     /// Compute the worktree path for a given repo + branch.
     pub(crate) async fn worktree_path(&self, repo_path: &Path, branch: &str) -> PathBuf {
+        self.worktree_path_with_base(repo_path, branch, None).await
+    }
+
+    /// Compute the worktree path with an optional base directory override.
+    pub(crate) async fn worktree_path_with_base(
+        &self,
+        repo_path: &Path,
+        branch: &str,
+        base_override: Option<&Path>,
+    ) -> PathBuf {
         let hash = repo_hash(repo_path).await;
         let sanitized = sanitize_branch(branch);
-        worktree_base_dir().join(hash).join(sanitized)
+        effective_base_dir(base_override).join(hash).join(sanitized)
     }
 
     /// Creates a worktree for the given branch, returning its path on disk.
@@ -91,6 +109,16 @@ impl WorktreeManager {
         &self,
         branch: &str,
         repo_path: &Path,
+    ) -> Result<PathBuf, GitError> {
+        self.create_with_base(branch, repo_path, None).await
+    }
+
+    /// Creates a worktree with an optional base directory override.
+    pub async fn create_with_base(
+        &self,
+        branch: &str,
+        repo_path: &Path,
+        base_override: Option<&Path>,
     ) -> Result<PathBuf, GitError> {
         let git = Git::new(repo_path);
 
@@ -112,7 +140,7 @@ impl WorktreeManager {
             }
         }
 
-        let wt_path = self.worktree_path(repo_path, branch).await;
+        let wt_path = self.worktree_path_with_base(repo_path, branch, base_override).await;
 
         // Create parent directories
         if let Some(parent) = wt_path.parent() {
@@ -145,10 +173,19 @@ impl WorktreeManager {
     /// Lists only worktrees that live under Maestro's managed base directory,
     /// filtering out the main worktree and any manually created worktrees.
     pub async fn list_managed(&self, repo_path: &Path) -> Result<Vec<WorktreeInfo>, GitError> {
+        self.list_managed_with_base(repo_path, None).await
+    }
+
+    /// Lists managed worktrees with an optional base directory override.
+    pub async fn list_managed_with_base(
+        &self,
+        repo_path: &Path,
+        base_override: Option<&Path>,
+    ) -> Result<Vec<WorktreeInfo>, GitError> {
         let git = Git::new(repo_path);
         let all = git.worktree_list().await?;
 
-        let base = worktree_base_dir();
+        let base = effective_base_dir(base_override);
 
         Ok(all
             .into_iter()

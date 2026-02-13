@@ -173,6 +173,9 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
   const addSessionToProject = useWorkspaceStore((s) => s.addSessionToProject);
   const removeSessionFromProject = useWorkspaceStore((s) => s.removeSessionFromProject);
+  const worktreeBasePath = useWorkspaceStore((s) =>
+    tabId ? s.tabs.find((t) => t.id === tabId)?.worktreeBasePath ?? null : null
+  );
 
   // MCP store - use stable empty array reference to avoid infinite re-render loops
   const mcpServers = useMcpStore((s) =>
@@ -465,7 +468,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       let worktreeWarning: string | null = null;
 
       if (effectiveRepoPath && slot.branch) {
-        const result = await prepareSessionWorktree(effectiveRepoPath, slot.branch);
+        const result = await prepareSessionWorktree(effectiveRepoPath, slot.branch, worktreeBasePath);
         workingDirectory = result.working_directory;
         worktreePath = result.worktree_path;
         worktreeWarning = result.warning;

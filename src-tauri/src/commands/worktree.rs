@@ -1,9 +1,9 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use tauri::State;
 
-use crate::core::worktree_manager::WorktreeManager;
+use crate::core::worktree_manager::{worktree_base_dir, WorktreeManager};
 use crate::git::{BranchInfo, Git};
 
 /// Result of preparing a worktree for a session.
@@ -35,8 +35,9 @@ pub async fn prepare_session_worktree(
     worktree_manager: State<'_, WorktreeManager>,
     project_path: String,
     branch: Option<String>,
+    worktree_base_path: Option<String>,
 ) -> Result<WorktreePreparationResult, String> {
-    prepare_worktree_inner(&worktree_manager, project_path, branch).await
+    prepare_worktree_inner(&worktree_manager, project_path, branch, worktree_base_path).await
 }
 
 /// Inner implementation extracted from the Tauri command for testability.
@@ -47,6 +48,7 @@ pub(crate) async fn prepare_worktree_inner(
     worktree_manager: &WorktreeManager,
     project_path: String,
     branch: Option<String>,
+    worktree_base_path: Option<String>,
 ) -> Result<WorktreePreparationResult, String> {
     // No branch specified - just use the project path
     let branch = match branch {
@@ -159,7 +161,8 @@ pub(crate) async fn prepare_worktree_inner(
     }
 
     // Create the worktree
-    match worktree_manager.create(&local_branch, &repo_path).await {
+    let base_override = worktree_base_path.as_deref().map(Path::new);
+    match worktree_manager.create_with_base(&local_branch, &repo_path, base_override).await {
         Ok(wt_path) => {
             let wt_path_str = wt_path.to_string_lossy().to_string();
             log::info!(
@@ -257,6 +260,15 @@ pub(crate) async fn get_fallback_branch(git: &Git, avoid_branch: &str) -> Option
 
     // No fallback available
     None
+}
+
+/// Returns the default worktree base directory path.
+///
+/// This allows the frontend to display the default path when no custom
+/// override is configured for a project.
+#[tauri::command]
+pub async fn get_default_worktree_base_dir() -> Result<String, String> {
+    Ok(worktree_base_dir().to_string_lossy().to_string())
 }
 
 /// Resolves a branch reference to the local branch name.
@@ -413,7 +425,7 @@ mod tests {
     async fn test_prepare_no_branch_returns_project_path() {
         let (_dir, path) = create_test_repo().await;
         let wm = WorktreeManager::new();
-        let result = prepare_worktree_inner(&wm, path.to_string_lossy().to_string(), None)
+        let result = prepare_worktree_inner(&wm, path.to_string_lossy().to_string(), None, None)
             .await
             .unwrap();
 
@@ -431,6 +443,7 @@ mod tests {
             &wm,
             path.to_string_lossy().to_string(),
             Some("".to_string()),
+            None,
         )
         .await
         .unwrap();
@@ -455,6 +468,7 @@ mod tests {
             &wm,
             path.to_string_lossy().to_string(),
             Some(current.clone()),
+            None,
         )
         .await
         .unwrap();
@@ -495,6 +509,7 @@ mod tests {
             &wm,
             path.to_string_lossy().to_string(),
             Some(current.clone()),
+            None,
         )
         .await
         .unwrap();
@@ -522,6 +537,7 @@ mod tests {
             &wm,
             path.to_string_lossy().to_string(),
             Some("feature-test".to_string()),
+            None,
         )
         .await
         .unwrap();
@@ -552,6 +568,7 @@ mod tests {
             &wm,
             path.to_string_lossy().to_string(),
             Some("reuse-test".to_string()),
+            None,
         )
         .await
         .unwrap();
@@ -562,6 +579,7 @@ mod tests {
             &wm,
             path.to_string_lossy().to_string(),
             Some("reuse-test".to_string()),
+            None,
         )
         .await
         .unwrap();
@@ -582,6 +600,7 @@ mod tests {
             &wm,
             path.to_string_lossy().to_string(),
             Some("brand-new-branch".to_string()),
+            None,
         )
         .await
         .unwrap();
@@ -609,6 +628,7 @@ mod tests {
             &wm,
             path.to_string_lossy().to_string(),
             Some("main".to_string()),
+            None,
         )
         .await
         .unwrap();

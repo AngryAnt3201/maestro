@@ -1,18 +1,21 @@
 import {
   Check,
   Edit2,
+  FolderGit2,
   FolderSearch,
   GitBranch,
   Loader2,
   Mail,
   Plus,
   RefreshCw,
+  RotateCcw,
   Trash2,
   User,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useGitStore } from "@/stores/useGitStore";
 import { useWorkspaceStore, type RepositoryInfo } from "@/stores/useWorkspaceStore";
 import { RemoteStatusIndicator } from "./RemoteStatusIndicator";
@@ -78,6 +81,7 @@ export function GitSettingsModal({ repoPath, tabId, onClose }: GitSettingsModalP
           <RepositoryDiscoverySection repoPath={repoPath} tabId={tabId} />
           <RemotesSection repoPath={repoPath} />
           <DefaultBranchSection repoPath={repoPath} />
+          <WorktreeSection repoPath={repoPath} tabId={tabId} />
         </div>
       </div>
     </div>
@@ -594,6 +598,150 @@ function DefaultBranchSection({ repoPath }: { repoPath: string }) {
             Save
           </button>
         </div>
+      </div>
+    </section>
+  );
+}
+
+/* ── Worktree Base Path Section ── */
+
+function WorktreeSection({ tabId }: { repoPath: string; tabId: string }) {
+  const worktreeBasePath = useWorkspaceStore(
+    (s) => s.tabs.find((t) => t.id === tabId)?.worktreeBasePath ?? null
+  );
+  const setWorktreeBasePath = useWorkspaceStore((s) => s.setWorktreeBasePath);
+
+  const [defaultPath, setDefaultPath] = useState<string>("");
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState("");
+
+  useEffect(() => {
+    invoke<string>("get_default_worktree_base_dir")
+      .then(setDefaultPath)
+      .catch(() => {});
+  }, []);
+
+  const displayPath = worktreeBasePath ?? defaultPath;
+  const isCustom = worktreeBasePath !== null;
+
+  const handleEditStart = () => {
+    setEditValue(worktreeBasePath ?? defaultPath);
+    setEditing(true);
+  };
+
+  const handleSave = () => {
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== defaultPath) {
+      setWorktreeBasePath(tabId, trimmed);
+    } else {
+      setWorktreeBasePath(tabId, null);
+    }
+    setEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditing(false);
+    setEditValue("");
+  };
+
+  const handleReset = () => {
+    setWorktreeBasePath(tabId, null);
+    setEditing(false);
+  };
+
+  const handlePickFolder = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Select Worktree Base Directory",
+      defaultPath: (worktreeBasePath ?? defaultPath) || undefined,
+    });
+    if (selected) {
+      setEditValue(selected);
+    }
+  };
+
+  return (
+    <section>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-maestro-muted">
+        Worktree Base Path
+      </h3>
+      <div className="space-y-2 rounded-lg border border-maestro-border bg-maestro-card p-3">
+        {editing ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                placeholder="Worktree base directory"
+                className="flex-1 rounded border border-maestro-border bg-maestro-bg px-2 py-1 text-xs text-maestro-text placeholder:text-maestro-muted focus:outline-none focus:border-maestro-accent"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSave();
+                  if (e.key === "Escape") handleCancel();
+                }}
+              />
+              <button
+                type="button"
+                onClick={handlePickFolder}
+                className="rounded p-1 hover:bg-maestro-border/40"
+                title="Browse..."
+              >
+                <FolderGit2 size={14} className="text-maestro-accent" />
+              </button>
+            </div>
+            <div className="flex justify-end gap-1">
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="rounded px-2 py-1 text-xs text-maestro-muted hover:bg-maestro-border/40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                className="rounded px-2 py-1 text-xs text-maestro-accent hover:bg-maestro-accent/10"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <FolderGit2 size={14} className="text-maestro-accent shrink-0" />
+              <span
+                className="flex-1 text-xs text-maestro-text truncate"
+                title={displayPath}
+              >
+                {displayPath || "Loading..."}
+              </span>
+              {!isCustom && (
+                <span className="text-[10px] text-maestro-muted">(default)</span>
+              )}
+              <button
+                type="button"
+                onClick={handleEditStart}
+                className="rounded p-1 hover:bg-maestro-border/40"
+                title="Edit path"
+              >
+                <Edit2 size={10} className="text-maestro-muted" />
+              </button>
+            </div>
+            {isCustom && (
+              <button
+                type="button"
+                onClick={handleReset}
+                className="flex items-center gap-1 text-[11px] text-maestro-muted hover:text-maestro-text"
+              >
+                <RotateCcw size={10} />
+                Reset to default
+              </button>
+            )}
+          </>
+        )}
       </div>
     </section>
   );

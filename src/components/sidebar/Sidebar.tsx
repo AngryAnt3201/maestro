@@ -9,6 +9,7 @@ import {
   Cpu,
   Edit2,
   FileText,
+  FolderGit2,
   GitBranch,
   Globe,
   Home,
@@ -32,6 +33,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { type AiMode, type BackendSessionStatus, useSessionStore } from "@/stores/useSessionStore";
 import { useGitStore } from "@/stores/useGitStore";
 import { useMcpStore } from "@/stores/useMcpStore";
@@ -316,14 +318,28 @@ function ConfigTab({
 
 /* ── 1. Git Repository ── */
 
+/** Shortens a filesystem path for display by keeping the last 2-3 segments. */
+function shortenPath(path: string): string {
+  const segments = path.replace(/[\\/]+$/, "").split(/[\\/]/);
+  if (segments.length <= 3) return path;
+  return `.../${segments.slice(-3).join("/")}`;
+}
+
 function GitRepositorySection() {
   const [showSettings, setShowSettings] = useState(false);
+  const [defaultWorktreeBase, setDefaultWorktreeBase] = useState<string | null>(null);
   const tabs = useWorkspaceStore((s) => s.tabs);
   const activeTab = tabs.find((t) => t.active);
   const repoPath = activeTab?.projectPath ?? "";
+  const worktreeBasePath = activeTab?.worktreeBasePath ?? null;
 
   const { userConfig, remotes, remoteStatuses, fetchUserConfig, fetchRemotes, testAllRemotes } =
     useGitStore();
+
+  // Fetch default worktree base dir on mount
+  useEffect(() => {
+    invoke<string>("get_default_worktree_base_dir").then(setDefaultWorktreeBase).catch(() => {});
+  }, []);
 
   // Fetch data on mount and when repoPath changes
   useEffect(() => {
@@ -418,6 +434,25 @@ function GitRepositorySection() {
               </div>
             </div>
           ))
+        )}
+
+        {/* Worktree base path */}
+        {(worktreeBasePath || defaultWorktreeBase) && (
+          <div className="mt-2 border-t border-maestro-border/30 pt-2 min-w-0 overflow-hidden">
+            <div className="flex items-center gap-2 px-1 py-1 min-w-0">
+              <FolderGit2 size={12} className="text-maestro-accent shrink-0" />
+              <span className="text-xs font-semibold text-maestro-text truncate min-w-0">Worktrees</span>
+              {!worktreeBasePath && (
+                <span className="text-[10px] text-maestro-muted/60 shrink-0">(default)</span>
+              )}
+            </div>
+            <div
+              className="pl-5 text-[11px] text-maestro-muted truncate min-w-0 overflow-hidden"
+              title={worktreeBasePath ?? defaultWorktreeBase ?? ""}
+            >
+              {shortenPath(worktreeBasePath ?? defaultWorktreeBase ?? "")}
+            </div>
+          </div>
         )}
       </div>
 

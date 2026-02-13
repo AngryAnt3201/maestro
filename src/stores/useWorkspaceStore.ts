@@ -32,6 +32,7 @@ export interface RepositoryInfo {
  * @property workspaceType - Whether this is a single repo, multi-repo workspace, or non-git.
  * @property repositories - Detected repositories within this workspace (empty for single-repo).
  * @property selectedRepoPath - Currently selected repository path for git operations.
+ * @property worktreeBasePath - Custom worktree base directory for this project (null = use default).
  */
 export type WorkspaceTab = {
   id: string;
@@ -43,6 +44,7 @@ export type WorkspaceTab = {
   workspaceType: WorkspaceType;
   repositories: RepositoryInfo[];
   selectedRepoPath: string | null;
+  worktreeBasePath: string | null;
 };
 
 /** Read-only slice of the workspace store; persisted to disk via Zustand `persist`. */
@@ -67,6 +69,8 @@ type WorkspaceActions = {
   setSelectedRepo: (tabId: string, repoPath: string) => void;
   /** Update repositories list after recursive scan. */
   updateRepositories: (tabId: string, repositories: RepositoryInfo[]) => void;
+  /** Set or clear a custom worktree base path for a project tab. */
+  setWorktreeBasePath: (tabId: string, path: string | null) => void;
 };
 
 // --- Tauri LazyStore-backed StateStorage adapter ---
@@ -195,6 +199,7 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
               workspaceType,
               repositories,
               selectedRepoPath,
+              worktreeBasePath: null,
             },
           ],
         });
@@ -297,12 +302,20 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
           ),
         });
       },
+
+      setWorktreeBasePath: (tabId: string, path: string | null) => {
+        set({
+          tabs: get().tabs.map((t) =>
+            t.id === tabId ? { ...t, worktreeBasePath: path } : t
+          ),
+        });
+      },
     }),
     {
       name: "maestro-workspace",
       storage: createJSONStorage(() => tauriStorage),
       partialize: (state) => ({ tabs: state.tabs }),
-      version: 3,
+      version: 4,
       onRehydrateStorage: () => {
         return (state) => {
           if (state) {
@@ -337,6 +350,14 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
             workspaceType: (t.workspaceType as WorkspaceType) ?? "single-repo",
             repositories: t.repositories ?? [],
             selectedRepoPath: t.selectedRepoPath ?? t.projectPath,
+          }));
+        }
+
+        // v3 -> v4: Add worktreeBasePath
+        if (version < 4) {
+          tabs = tabs.map((t) => ({
+            ...t,
+            worktreeBasePath: t.worktreeBasePath ?? null,
           }));
         }
 
