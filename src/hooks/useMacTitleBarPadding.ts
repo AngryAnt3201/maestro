@@ -12,8 +12,8 @@ export const MAC_TITLE_BAR_INSET_PX = 74;
 /**
  * On macOS with native traffic lights: returns true when the title bar should
  * reserve left padding for the traffic lights (i.e. when they are visible).
- * When the window is maximized or fullscreen, traffic lights are hidden, so we
- * return false and content can use the full left edge.
+ * Traffic lights remain visible when maximized/snapped but are hidden in native
+ * fullscreen, so we only remove padding in fullscreen mode.
  */
 export function useMacTitleBarPadding(): boolean {
   const appWindow = useMemo(() => getCurrentWindow(), []);
@@ -25,8 +25,8 @@ export function useMacTitleBarPadding(): boolean {
     let unlistenResized: (() => void) | undefined;
 
     const updateVisibility = () => {
-      Promise.all([appWindow.isMaximized(), appWindow.isFullscreen()])
-        .then(([maximized, fullscreen]) => setTrafficLightsVisible(!maximized && !fullscreen))
+      appWindow.isFullscreen()
+        .then((fullscreen) => setTrafficLightsVisible(!fullscreen))
         .catch(() => setTrafficLightsVisible(true));
     };
 
