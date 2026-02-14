@@ -1,6 +1,6 @@
 [package]
 name = "maestro"
-version = "0.2.1"
+version = "0.2.2"
 description = "Maestro — Multi-session AI orchestrator"
 authors = ["lliWcWill"]
 edition = "2021"
