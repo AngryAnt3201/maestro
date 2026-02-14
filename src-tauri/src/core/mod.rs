@@ -1,3 +1,4 @@
+pub mod api_types;
 pub mod error;
 pub mod font_detector;
 pub mod marketplace_error;

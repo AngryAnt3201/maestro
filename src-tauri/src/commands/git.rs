@@ -290,6 +290,51 @@ pub async fn detect_repositories(path: String) -> Result<Vec<RepositoryInfo>, Gi
     Ok(repos)
 }
 
+/// Pushes commits to a remote.
+#[tauri::command]
+pub async fn git_push(
+    repo_path: String,
+    remote: String,
+    branch: Option<String>,
+    set_upstream: Option<bool>,
+    force_with_lease: Option<bool>,
+) -> Result<String, GitError> {
+    validate_repo_path(&repo_path)?;
+    let git = Git::new(&repo_path);
+    git.push(
+        &remote,
+        branch.as_deref(),
+        set_upstream.unwrap_or(false),
+        force_with_lease.unwrap_or(false),
+    )
+    .await
+}
+
+/// Pulls changes from a remote.
+#[tauri::command]
+pub async fn git_pull(
+    repo_path: String,
+    remote: String,
+    branch: Option<String>,
+    ff_only: Option<bool>,
+) -> Result<String, GitError> {
+    validate_repo_path(&repo_path)?;
+    let git = Git::new(&repo_path);
+    git.pull(&remote, branch.as_deref(), ff_only.unwrap_or(true))
+        .await
+}
+
+/// Fetches refs and objects from a remote (or all if not specified).
+#[tauri::command]
+pub async fn git_fetch(
+    repo_path: String,
+    remote: Option<String>,
+) -> Result<(), GitError> {
+    validate_repo_path(&repo_path)?;
+    let git = Git::new(&repo_path);
+    git.fetch(remote.as_deref()).await
+}
+
 /// Internal recursive helper for detect_repositories.
 /// Uses Box::pin for async recursion.
 fn detect_repos_recursive<'a>(

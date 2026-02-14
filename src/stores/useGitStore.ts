@@ -107,6 +107,9 @@ interface GitState {
   setDefaultBranch: (repoPath: string, branch: string, global?: boolean) => Promise<void>;
   getCommitFiles: (repoPath: string, commitHash: string) => Promise<FileChange[]>;
   getRefsForCommit: (repoPath: string, commitHash: string) => Promise<string[]>;
+  push: (repoPath: string, remote?: string, branch?: string, setUpstream?: boolean, forceWithLease?: boolean) => Promise<string>;
+  pull: (repoPath: string, remote?: string, branch?: string, ffOnly?: boolean) => Promise<string>;
+  fetch: (repoPath: string, remote?: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -369,6 +372,55 @@ export const useGitStore = create<GitState>()((set, get) => ({
     } catch (err) {
       console.error("Failed to get refs for commit:", err);
       return [];
+    }
+  },
+
+  push: async (
+    repoPath: string,
+    remote = "origin",
+    branch?: string,
+    setUpstream = false,
+    forceWithLease = false,
+  ): Promise<string> => {
+    try {
+      return await invoke<string>("git_push", {
+        repoPath,
+        remote,
+        branch: branch ?? null,
+        setUpstream,
+        forceWithLease,
+      });
+    } catch (err) {
+      console.error("Failed to push:", err);
+      throw err;
+    }
+  },
+
+  pull: async (
+    repoPath: string,
+    remote = "origin",
+    branch?: string,
+    ffOnly = true,
+  ): Promise<string> => {
+    try {
+      return await invoke<string>("git_pull", {
+        repoPath,
+        remote,
+        branch: branch ?? null,
+        ffOnly,
+      });
+    } catch (err) {
+      console.error("Failed to pull:", err);
+      throw err;
+    }
+  },
+
+  fetch: async (repoPath: string, remote?: string): Promise<void> => {
+    try {
+      await invoke("git_fetch", { repoPath, remote: remote ?? null });
+    } catch (err) {
+      console.error("Failed to fetch:", err);
+      throw err;
     }
   },
 

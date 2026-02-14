@@ -639,6 +639,67 @@ impl Git {
 
         Ok(git_dir_canon != common_dir_canon)
     }
+
+    /// Pushes commits to a remote.
+    ///
+    /// If `branch` is None, pushes the current branch.
+    /// `set_upstream` adds `-u` to track the remote branch.
+    /// `force_with_lease` uses `--force-with-lease` (never bare `--force`).
+    pub async fn push(
+        &self,
+        remote: &str,
+        branch: Option<&str>,
+        set_upstream: bool,
+        force_with_lease: bool,
+    ) -> Result<String, GitError> {
+        let mut args = vec!["push"];
+        if set_upstream {
+            args.push("-u");
+        }
+        if force_with_lease {
+            args.push("--force-with-lease");
+        }
+        args.push(remote);
+        if let Some(b) = branch {
+            args.push(b);
+        }
+        let output = self.run(&args).await?;
+        Ok(output.trimmed().to_string())
+    }
+
+    /// Pulls changes from a remote.
+    ///
+    /// If `branch` is None, pulls the current branch's tracking remote.
+    /// `ff_only` uses `--ff-only` to prevent merge commits.
+    pub async fn pull(
+        &self,
+        remote: &str,
+        branch: Option<&str>,
+        ff_only: bool,
+    ) -> Result<String, GitError> {
+        let mut args = vec!["pull"];
+        if ff_only {
+            args.push("--ff-only");
+        }
+        args.push(remote);
+        if let Some(b) = branch {
+            args.push(b);
+        }
+        let output = self.run(&args).await?;
+        Ok(output.trimmed().to_string())
+    }
+
+    /// Fetches refs and objects from a remote (or all remotes if None).
+    pub async fn fetch(&self, remote: Option<&str>) -> Result<(), GitError> {
+        let mut args = vec!["fetch"];
+        if let Some(r) = remote {
+            args.push(r);
+        } else {
+            args.push("--all");
+        }
+        self.run(&args).await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

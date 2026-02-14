@@ -104,27 +104,40 @@ pub fn run() {
         .manage(MarketplaceManager::new())
         .manage(McpManager::new())
         .manage(PluginManager::new())
-        .manage(ProcessManager::new())
-        .manage(SessionManager::new())
-        .manage(WorktreeManager::new())
         .setup(|app| {
             // Generate a unique instance ID for this Maestro run
             // This prevents status pollution between different app instances
             let instance_id = uuid::Uuid::new_v4().to_string();
             log::info!("Maestro instance ID: {}", instance_id);
 
-            // Start the HTTP status server for MCP status reporting
+            // Retrieve managed state references for the status server API
+            let process_manager: Arc<ProcessManager> = Arc::new(ProcessManager::new());
+            let session_manager: Arc<SessionManager> = Arc::new(SessionManager::new());
+            let worktree_manager: Arc<WorktreeManager> = Arc::new(WorktreeManager);
+
+            // Re-manage the Arc versions so they're shared with the server
+            app.manage(process_manager.clone());
+            app.manage(session_manager.clone());
+            app.manage(worktree_manager.clone());
+
+            // Start the HTTP status server for MCP status reporting + REST API
             // IMPORTANT: This must be done synchronously so the server is ready
             // before any commands try to use it
             let app_handle = app.handle().clone();
             let server = tauri::async_runtime::block_on(async {
-                StatusServer::start(app_handle, instance_id).await
+                StatusServer::start(
+                    app_handle,
+                    instance_id,
+                    process_manager,
+                    session_manager,
+                    worktree_manager,
+                ).await
             });
 
             match server {
                 Some(server) => {
                     log::info!(
-                        "Status server started on port {}, URL: {}",
+                        "Status server started on port {}, URL: {}, API token written to ~/.maestro/",
                         server.port(),
                         server.status_url()
                     );
@@ -132,7 +145,6 @@ pub fn run() {
                 }
                 None => {
                     log::error!("Failed to start status server - MCP status reporting will not work");
-                    // Return error to prevent app from starting without status server
                     return Err("Failed to start status server".into());
                 }
             }
@@ -175,6 +187,9 @@ pub fn run() {
             commands::git::is_git_repository,
             commands::git::is_git_worktree,
             commands::git::detect_repositories,
+            commands::git::git_push,
+            commands::git::git_pull,
+            commands::git::git_fetch,
             // Session commands (new)
             commands::session::get_sessions,
             commands::session::create_session,
