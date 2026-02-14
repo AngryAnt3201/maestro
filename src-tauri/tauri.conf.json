@@ -44,8 +44,8 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "../target/*/maestro-mcp-server*"
+    "externalBin": [
+      "binaries/maestro-mcp-server"
     ],
     "linux": {
       "deb": {

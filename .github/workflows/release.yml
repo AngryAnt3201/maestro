@@ -89,7 +89,11 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Build MCP server (needed by Tauri build script)
-        run: cargo build --release -p maestro-mcp-server
+        run: |
+          cargo build --release -p maestro-mcp-server
+          mkdir -p src-tauri/binaries
+          cp target/release/maestro-mcp-server \
+            src-tauri/binaries/maestro-mcp-server-x86_64-unknown-linux-gnu
 
       - name: Run Rust tests
         run: cargo test --workspace
@@ -196,15 +200,22 @@ jobs:
       - name: Build MCP server
         shell: bash
         run: |
+          mkdir -p src-tauri/binaries
           if [ "${{ matrix.platform }}" = "macos-latest" ]; then
             cargo build --release -p maestro-mcp-server --target aarch64-apple-darwin
             cargo build --release -p maestro-mcp-server --target x86_64-apple-darwin
-            mkdir -p target/release
-            lipo -create -output target/release/maestro-mcp-server \
+            # Universal binary for macOS
+            lipo -create -output src-tauri/binaries/maestro-mcp-server-universal-apple-darwin \
               target/aarch64-apple-darwin/release/maestro-mcp-server \
               target/x86_64-apple-darwin/release/maestro-mcp-server
+          elif [ "${{ matrix.platform }}" = "windows-latest" ]; then
+            cargo build --release -p maestro-mcp-server
+            cp target/release/maestro-mcp-server.exe \
+              src-tauri/binaries/maestro-mcp-server-x86_64-pc-windows-msvc.exe
           else
             cargo build --release -p maestro-mcp-server
+            cp target/release/maestro-mcp-server \
+              src-tauri/binaries/maestro-mcp-server-x86_64-unknown-linux-gnu
           fi
 
       - name: Build Tauri app
@@ -426,7 +437,11 @@ jobs:
               notes: notes,
               pub_date: new Date().toISOString(),
               platforms: {
-                'darwin-universal': {
+                'darwin-aarch64': {
+                  signature: macSig,
+                  url: `${baseUrl}/${macBundle.name}`,
+                },
+                'darwin-x86_64': {
                   signature: macSig,
                   url: `${baseUrl}/${macBundle.name}`,
                 },

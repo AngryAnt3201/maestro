@@ -53,8 +53,10 @@ async fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
 /// Finds the maestro-mcp-server binary in common installation locations.
 ///
 /// Searches in order:
-/// 1. Next to the current executable (development and installed)
-/// 2. Inside Resources for macOS app bundle
+/// 1. Next to the current executable — covers both dev builds (target/{profile}/)
+///    and production sidecar bundles (Contents/MacOS/ on macOS, next to exe on
+///    Linux/Windows) since Tauri's `externalBin` places sidecars alongside the main binary.
+/// 2. Inside Resources for macOS app bundle (legacy fallback)
 /// 3. Development: relative to src-tauri/target/debug or release
 /// 4. macOS Application Support (~Library/Application Support/Claude Maestro/)
 /// 5. Linux local share (~/.local/share/maestro/)
@@ -72,7 +74,10 @@ fn find_maestro_mcp_path() -> Option<PathBuf> {
     );
 
     let candidates: Vec<Option<PathBuf>> = vec![
-        // Next to the executable (most common for development and installed)
+        // Candidate [0]: Next to the executable.
+        // - Dev: build.rs copies to target/{profile}/ which is where current_exe lives
+        // - Prod: Tauri's externalBin places sidecar in Contents/MacOS/ (macOS) or
+        //   next to the exe (Linux/Windows), which is also current_exe's parent dir
         current_exe
             .as_ref()
             .and_then(|p| p.parent().map(|d| d.join(binary_name))),
