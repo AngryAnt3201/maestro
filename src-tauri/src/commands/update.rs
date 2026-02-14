@@ -3,6 +3,8 @@ use tauri::{AppHandle, Emitter};
 use tauri_plugin_updater::UpdaterExt;
 use url::Url;
 
+use crate::core::ProcessManager;
+
 #[derive(Debug, Serialize)]
 pub struct UpdateInfo {
     pub available: bool,
@@ -64,6 +66,7 @@ pub async fn check_for_updates(
 #[tauri::command]
 pub async fn download_and_install_update(
     app: AppHandle,
+    process_manager: tauri::State<'_, ProcessManager>,
     custom_endpoint: Option<String>,
 ) -> Result<(), String> {
     let update = if let Some(endpoint) = custom_endpoint {
@@ -107,7 +110,15 @@ pub async fn download_and_install_update(
 
     let _ = app.emit("update-installing", ());
 
-    Ok(())
+    // Clean up all PTY sessions before restart
+    log::info!("Update installed. Cleaning up PTY sessions before restart...");
+    if let Ok(count) = process_manager.kill_all_sessions().await {
+        log::info!("Cleaned up {} PTY session(s)", count);
+    }
+
+    // Restart the app to apply the update
+    log::info!("Restarting app to apply update...");
+    app.restart();
 }
 
 #[tauri::command]
