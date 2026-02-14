@@ -125,6 +125,62 @@ export function collectSlotIds(tree: TreeNode): string[] {
 }
 
 /**
+ * Returns grid dimensions matching the old CSS grid layout:
+ * 1→1x1, 2→2x1, 3→3x1, 4→2x2, 5-6→3x2, 7-9→3x3
+ */
+export function gridDimensions(count: number): { cols: number; rows: number } {
+  if (count <= 1) return { cols: 1, rows: 1 };
+  if (count === 2) return { cols: 2, rows: 1 };
+  if (count === 3) return { cols: 3, rows: 1 };
+  if (count === 4) return { cols: 2, rows: 2 };
+  if (count <= 6) return { cols: 3, rows: 2 };
+  return { cols: 3, rows: 3 };
+}
+
+/**
+ * Recursively builds a balanced binary split tree from an array of nodes
+ * along one axis. The ratio is proportional so each leaf gets equal space.
+ */
+export function buildBalancedSplit(nodes: TreeNode[], direction: SplitDirection): TreeNode {
+  if (nodes.length === 1) return nodes[0];
+  const mid = Math.ceil(nodes.length / 2);
+  const left = buildBalancedSplit(nodes.slice(0, mid), direction);
+  const right = buildBalancedSplit(nodes.slice(mid), direction);
+  return {
+    type: "split",
+    id: uid(),
+    direction,
+    children: [left, right],
+    ratio: mid / nodes.length,
+  };
+}
+
+/**
+ * Builds a 2D grid tree from slot IDs matching the old CSS grid layout.
+ * Each row is a balanced vertical (side-by-side) split, then rows are
+ * stacked with horizontal splits.
+ */
+export function buildGridTree(slotIds: string[]): TreeNode {
+  if (slotIds.length === 0) return createLeaf("empty");
+  if (slotIds.length === 1) return createLeaf(slotIds[0]);
+
+  const { cols, rows } = gridDimensions(slotIds.length);
+
+  // Distribute slots into rows (cols per row, last row may have fewer)
+  const rowNodes: TreeNode[] = [];
+  for (let r = 0; r < rows; r++) {
+    const start = r * cols;
+    const end = Math.min(start + cols, slotIds.length);
+    const rowSlots = slotIds.slice(start, end);
+    const rowLeaves = rowSlots.map(createLeaf);
+    rowNodes.push(buildBalancedSplit(rowLeaves, "vertical"));
+  }
+
+  // Stack rows with horizontal splits
+  return buildBalancedSplit(rowNodes, "horizontal");
+}
+
+/**
  * Find the sibling slot ID of a given slot in the tree.
  * Returns null if the slot is the root or not found.
  */

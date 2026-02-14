@@ -35,7 +35,7 @@ import type { AiMode } from "@/stores/useSessionStore";
 import { useWorkspaceStore, type RepositoryInfo, type WorkspaceType } from "@/stores/useWorkspaceStore";
 import { PreLaunchCard, type SessionSlot } from "./PreLaunchCard";
 import { SplitPaneView } from "./SplitPaneView";
-import { createLeaf, splitLeaf, removeLeaf, updateRatio, collectSlotIds, findSiblingSlotId, type TreeNode, type SplitDirection } from "./splitTree";
+import { createLeaf, splitLeaf, removeLeaf, updateRatio, collectSlotIds, findSiblingSlotId, buildGridTree, type TreeNode, type SplitDirection } from "./splitTree";
 import { TerminalView } from "./TerminalView";
 
 /** Stable empty arrays to avoid infinite re-render loops in Zustand selectors. */
@@ -984,24 +984,12 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       if (prev.length >= MAX_SESSIONS) return prev;
       return [...prev, newSlot];
     });
-    // Add to split tree — split the focused pane vertically, or add to root
-    setLayoutTree((prev) => {
-      if (focusedSlotId) {
-        return splitLeaf(prev, focusedSlotId, newSlot.id, "vertical");
-      }
-      // No focused pane: wrap root in a vertical split
-      return {
-        type: "split",
-        id: `node-${Date.now()}-addSession`,
-        direction: "vertical" as const,
-        children: [prev, createLeaf(newSlot.id)],
-        ratio: prev.type === "leaf" ? 0.5 : orderedSlotIds.length / (orderedSlotIds.length + 1),
-      };
-    });
+    // Rebuild layout as a clean 2D grid (matching old CSS grid dimensions)
+    setLayoutTree(() => buildGridTree([...orderedSlotIds, newSlot.id]));
     setFocusedSlotId(newSlot.id);
     // Refresh branch list so new slots see the latest branches
     refreshBranches();
-  }, [mcpServers, skills, plugins, refreshBranches, focusedSlotId, orderedSlotIds.length]);
+  }, [mcpServers, skills, plugins, refreshBranches, orderedSlotIds]);
 
   useImperativeHandle(ref, () => ({ addSession, launchAll, refreshBranches }), [addSession, launchAll, refreshBranches]);
 
