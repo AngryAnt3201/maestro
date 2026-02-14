@@ -230,6 +230,11 @@ impl ProcessManager {
             cmd.env("LANG", "en_US.UTF-8");
         }
 
+        // Prevent Claude Code from thinking it's nested inside another session.
+        // Maestro may have been launched from a Claude Code terminal, so strip
+        // the marker env var so terminals inside Maestro can start fresh sessions.
+        cmd.env_remove("CLAUDECODE");
+
         // Inject MAESTRO_SESSION_ID automatically (used by MCP status server)
         cmd.env("MAESTRO_SESSION_ID", id.to_string());
 

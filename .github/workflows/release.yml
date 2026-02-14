@@ -222,16 +222,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          # Unset password if empty — empty string != no password for minisign
-          if [ -z "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
-            unset TAURI_SIGNING_PRIVATE_KEY_PASSWORD
-          fi
-
           if [ "${{ matrix.platform }}" = "macos-latest" ]; then
             BUNDLE_DIR="target/universal-apple-darwin/release/bundle"
             # .app.tar.gz already created by tauri-action
             echo "Signing macOS updater bundle..."
-            npx tauri signer sign "$BUNDLE_DIR/macos/Maestro.app.tar.gz"
+            npx tauri signer sign -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$BUNDLE_DIR/macos/Maestro.app.tar.gz"
             ls -la "$BUNDLE_DIR/macos/"
           fi
 
@@ -243,7 +238,7 @@ jobs:
             # Use PowerShell for zip on Windows
             powershell -Command "Compress-Archive -Path '$EXE_FILE' -DestinationPath '$ZIP_FILE'"
             echo "Signing Windows updater bundle..."
-            npx tauri signer sign "$ZIP_FILE"
+            npx tauri signer sign -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$ZIP_FILE"
             ls -la "$BUNDLE_DIR/nsis/"
           fi
 
@@ -255,7 +250,7 @@ jobs:
             echo "Creating Linux updater archive: $(basename $TGZ_FILE)"
             tar czf "$TGZ_FILE" -C "$(dirname $APPIMAGE_FILE)" "$APPIMAGE_NAME"
             echo "Signing Linux updater bundle..."
-            npx tauri signer sign "$TGZ_FILE"
+            npx tauri signer sign -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$TGZ_FILE"
             ls -la "$BUNDLE_DIR/appimage/"
           fi
 
