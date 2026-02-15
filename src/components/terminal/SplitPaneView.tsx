@@ -25,7 +25,7 @@ function clampRatio(ratio: number): number {
 export function SplitPaneView({ node, renderLeaf, onRatioChange, onDragStateChange }: SplitPaneViewProps) {
   if (node.type === "leaf") {
     return (
-      <div className="h-full w-full min-w-0 min-h-0">
+      <div className="h-full w-full min-w-0 min-h-0 relative" data-slot-id={node.slotId}>
         {renderLeaf(node.slotId)}
       </div>
     );

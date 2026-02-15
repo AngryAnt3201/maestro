@@ -277,6 +277,23 @@
   background: rgb(var(--maestro-accent));
 }
 
+/* ── Drop Zone Overlay ── */
+.drop-zone-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(var(--maestro-accent) / 0.08);
+  border: 2px dashed rgb(var(--maestro-accent) / 0.5);
+  border-radius: 12px;
+  pointer-events: none;
+  color: rgb(var(--maestro-accent));
+  font-size: 13px;
+  font-weight: 500;
+}
+
 /* ── Terminal Cell Styling ── */
 
 .terminal-cell {
