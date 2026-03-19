@@ -5,9 +5,18 @@
 
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::time::Instant;
 
 /// Flag to skip credential store after first failure (prevents repeated prompts).
 static CREDENTIAL_STORE_FAILED: AtomicBool = AtomicBool::new(false);
+
+/// Minimum seconds between actual API calls. Requests within this window return cached data.
+const CACHE_TTL_SECS: u64 = 30;
+
+/// Cached usage response to prevent duplicate API calls from multiple frontend
+/// components or rapid re-renders.
+static USAGE_CACHE: Mutex<Option<(Instant, UsageData)>> = Mutex::new(None);
 
 /// Usage data from Anthropic's OAuth API.
 #[derive(Debug, Clone, Serialize)]
@@ -198,8 +207,34 @@ async fn get_access_token() -> Result<String, String> {
 }
 
 /// Fetch usage data from Anthropic's OAuth API.
+/// Responses are cached for 30 seconds to prevent 429 errors when multiple
+/// components or re-renders trigger concurrent requests.
 #[tauri::command]
 pub async fn get_claude_usage() -> Result<UsageData, String> {
+    // Return cached response if still fresh
+    if let Ok(guard) = USAGE_CACHE.lock() {
+        if let Some((fetched_at, ref data)) = *guard {
+            if fetched_at.elapsed().as_secs() < CACHE_TTL_SECS {
+                log::debug!("Returning cached usage data (age: {}s)", fetched_at.elapsed().as_secs());
+                return Ok(data.clone());
+            }
+        }
+    }
+
+    let result = fetch_usage_from_api().await;
+
+    // Cache successful responses (and auth errors, since those won't change quickly)
+    if let Ok(ref data) = result {
+        if let Ok(mut guard) = USAGE_CACHE.lock() {
+            *guard = Some((Instant::now(), data.clone()));
+        }
+    }
+
+    result
+}
+
+/// Actually fetch usage data from the API (uncached).
+async fn fetch_usage_from_api() -> Result<UsageData, String> {
     let token = match get_access_token().await {
         Ok(t) => t,
         Err(e) => {
@@ -230,6 +265,26 @@ pub async fn get_claude_usage() -> Result<UsageData, String> {
             needs_auth: true,
             ..Default::default()
         });
+    }
+
+    // Handle rate limiting (429) — extend cache TTL to avoid hammering the API
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        let retry_after = response
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(60);
+        log::warn!("Usage API returned 429, retry after {}s", retry_after);
+        let data = UsageData {
+            error_message: Some(format!("Rate limited, retrying in {}s", retry_after)),
+            ..Default::default()
+        };
+        // Cache the 429 response so we don't keep retrying
+        if let Ok(mut guard) = USAGE_CACHE.lock() {
+            *guard = Some((Instant::now(), data.clone()));
+        }
+        return Ok(data);
     }
 
     if !response.status().is_success() {

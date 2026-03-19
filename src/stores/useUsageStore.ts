@@ -6,8 +6,11 @@ import {
   type TamagotchiMood,
 } from "@/lib/usageParser";
 
-/** Polling interval for usage updates (60 seconds). */
+/** Default polling interval for usage updates (60 seconds). */
 const POLL_INTERVAL_MS = 60_000;
+
+/** Max polling interval after repeated errors (5 minutes). */
+const MAX_POLL_INTERVAL_MS = 300_000;
 
 interface UsageState {
   /** Raw usage data from backend. */
@@ -34,9 +37,19 @@ interface UsageState {
   toggleCharacter: () => void;
 }
 
+/** Tracks the single active polling interval across all component mounts. */
+let globalIntervalId: ReturnType<typeof setInterval> | null = null;
+/** Number of components currently subscribed to polling. */
+let pollingRefCount = 0;
+/** Consecutive error count for backoff. */
+let consecutiveErrors = 0;
+
 /**
  * Zustand store for Claude Code usage tracking.
  * Powers the tamagotchi widget in the sidebar footer.
+ *
+ * Polling is ref-counted: multiple mounts share one interval,
+ * and it is cleared only when the last subscriber unmounts.
  */
 export const useUsageStore = create<UsageState>()((set, get) => ({
   usage: null,
@@ -48,12 +61,22 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
   showCharacter: true,
 
   fetchUsage: async () => {
+    // Skip if a fetch is already in-flight
+    if (get().isLoading) return;
+
     set({ isLoading: true, error: null });
 
     try {
       const usage = await getClaudeUsage();
       const needsAuth = usage.needsAuth;
       const mood = getMood(usage.weeklyPercent, needsAuth);
+
+      const hasError = !needsAuth && !!usage.errorMessage;
+      if (hasError) {
+        consecutiveErrors++;
+      } else {
+        consecutiveErrors = 0;
+      }
 
       set({
         usage,
@@ -66,6 +89,7 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
       });
     } catch (err) {
       console.error("Failed to fetch Claude usage:", err);
+      consecutiveErrors++;
       set({
         error: String(err),
         isLoading: false,
@@ -74,16 +98,41 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
   },
 
   startPolling: () => {
-    // Initial fetch
-    get().fetchUsage();
+    pollingRefCount++;
 
-    // Set up interval for periodic updates
-    const intervalId = setInterval(() => {
+    // If this is the first subscriber, start the global interval
+    if (pollingRefCount === 1) {
+      // Initial fetch
       get().fetchUsage();
-    }, POLL_INTERVAL_MS);
 
-    // Return cleanup function
-    return () => clearInterval(intervalId);
+      const scheduleNext = () => {
+        // Exponential backoff: double the interval for each consecutive error, up to max
+        const backoffMs = consecutiveErrors > 0
+          ? Math.min(POLL_INTERVAL_MS * Math.pow(2, consecutiveErrors), MAX_POLL_INTERVAL_MS)
+          : POLL_INTERVAL_MS;
+
+        globalIntervalId = setInterval(() => {
+          get().fetchUsage();
+          // Reschedule with updated backoff if error count changed
+          if (globalIntervalId) {
+            clearInterval(globalIntervalId);
+            scheduleNext();
+          }
+        }, backoffMs);
+      };
+
+      scheduleNext();
+    }
+
+    // Return cleanup: decrement ref count, clear interval if last subscriber
+    return () => {
+      pollingRefCount = Math.max(0, pollingRefCount - 1);
+      if (pollingRefCount === 0 && globalIntervalId) {
+        clearInterval(globalIntervalId);
+        globalIntervalId = null;
+        consecutiveErrors = 0;
+      }
+    };
   },
 
   toggleCharacter: () => {
