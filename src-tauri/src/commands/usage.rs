@@ -15,8 +15,8 @@ static CREDENTIAL_STORE_FAILED: AtomicBool = AtomicBool::new(false);
 const CACHE_TTL_SECS: u64 = 30;
 
 /// Cached usage response to prevent duplicate API calls from multiple frontend
-/// components or rapid re-renders.
-static USAGE_CACHE: Mutex<Option<(Instant, UsageData)>> = Mutex::new(None);
+/// components or rapid re-renders. Stores (fetch_time, ttl_secs, data).
+static USAGE_CACHE: Mutex<Option<(Instant, u64, UsageData)>> = Mutex::new(None);
 
 /// Usage data from Anthropic's OAuth API.
 #[derive(Debug, Clone, Serialize)]
@@ -213,9 +213,9 @@ async fn get_access_token() -> Result<String, String> {
 pub async fn get_claude_usage() -> Result<UsageData, String> {
     // Return cached response if still fresh
     if let Ok(guard) = USAGE_CACHE.lock() {
-        if let Some((fetched_at, ref data)) = *guard {
-            if fetched_at.elapsed().as_secs() < CACHE_TTL_SECS {
-                log::debug!("Returning cached usage data (age: {}s)", fetched_at.elapsed().as_secs());
+        if let Some((fetched_at, ttl, ref data)) = *guard {
+            if fetched_at.elapsed().as_secs() < ttl {
+                log::debug!("Returning cached usage data (age: {}s, ttl: {}s)", fetched_at.elapsed().as_secs(), ttl);
                 return Ok(data.clone());
             }
         }
@@ -226,7 +226,7 @@ pub async fn get_claude_usage() -> Result<UsageData, String> {
     // Cache successful responses (and auth errors, since those won't change quickly)
     if let Ok(ref data) = result {
         if let Ok(mut guard) = USAGE_CACHE.lock() {
-            *guard = Some((Instant::now(), data.clone()));
+            *guard = Some((Instant::now(), CACHE_TTL_SECS, data.clone()));
         }
     }
 
@@ -280,9 +280,9 @@ async fn fetch_usage_from_api() -> Result<UsageData, String> {
             error_message: Some(format!("Rate limited, retrying in {}s", retry_after)),
             ..Default::default()
         };
-        // Cache the 429 response so we don't keep retrying
+        // Cache the 429 response using retry-after as TTL so we don't retry before the server allows
         if let Ok(mut guard) = USAGE_CACHE.lock() {
-            *guard = Some((Instant::now(), data.clone()));
+            *guard = Some((Instant::now(), retry_after, data.clone()));
         }
         return Ok(data);
     }

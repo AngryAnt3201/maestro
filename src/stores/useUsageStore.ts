@@ -37,8 +37,8 @@ interface UsageState {
   toggleCharacter: () => void;
 }
 
-/** Tracks the single active polling interval across all component mounts. */
-let globalIntervalId: ReturnType<typeof setInterval> | null = null;
+/** Tracks the single active polling timeout across all component mounts. */
+let globalTimeoutId: ReturnType<typeof setTimeout> | null = null;
 /** Number of components currently subscribed to polling. */
 let pollingRefCount = 0;
 /** Consecutive error count for backoff. */
@@ -111,13 +111,9 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
           ? Math.min(POLL_INTERVAL_MS * Math.pow(2, consecutiveErrors), MAX_POLL_INTERVAL_MS)
           : POLL_INTERVAL_MS;
 
-        globalIntervalId = setInterval(() => {
+        globalTimeoutId = setTimeout(() => {
           get().fetchUsage();
-          // Reschedule with updated backoff if error count changed
-          if (globalIntervalId) {
-            clearInterval(globalIntervalId);
-            scheduleNext();
-          }
+          scheduleNext();
         }, backoffMs);
       };
 
@@ -127,9 +123,9 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
     // Return cleanup: decrement ref count, clear interval if last subscriber
     return () => {
       pollingRefCount = Math.max(0, pollingRefCount - 1);
-      if (pollingRefCount === 0 && globalIntervalId) {
-        clearInterval(globalIntervalId);
-        globalIntervalId = null;
+      if (pollingRefCount === 0 && globalTimeoutId) {
+        clearTimeout(globalTimeoutId);
+        globalTimeoutId = null;
         consecutiveErrors = 0;
       }
     };
