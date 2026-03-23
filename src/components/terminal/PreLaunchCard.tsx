@@ -464,9 +464,13 @@ export function PreLaunchCard({
                     <>
                       <FolderOpen size={14} className="shrink-0 text-maestro-purple" />
                       <span className="truncate">{selectedRepoName}</span>
-                      <span className="text-maestro-muted">/</span>
-                      <GitBranch size={12} className="shrink-0 text-maestro-accent" />
-                      <span className="truncate text-maestro-muted">{displayBranch}</span>
+                      {selectedRepo?.isGitRepo !== false && (
+                        <>
+                          <span className="text-maestro-muted">/</span>
+                          <GitBranch size={12} className="shrink-0 text-maestro-accent" />
+                          <span className="truncate text-maestro-muted">{displayBranch}</span>
+                        </>
+                      )}
                     </>
                   ) : (
                     <>
@@ -474,17 +478,17 @@ export function PreLaunchCard({
                       <span className="truncate">{displayBranch}</span>
                     </>
                   )}
-                  {selectedBranchInfo?.hasWorktree && (
+                  {selectedRepo?.isGitRepo !== false && selectedBranchInfo?.hasWorktree && (
                     <span title="Worktree exists">
                       <FolderGit2 size={12} className="shrink-0 text-maestro-orange" />
                     </span>
                   )}
-                  {selectedBranchInfo?.isCurrent && (
+                  {selectedRepo?.isGitRepo !== false && selectedBranchInfo?.isCurrent && (
                     <span className="shrink-0 rounded bg-maestro-green/20 px-1 text-[9px] text-maestro-green">
                       current
                     </span>
                   )}
-                  {slot.branch && !selectedBranchInfo && (
+                  {selectedRepo?.isGitRepo !== false && slot.branch && !selectedBranchInfo && (
                     <span className="shrink-0 rounded bg-maestro-accent/20 px-1 text-[9px] text-maestro-accent">
                       new
                     </span>
@@ -672,36 +676,45 @@ export function PreLaunchCard({
                           <div key={repo.path} className={isSelected ? "bg-maestro-accent/5" : ""}>
                             {/* Repo header row */}
                             <div className="flex items-center gap-1 px-2 py-1.5 hover:bg-maestro-surface">
-                              {/* Expand/collapse button */}
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleRepoExpanded(repo.path);
-                                }}
-                                className="shrink-0 rounded p-0.5 hover:bg-maestro-border/40"
-                              >
-                                {isLoading ? (
-                                  <Loader2 size={12} className="animate-spin text-maestro-muted" />
-                                ) : isExpanded ? (
-                                  <ChevronDown size={12} className="text-maestro-muted" />
-                                ) : (
-                                  <ChevronRight size={12} className="text-maestro-muted" />
-                                )}
-                              </button>
+                              {/* Expand/collapse button — only for git repos */}
+                              {repo.isGitRepo !== false ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleRepoExpanded(repo.path);
+                                  }}
+                                  className="shrink-0 rounded p-0.5 hover:bg-maestro-border/40"
+                                >
+                                  {isLoading ? (
+                                    <Loader2 size={12} className="animate-spin text-maestro-muted" />
+                                  ) : isExpanded ? (
+                                    <ChevronDown size={12} className="text-maestro-muted" />
+                                  ) : (
+                                    <ChevronRight size={12} className="text-maestro-muted" />
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="inline-block w-[20px]" />
+                              )}
                               {/* Repo select button */}
                               <button
                                 type="button"
                                 onClick={() => handleSelectRepo(repo.path)}
                                 className="flex flex-1 items-center gap-2 text-left text-sm"
                               >
-                                <FolderOpen size={14} className="shrink-0 text-maestro-purple" />
+                                <FolderOpen size={14} className={`shrink-0 ${repo.isGitRepo !== false ? "text-maestro-purple" : "text-maestro-muted"}`} />
                                 <span className={`flex-1 truncate ${isSelected ? "text-maestro-text font-medium" : "text-maestro-muted"}`}>
                                   {repo.name}
                                 </span>
-                                {currentRepoBranch && (
+                                {repo.isGitRepo !== false && currentRepoBranch && (
                                   <span className="text-[10px] text-maestro-muted">
                                     {currentRepoBranch.name}
+                                  </span>
+                                )}
+                                {repo.isGitRepo === false && (
+                                  <span className="text-[10px] text-maestro-muted/60">
+                                    no git
                                   </span>
                                 )}
                                 {isSelected && (
@@ -710,8 +723,8 @@ export function PreLaunchCard({
                               </button>
                             </div>
 
-                            {/* Expanded branches */}
-                            {isExpanded && !isLoading && (
+                            {/* Expanded branches — only for git repos */}
+                            {repo.isGitRepo !== false && isExpanded && !isLoading && (
                               <div className="ml-5 border-l border-maestro-border/40 pl-2">
                                 {/* Use current branch option */}
                                 <button

@@ -16,6 +16,8 @@ export interface RepositoryInfo {
   path: string;
   /** Display name (folder name). */
   name: string;
+  /** Whether this directory is a git repository. */
+  isGitRepo: boolean;
   /** Current branch name (if available). */
   currentBranch: string | null;
   /** Primary remote URL (origin, or first remote if no origin). */

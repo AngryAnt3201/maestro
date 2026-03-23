@@ -2,13 +2,16 @@ use std::path::PathBuf;
 
 use crate::git::{BranchInfo, CommitInfo, FileChange, Git, GitError, GitUserConfig, RemoteInfo, WorktreeInfo};
 
-/// Information about a detected git repository within a workspace.
+/// Information about a detected repository or directory within a workspace.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RepositoryInfo {
     /// Absolute path to the repository root.
     pub path: String,
     /// Display name (folder name).
     pub name: String,
+    /// Whether this directory is a git repository.
+    #[serde(rename = "isGitRepo")]
+    pub is_git_repo: bool,
     /// Current branch name (if available).
     #[serde(rename = "currentBranch")]
     pub current_branch: Option<String>,
@@ -348,10 +351,23 @@ fn detect_repos_recursive<'a>(
                     .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| dir.to_string_lossy().to_string()),
+                is_git_repo: true,
                 current_branch,
                 remote_url,
             });
             // Continue scanning - there may be nested repos (submodules, monorepo packages, etc.)
+        } else if depth == 1 {
+            // Include immediate non-git directories so they appear in the workspace selector
+            repos.push(RepositoryInfo {
+                path: dir.to_string_lossy().to_string(),
+                name: dir
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| dir.to_string_lossy().to_string()),
+                is_git_repo: false,
+                current_branch: None,
+                remote_url: None,
+            });
         }
 
         // Read directory entries

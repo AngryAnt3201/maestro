@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "langfuse": {
+    "trace_id": "5f792e2d8de28f92d2395240c4f08d80",
+    "trace_url": "https://cloud.langfuse.com/trace/5f792e2d8de28f92d2395240c4f08d80",
+    "session_id": "7797d9bc-00df-45fb-be8c-aad8a18dabc0",
+    "host": "https://cloud.langfuse.com"
+  },
+  "git": {
+    "commit_sha": "f74b74cc27baa84bbf7aaab19bd7bb22d6e2e197",
+    "commit_url": "https://github.com/its-maestro-baby/maestro/commit/f74b74cc27baa84bbf7aaab19bd7bb22d6e2e197",
+    "remote_url": "git@github.com:its-maestro-baby/maestro.git",
+    "branch": "main"
+  },
+  "created_at": "2026-03-22T10:38:04.909Z",
+  "updated_at": "2026-03-22T10:38:04.909Z"
+}
