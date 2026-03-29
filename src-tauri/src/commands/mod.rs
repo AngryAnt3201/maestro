@@ -1,3 +1,4 @@
+pub mod claude_sessions;
 pub mod claudemd;
 pub mod fonts;
 pub mod git;

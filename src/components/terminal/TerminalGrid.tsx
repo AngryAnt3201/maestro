@@ -15,6 +15,7 @@ import {
   type PluginConfig,
   type SkillConfig,
 } from "@/lib/plugins";
+import { getSessionDirs } from "@/lib/sessionDirs";
 import {
   AI_CLI_CONFIG,
   assignSessionBranch,
@@ -571,6 +572,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
         useSessionStore.getState().addSession({
           ...sessionConfig,
           status: sessionConfig.status as import("@/stores/useSessionStore").BackendSessionStatus,
+          working_directory: workingDirectory,
         });
       }
 
@@ -704,7 +706,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
             // Build CLI command with user-configured flags
             const cliFlags = useCliSettingsStore.getState().getFlags(slot.mode);
-            const cliCommand = buildCliCommand(slot.mode, cliFlags);
+            const cliCommand = buildCliCommand(slot.mode, cliFlags, slot.resumeSessionId ?? undefined);
 
             // Send CLI launch command
             await writeStdin(sessionId, `${cliCommand}\r`);
@@ -714,6 +716,20 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             // we no longer have race conditions on .mcp.json, so we only need
             // a minimal delay for general CLI startup.
             await new Promise((resolve) => setTimeout(resolve, 500));
+
+            // When resuming a session, restore persisted additional directories
+            if (slot.resumeSessionId) {
+              try {
+                const savedDirs = await getSessionDirs(slot.resumeSessionId);
+                if (savedDirs.length > 0) {
+                  useSessionStore.getState().updateSession(sessionId, {
+                    additionalDirs: savedDirs,
+                  });
+                }
+              } catch (err) {
+                console.warn("Failed to restore session directories:", err);
+              }
+            }
           } else {
             console.warn(
               `CLI '${cliConfig.command}' not found. Install with: ${cliConfig.installHint}`
@@ -911,7 +927,15 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
   const updateSlotMode = useCallback((slotId: string, mode: AiMode) => {
     setSlots((prev) =>
       prev.map((s) =>
-        s.id === slotId ? { ...s, mode } : s
+        s.id === slotId ? { ...s, mode, resumeSessionId: mode !== "Claude" ? null : s.resumeSessionId } : s
+      )
+    );
+  }, []);
+
+  const updateSlotResumeSession = useCallback((slotId: string, sessionId: string | null) => {
+    setSlots((prev) =>
+      prev.map((s) =>
+        s.id === slotId ? { ...s, resumeSessionId: sessionId } : s
       )
     );
   }, []);
@@ -1222,12 +1246,13 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
         onPluginsUnselectAll={() => unselectAllPlugins(slot.id)}
         onLaunch={() => launchSlot(slot.id)}
         onRemove={() => removeSlot(slot.id)}
+        onResumeSessionChange={(sessionId) => updateSlotResumeSession(slot.id, sessionId)}
         isZoomed={false}
         onToggleZoom={() => handleToggleZoom(slot.id)}
       />
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps -- Deps cover all render-affecting state
-  }, [slots, focusedSlotId, isActive, isDraggingFiles, dropTargetSlotId, getFocusCallback, handleKill, handleToggleZoom, projectPath, branches, isLoadingBranches, isGitRepo, hasManagedWorktree, repositories, workspaceType, effectiveRepoPath, onRepoChange, mcpServers, skills, plugins, handleCreateBranch, updateSlotMode, updateSlotBranch, updateSlotWorktreeMode, refreshBranches, toggleSlotMcp, toggleSlotSkill, toggleSlotPlugin, selectAllMcp, unselectAllMcp, selectAllPlugins, unselectAllPlugins, launchSlot, removeSlot]);
+  }, [slots, focusedSlotId, isActive, isDraggingFiles, dropTargetSlotId, getFocusCallback, handleKill, handleToggleZoom, projectPath, branches, isLoadingBranches, isGitRepo, hasManagedWorktree, repositories, workspaceType, effectiveRepoPath, onRepoChange, mcpServers, skills, plugins, handleCreateBranch, updateSlotMode, updateSlotBranch, updateSlotWorktreeMode, refreshBranches, toggleSlotMcp, toggleSlotSkill, toggleSlotPlugin, selectAllMcp, unselectAllMcp, selectAllPlugins, unselectAllPlugins, launchSlot, removeSlot, updateSlotResumeSession]);
 
   const handleRatioChange = useCallback((nodeId: string, ratio: number) => {
     setLayoutTree((prev) => updateRatio(prev, nodeId, ratio));
@@ -1355,6 +1380,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
                 onPluginsUnselectAll={() => unselectAllPlugins(zoomedSlot.id)}
                 onLaunch={() => launchSlot(zoomedSlot.id)}
                 onRemove={() => removeSlot(zoomedSlot.id)}
+                onResumeSessionChange={(sessionId) => updateSlotResumeSession(zoomedSlot.id, sessionId)}
                 isZoomed={true}
                 onToggleZoom={() => handleToggleZoom(zoomedSlot.id)}
               />

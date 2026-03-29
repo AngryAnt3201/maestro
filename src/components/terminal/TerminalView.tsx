@@ -14,6 +14,7 @@ import { ActivityFeed } from "@/components/session/ActivityFeed";
 import { isGitWorktree } from "@/lib/git";
 import { useSessionBranch } from "@/hooks/useSessionBranch";
 import { buildFontFamily, waitForFont } from "@/lib/fonts";
+import { addSessionDir } from "@/lib/sessionDirs";
 import { getBackendInfo, killSession, onPtyOutput, resizePty, savePastedImage, signalTerminalReady, writeStdin, type BackendInfo } from "@/lib/terminal";
 import { DEFAULT_THEME, LIGHT_THEME, toXtermTheme } from "@/lib/terminalTheme";
 import { useMcpStore } from "@/stores/useMcpStore";
@@ -21,6 +22,7 @@ import { type AiMode, type BackendSessionStatus, useSessionStore } from "@/store
 import { useTerminalSettingsStore } from "@/stores/useTerminalSettingsStore";
 import { useShallow } from "zustand/react/shallow";
 import { QuickActionPills } from "./QuickActionPills";
+import { SessionDirectoriesModal } from "./SessionDirectoriesModal";
 import { type AIProvider, type SessionStatus, TerminalHeader } from "./TerminalHeader";
 
 /**
@@ -129,17 +131,19 @@ export const TerminalView = memo(function TerminalView({
         status: sess.status,
         mode: sess.mode,
         projectPath: sess.project_path,
+        workingDirectory: sess.working_directory,
         worktreePath: sess.worktree_path,
         branch: sess.branch,
         statusMessage: sess.statusMessage,
         needsInputPrompt: sess.needsInputPrompt,
+        additionalDirs: sess.additionalDirs,
       };
     })
   );
   const effectiveStatus = sessionData ? mapStatus(sessionData.status) : status;
   const effectiveProvider = sessionData ? mapAiMode(sessionData.mode) : "claude";
   const hasSessionWorktree = Boolean(sessionData?.worktreePath);
-  const projectPath = sessionData?.projectPath ?? "";
+  const projectPath = sessionData?.workingDirectory ?? sessionData?.projectPath ?? "";
 
   // Detect if the project path itself is a git worktree (not the main working tree).
   // This handles the case where the user opens a worktree directory as their project.
@@ -181,6 +185,62 @@ export const TerminalView = memo(function TerminalView({
   const [showQuickActionsManager, setShowQuickActionsManager] = useState(false);
   const [activeTab, setActiveTab] = useState<"terminal" | "activity">("terminal");
   const handleManageClick = useCallback(() => setShowQuickActionsManager(true), []);
+
+  // Session directories modal state
+  const [showDirsModal, setShowDirsModal] = useState(false);
+  const additionalDirs = sessionData?.additionalDirs ?? [];
+
+  // Queue of /add-dir commands waiting for the session to become Idle
+  const pendingAddDirsRef = useRef<string[]>([]);
+  // Track which dirs have already been sent to avoid re-sending
+  const sentDirsRef = useRef<Set<string>>(new Set());
+
+  const handleAddDir = useCallback(async (path: string) => {
+    // Optimistically update the store immediately
+    const store = useSessionStore.getState();
+    const sess = store.sessions.find((s) => s.id === sessionId);
+    const current = sess?.additionalDirs ?? [];
+    store.updateSession(sessionId, { additionalDirs: [...current, path] });
+
+    // Persist the directory keyed by Claude session UUID (for resume)
+    if (sess?.claudeSessionUuid) {
+      addSessionDir(sess.claudeSessionUuid, path).catch(console.error);
+    }
+
+    // If session is idle, send immediately; otherwise queue
+    const status = sess?.status;
+    if (status === "Idle" || status === "Done") {
+      sentDirsRef.current.add(path);
+      await writeStdin(sessionId, `/add-dir ${path}\r`);
+    } else {
+      pendingAddDirsRef.current.push(path);
+    }
+  }, [sessionId]);
+
+  // Queue restored dirs (from resume) that haven't been sent yet
+  useEffect(() => {
+    for (const dir of additionalDirs) {
+      if (!sentDirsRef.current.has(dir) && !pendingAddDirsRef.current.includes(dir)) {
+        pendingAddDirsRef.current.push(dir);
+      }
+    }
+  }, [additionalDirs]);
+
+  // Flush queued /add-dir commands when session becomes Idle
+  useEffect(() => {
+    if (sessionData?.status === "Idle" && pendingAddDirsRef.current.length > 0) {
+      const dirs = [...pendingAddDirsRef.current];
+      pendingAddDirsRef.current = [];
+      (async () => {
+        for (const dir of dirs) {
+          if (sentDirsRef.current.has(dir)) continue;
+          sentDirsRef.current.add(dir);
+          await writeStdin(sessionId, `/add-dir ${dir}\r`);
+          await new Promise((r) => setTimeout(r, 300));
+        }
+      })();
+    }
+  }, [sessionData?.status, sessionId]);
 
   // Backend capabilities (for future enhanced features like terminal state queries)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -696,6 +756,8 @@ export const TerminalView = memo(function TerminalView({
         onToggleZoom={onToggleZoom}
         zoomLevel={zoomLevel}
         onSetZoomLevel={setZoomLevel}
+        dirCount={1 + additionalDirs.length}
+        onDirsClick={() => setShowDirsModal(true)}
       />
 
       {/* Tab bar */}
@@ -745,6 +807,15 @@ export const TerminalView = memo(function TerminalView({
       {/* Quick actions manager modal */}
       {showQuickActionsManager && (
         <QuickActionsManager onClose={() => setShowQuickActionsManager(false)} />
+      )}
+
+      {showDirsModal && (
+        <SessionDirectoriesModal
+          projectPath={projectPath}
+          additionalDirs={additionalDirs}
+          onClose={() => setShowDirsModal(false)}
+          onAddDir={handleAddDir}
+        />
       )}
     </div>
   );
