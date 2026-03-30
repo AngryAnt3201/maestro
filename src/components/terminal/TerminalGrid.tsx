@@ -53,6 +53,7 @@ import { useWorkspaceStore, type RepositoryInfo, type WorkspaceType } from "@/st
 import { PreLaunchCard, type SessionSlot } from "./PreLaunchCard";
 import { SplitPaneView } from "./SplitPaneView";
 import { createLeaf, splitLeaf, removeLeaf, updateRatio, collectSlotIds, findSiblingSlotId, buildGridTree, swapLeaves, type TreeNode, type SplitDirection } from "./splitTree";
+import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { TerminalView } from "./TerminalView";
 
 /** Stable empty arrays to avoid infinite re-render loops in Zustand selectors. */
@@ -1292,34 +1293,6 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     zoomedContainerRef.current.appendChild(container);
   }, [zoomedSlotId]);
 
-  if (error) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-maestro-muted">
-        <span className="text-sm text-maestro-red">{error}</span>
-        <button
-          type="button"
-          onClick={() => {
-            setError(null);
-            const freshSlot = createEmptySlot();
-            setSlots([freshSlot]);
-            setLayoutTree(createLeaf(freshSlot.id));
-          }}
-          className="rounded bg-maestro-border px-3 py-1.5 text-xs text-maestro-text hover:bg-maestro-muted/20"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
-  if (slots.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center text-maestro-muted text-sm">
-        Initializing...
-      </div>
-    );
-  }
-
   const renderLeaf = useCallback((slotId: string) => {
     const slot = slots.find((s) => s.id === slotId);
     if (!slot) return null;
@@ -1328,18 +1301,20 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     const isThisZoomed = zoomedSlotId === slotId;
 
     const content = slot.sessionId !== null ? (
-      <TerminalView
-        key={slot.id}
-        sessionId={slot.sessionId}
-        slotId={slot.id}
-        isFocused={isThisZoomed || focusedSlotId === slot.id}
-        isActive={isActive}
-        onFocus={getFocusCallback(slot.id)}
-        onKill={handleKill}
-        terminalCount={slots.length}
-        isZoomed={isThisZoomed}
-        onToggleZoom={() => handleToggleZoom(slot.id)}
-      />
+      <ErrorBoundary>
+        <TerminalView
+          key={slot.id}
+          sessionId={slot.sessionId}
+          slotId={slot.id}
+          isFocused={isThisZoomed || focusedSlotId === slot.id}
+          isActive={isActive}
+          onFocus={getFocusCallback(slot.id)}
+          onKill={handleKill}
+          terminalCount={slots.length}
+          isZoomed={isThisZoomed}
+          onToggleZoom={() => handleToggleZoom(slot.id)}
+        />
+      </ErrorBoundary>
     ) : (
       <PreLaunchCard
         key={slot.id}
@@ -1385,6 +1360,34 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
   const handleRatioChange = useCallback((nodeId: string, ratio: number) => {
     setLayoutTree((prev) => updateRatio(prev, nodeId, ratio));
   }, []);
+
+  if (error) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-maestro-muted">
+        <span className="text-sm text-maestro-red">{error}</span>
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            const freshSlot = createEmptySlot();
+            setSlots([freshSlot]);
+            setLayoutTree(createLeaf(freshSlot.id));
+          }}
+          className="rounded bg-maestro-border px-3 py-1.5 text-xs text-maestro-text hover:bg-maestro-muted/20"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (slots.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center text-maestro-muted text-sm">
+        Initializing...
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col bg-maestro-bg">
