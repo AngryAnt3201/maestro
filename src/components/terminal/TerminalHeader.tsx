@@ -6,6 +6,7 @@ import {
   Code2,
   Expand,
   GitBranch,
+  FolderOpen,
   GitCompareArrows,
   Minimize,
   Sparkles,
@@ -36,6 +37,8 @@ interface TerminalHeaderProps {
   onToggleZoom?: () => void;
   zoomLevel?: number;
   onSetZoomLevel?: (level: number) => void;
+  dirCount?: number;
+  onDirsClick?: () => void;
 }
 
 const STATUS_COLOR: Record<SessionStatus, string> = {
@@ -83,6 +86,8 @@ export const TerminalHeader = memo(function TerminalHeader({
   onToggleZoom,
   zoomLevel = 100,
   onSetZoomLevel,
+  dirCount,
+  onDirsClick,
 }: TerminalHeaderProps) {
   const { icon: ProviderIcon, label: providerLabel } = providerConfig[provider];
   const [showZoomMenu, setShowZoomMenu] = useState(false);
@@ -287,6 +292,17 @@ export const TerminalHeader = memo(function TerminalHeader({
             className="rounded bg-maestro-green px-1.5 py-0.5 font-medium text-white transition-colors hover:bg-maestro-green/80 text-[9px]"
           >
             Launch
+          </button>
+        )}
+
+        {/* Dirs badge */}
+        {dirCount != null && dirCount > 0 && onDirsClick && (
+          <button
+            type="button"
+            onClick={onDirsClick}
+            className={`flex shrink-0 items-center gap-1 rounded-full bg-maestro-green/15 font-medium text-maestro-green ${adaptive.badgePadding} ${adaptive.badgeSize} hover:bg-maestro-green/25`}
+          >
+            <FolderOpen size={10} /> {dirCount} {dirCount === 1 ? "dir" : "dirs"}
           </button>
         )}
 

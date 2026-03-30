@@ -19,6 +19,7 @@ import {
   Star,
   Store,
   Terminal,
+  Trash2,
   X,
   Zap,
 } from "lucide-react";
@@ -28,6 +29,8 @@ import { OpenCodeIcon, type IconComponent } from "@/components/icons";
 import type { BranchWithWorktreeStatus } from "@/lib/git";
 import type { McpServerConfig } from "@/lib/mcp";
 import type { PluginConfig, SkillConfig } from "@/lib/plugins";
+import { removeSessionDirs } from "@/lib/sessionDirs";
+import { listClaudeSessions, deleteClaudeSession, type ClaudeSessionInfo } from "@/lib/terminal";
 import type { AiMode } from "@/stores/useSessionStore";
 import type { RepositoryInfo, WorkspaceType } from "@/stores/useWorkspaceStore";
 
@@ -52,6 +55,8 @@ export interface SessionSlot {
   enabledSkills: string[];
   /** IDs of enabled plugins for this session. */
   enabledPlugins: string[];
+  /** Claude session UUID to resume, if resuming a previous session. */
+  resumeSessionId?: string | null;
 }
 
 interface PreLaunchCardProps {
@@ -90,6 +95,7 @@ interface PreLaunchCardProps {
   onPluginsUnselectAll: () => void;
   onLaunch: () => void;
   onRemove: () => void;
+  onResumeSessionChange: (sessionId: string | null) => void;
   isZoomed?: boolean;
   onToggleZoom?: () => void;
 }
@@ -125,6 +131,7 @@ function isValidBranchName(name: string): boolean {
 
 export function PreLaunchCard({
   slot,
+  projectPath,
   branches,
   isLoadingBranches,
   isGitRepo,
@@ -151,6 +158,7 @@ export function PreLaunchCard({
   onPluginsUnselectAll,
   onLaunch,
   onRemove,
+  onResumeSessionChange,
   isZoomed = false,
   onToggleZoom,
 }: PreLaunchCardProps) {
@@ -184,6 +192,23 @@ export function PreLaunchCard({
   const branchDropdownRef = useRef<HTMLDivElement>(null);
   const mcpDropdownRef = useRef<HTMLDivElement>(null);
   const pluginsSkillsDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Resume session state
+  const [claudeSessions, setClaudeSessions] = useState<ClaudeSessionInfo[]>([]);
+
+  // Fetch Claude sessions when mode is Claude
+  useEffect(() => {
+    if (slot.mode !== "Claude") {
+      setClaudeSessions([]);
+      return;
+    }
+    let cancelled = false;
+    const sessionPath = selectedRepoPath || projectPath;
+    listClaudeSessions(sessionPath)
+      .then((sessions) => { if (!cancelled) setClaudeSessions(sessions); })
+      .catch(() => { if (!cancelled) setClaudeSessions([]); });
+    return () => { cancelled = true; };
+  }, [slot.mode, selectedRepoPath, projectPath]);
 
   const modeConfig = getModeConfig(slot.mode);
   const ModeIcon = modeConfig.icon;
@@ -221,6 +246,22 @@ export function PreLaunchCard({
       repoCreateInputRef.current.focus();
     }
   }, [repoCreateBranch]);
+
+  // Helper: relative time string
+  const formatRelativeTime = (isoDate: string): string => {
+    const now = Date.now();
+    const then = new Date(isoDate).getTime();
+    const diffMs = now - then;
+    const minutes = Math.floor(diffMs / 60000);
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days === 1) return "yesterday";
+    if (days < 30) return `${days}d ago`;
+    return new Date(isoDate).toLocaleDateString();
+  };
 
   // MCP server display info
   const enabledCount = slot.enabledMcpServers.length;
@@ -1445,6 +1486,64 @@ export function PreLaunchCard({
           )}
         </div>
 
+        {/* Resume Session Picker — Claude only */}
+        {slot.mode === "Claude" && claudeSessions.length > 0 && (
+          <div>
+            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-maestro-muted">
+              Resume Previous Session
+            </label>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {claudeSessions.map((session) => {
+                const isSelected = slot.resumeSessionId === session.session_id;
+                return (
+                  <div
+                    key={session.session_id}
+                    className={`relative flex w-44 shrink-0 flex-col gap-1 rounded-lg border px-3 py-2 text-left transition-colors ${
+                      isSelected
+                        ? "border-violet-500/50 bg-violet-500/10"
+                        : "border-maestro-border bg-maestro-card hover:border-maestro-accent/50"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onResumeSessionChange(isSelected ? null : session.session_id)}
+                      className="flex flex-1 flex-col gap-1 text-left"
+                    >
+                      <span className="line-clamp-2 pr-4 text-xs leading-snug text-maestro-text">
+                        {session.first_prompt ?? "No prompt recorded"}
+                      </span>
+                      <div className="flex items-center gap-1.5 text-[10px] text-maestro-muted">
+                        {session.git_branch && (
+                          <span className="flex items-center gap-0.5 truncate">
+                            <GitBranch size={9} />
+                            {session.git_branch}
+                          </span>
+                        )}
+                        <span className="shrink-0">{formatRelativeTime(session.last_active)}</span>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      title="Delete session"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isSelected) onResumeSessionChange(null);
+                        deleteClaudeSession(selectedRepoPath || projectPath, session.session_id).then(() => {
+                          removeSessionDirs(session.session_id).catch(console.error);
+                          setClaudeSessions((prev) => prev.filter((s) => s.session_id !== session.session_id));
+                        });
+                      }}
+                      className="absolute right-1.5 top-1.5 rounded p-0.5 text-maestro-muted opacity-0 transition-opacity hover:text-maestro-red [div:hover>&]:opacity-100"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Launch Button */}
         <button
           type="button"
@@ -1452,7 +1551,7 @@ export function PreLaunchCard({
           className="flex items-center justify-center gap-2 rounded bg-maestro-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-maestro-accent/80"
         >
           <Play size={16} fill="currentColor" />
-          Launch Session
+          {slot.resumeSessionId ? "Resume Session" : "Launch Session"}
         </button>
       </div>
     </div>

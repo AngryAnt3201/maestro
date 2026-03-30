@@ -103,6 +103,25 @@ export async function checkCliAvailable(command: string): Promise<boolean> {
   return invoke<boolean>("check_cli_available", { command });
 }
 
+/** Info about a previous Claude Code session that can be resumed. */
+export interface ClaudeSessionInfo {
+  session_id: string;
+  first_prompt: string | null;
+  started_at: string;
+  last_active: string;
+  git_branch: string | null;
+}
+
+/** Lists previous Claude Code sessions for a project from Claude's native storage. */
+export async function listClaudeSessions(projectPath: string): Promise<ClaudeSessionInfo[]> {
+  return invoke<ClaudeSessionInfo[]>("list_claude_sessions", { projectPath });
+}
+
+/** Deletes a Claude Code session's transcript and snapshot data. */
+export async function deleteClaudeSession(projectPath: string, sessionId: string): Promise<void> {
+  return invoke("delete_claude_session", { projectPath, sessionId });
+}
+
 /** Session config returned by createSession. */
 export interface SessionConfig {
   id: number;
@@ -111,6 +130,8 @@ export interface SessionConfig {
   status: string;
   worktree_path: string | null;
   project_path: string;
+  /** Additional directories added to this session via /add-dir. */
+  additionalDirs?: string[];
 }
 
 /** Creates a session in the SessionManager (separate from PTY spawning). */
@@ -257,11 +278,15 @@ export type CliFlags = {
  * buildCliCommand("Codex", { skipPermissions: true, customFlags: "" })
  * // Returns: "codex --dangerously-bypass-approvals-and-sandbox"
  */
-export function buildCliCommand(mode: AiMode, flags?: CliFlags): string | null {
+export function buildCliCommand(mode: AiMode, flags?: CliFlags, resumeSessionId?: string): string | null {
   const config = AI_CLI_CONFIG[mode];
   if (!config.command) return null;
 
   const parts: string[] = [config.command];
+
+  if (resumeSessionId && mode === "Claude") {
+    parts.push("--resume", resumeSessionId);
+  }
 
   if (flags) {
     if (flags.skipPermissions && config.skipPermissionsFlag) {

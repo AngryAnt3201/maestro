@@ -2,6 +2,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { PreLaunchCard, type SessionSlot } from "../PreLaunchCard";
 
+vi.mock("@/lib/terminal", () => ({
+  listClaudeSessions: vi.fn().mockResolvedValue([]),
+  deleteClaudeSession: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/sessionDirs", () => ({
+  removeSessionDirs: vi.fn().mockResolvedValue(undefined),
+}));
+
 describe("PreLaunchCard branch creation", () => {
   const makeSlot = (overrides?: Partial<SessionSlot>): SessionSlot => ({
     id: "slot-1",
@@ -39,6 +48,7 @@ describe("PreLaunchCard branch creation", () => {
     onPluginsUnselectAll: vi.fn(),
     onLaunch: vi.fn(),
     onRemove: vi.fn(),
+    onResumeSessionChange: vi.fn(),
   };
 
   beforeEach(() => {
@@ -192,6 +202,7 @@ describe("PreLaunchCard AI Mode Selection", () => {
     onPluginsUnselectAll: vi.fn(),
     onLaunch: vi.fn(),
     onRemove: vi.fn(),
+    onResumeSessionChange: vi.fn(),
   };
 
   beforeEach(() => {
