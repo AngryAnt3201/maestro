@@ -98,7 +98,7 @@ fn project_path_to_claude_dir(project_path: &str) -> Option<PathBuf> {
 }
 
 /// Parses session info from a JSONL transcript file.
-/// Reads up to 80 lines to find metadata and the first real user prompt.
+/// Reads up to 200 lines to find metadata and the first real user prompt.
 fn parse_session_file(path: &PathBuf) -> Option<ClaudeSessionInfo> {
     let file = fs::File::open(path).ok()?;
     let reader = BufReader::new(file);
@@ -109,7 +109,7 @@ fn parse_session_file(path: &PathBuf) -> Option<ClaudeSessionInfo> {
     let mut first_prompt: Option<String> = None;
 
     for (i, line) in reader.lines().enumerate() {
-        if i >= 80 {
+        if i >= 200 {
             break;
         }
         let line = match line {
@@ -172,8 +172,9 @@ fn parse_session_file(path: &PathBuf) -> Option<ClaudeSessionInfo> {
                     }
                     let clean = extract_prompt_text(&content);
                     if !clean.is_empty() {
-                        let truncated = if clean.len() > 200 {
-                            format!("{}...", &clean[..200])
+                        let truncated = if clean.chars().count() > 200 {
+                            let s: String = clean.chars().take(200).collect();
+                            format!("{}...", s)
                         } else {
                             clean
                         };
@@ -205,9 +206,21 @@ fn parse_session_file(path: &PathBuf) -> Option<ClaudeSessionInfo> {
     })
 }
 
+/// Validates that a session ID is a valid UUID (hex + dashes, 36 chars).
+fn is_valid_session_id(id: &str) -> bool {
+    id.len() == 36
+        && id
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
 /// Deletes a Claude Code session's JSONL transcript and optional snapshot directory.
 #[tauri::command]
 pub async fn delete_claude_session(project_path: String, session_id: String) -> Result<(), String> {
+    if !is_valid_session_id(&session_id) {
+        return Err("Invalid session ID format".to_string());
+    }
+
     let canonical = fs::canonicalize(&project_path)
         .unwrap_or_else(|_| PathBuf::from(&project_path))
         .to_string_lossy()

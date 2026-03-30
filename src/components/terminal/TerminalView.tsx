@@ -226,9 +226,14 @@ export const TerminalView = memo(function TerminalView({
     }
   }, [additionalDirs]);
 
-  // Flush queued /add-dir commands when session becomes Idle
+  // Flush queued /add-dir commands when session becomes Idle, clear queue on terminal states
   useEffect(() => {
-    if (sessionData?.status === "Idle" && pendingAddDirsRef.current.length > 0) {
+    const status = sessionData?.status;
+    if (status === "Error" || status === "Done" || status === "Timeout") {
+      pendingAddDirsRef.current = [];
+      return;
+    }
+    if (status === "Idle" && pendingAddDirsRef.current.length > 0) {
       const dirs = [...pendingAddDirsRef.current];
       pendingAddDirsRef.current = [];
       (async () => {

@@ -202,10 +202,12 @@ export function PreLaunchCard({
       setClaudeSessions([]);
       return;
     }
+    let cancelled = false;
     const sessionPath = selectedRepoPath || projectPath;
     listClaudeSessions(sessionPath)
-      .then(setClaudeSessions)
-      .catch(() => setClaudeSessions([]));
+      .then((sessions) => { if (!cancelled) setClaudeSessions(sessions); })
+      .catch(() => { if (!cancelled) setClaudeSessions([]); });
+    return () => { cancelled = true; };
   }, [slot.mode, selectedRepoPath, projectPath]);
 
   const modeConfig = getModeConfig(slot.mode);

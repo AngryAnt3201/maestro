@@ -284,7 +284,7 @@ export function buildCliCommand(mode: AiMode, flags?: CliFlags, resumeSessionId?
 
   const parts: string[] = [config.command];
 
-  if (resumeSessionId) {
+  if (resumeSessionId && mode === "Claude") {
     parts.push("--resume", resumeSessionId);
   }
 
