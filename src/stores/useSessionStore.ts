@@ -35,6 +35,7 @@ const SESSION_STARTUP_TIMEOUT_MS = 30000;
 export interface SessionConfig {
   id: number;
   mode: AiMode;
+  name?: string | null;
   branch: string | null;
   status: BackendSessionStatus;
   worktree_path: string | null;
@@ -73,6 +74,7 @@ interface SessionState {
   removeSession: (sessionId: number) => void;
   removeSessionsForProject: (projectPath: string) => Promise<SessionConfig[]>;
   updateSession: (sessionId: number, updates: Partial<SessionConfig>) => void;
+  renameSession: (sessionId: number, name: string | null) => Promise<void>;
   getSessionsByProject: (projectPath: string) => SessionConfig[];
   initListeners: () => Promise<UnlistenFn>;
 }
@@ -221,6 +223,22 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
         s.id === sessionId ? { ...s, ...updates } : s
       ),
     }));
+  },
+
+  renameSession: async (sessionId: number, name: string | null) => {
+    try {
+      const updated = await invoke<SessionConfig>("rename_session", {
+        sessionId,
+        name,
+      });
+      set((state) => ({
+        sessions: state.sessions.map((s) =>
+          s.id === sessionId ? { ...s, name: updated.name } : s
+        ),
+      }));
+    } catch (err) {
+      console.error("Failed to rename session:", err);
+    }
   },
 
   removeSession: (sessionId: number) => {

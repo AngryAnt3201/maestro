@@ -214,6 +214,7 @@ pub fn run() {
             commands::session::create_session,
             commands::session::update_session_status,
             commands::session::assign_session_branch,
+            commands::session::rename_session,
             commands::session::remove_session,
             commands::session::get_sessions_for_project,
             commands::session::remove_sessions_for_project,
