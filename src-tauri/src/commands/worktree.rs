@@ -25,7 +25,8 @@ pub struct WorktreePreparationResult {
 /// 1. If no branch is specified, returns the project path as-is.
 /// 2. If a **managed** worktree already exists for this branch, reuses it.
 /// 3. If the branch is checked out in the main repo, switches main to a fallback first.
-/// 4. If the branch doesn't exist locally, creates it (handling remote branches).
+/// 4. If the branch doesn't exist locally, creates it (handling remote branches or an optional
+///    start point).
 /// 5. Creates the worktree via WorktreeManager.
 ///
 /// On any failure, falls back to the project path so sessions always launch.
@@ -36,8 +37,16 @@ pub async fn prepare_session_worktree(
     project_path: String,
     branch: Option<String>,
     worktree_base_path: Option<String>,
+    start_point: Option<String>,
 ) -> Result<WorktreePreparationResult, String> {
-    prepare_worktree_inner(&worktree_manager, project_path, branch, worktree_base_path).await
+    prepare_worktree_inner(
+        &worktree_manager,
+        project_path,
+        branch,
+        worktree_base_path,
+        start_point,
+    )
+    .await
 }
 
 /// Inner implementation extracted from the Tauri command for testability.
@@ -49,6 +58,7 @@ pub(crate) async fn prepare_worktree_inner(
     project_path: String,
     branch: Option<String>,
     worktree_base_path: Option<String>,
+    start_point: Option<String>,
 ) -> Result<WorktreePreparationResult, String> {
     // No branch specified - just use the project path
     let branch = match branch {
@@ -150,7 +160,15 @@ pub(crate) async fn prepare_worktree_inner(
     }
 
     // Ensure the branch exists locally, handling remote branches correctly
-    if let Err(e) = ensure_local_branch(&git, &branch, &local_branch, &branches).await {
+    if let Err(e) = ensure_local_branch(
+        &git,
+        &branch,
+        &local_branch,
+        &branches,
+        start_point.as_deref(),
+    )
+    .await
+    {
         log::error!("Failed to ensure branch {}: {}", local_branch, e);
         return Ok(WorktreePreparationResult {
             working_directory: project_path,
@@ -296,12 +314,14 @@ fn resolve_local_branch_name(branch: &str, local_branches: &[BranchInfo]) -> Str
 /// Handles three cases:
 /// 1. Branch already exists locally → no-op
 /// 2. Branch is a remote ref (e.g., `origin/feature-x`) → create local tracking branch
-/// 3. Branch doesn't exist anywhere → create from HEAD
+/// 3. Branch doesn't exist anywhere and a start point is provided → create from that ref
+/// 4. Branch doesn't exist anywhere → create from HEAD
 async fn ensure_local_branch(
     git: &Git,
     original_branch: &str,
     local_branch: &str,
     branches: &[BranchInfo],
+    start_point: Option<&str>,
 ) -> Result<(), String> {
     // Check if the local branch already exists
     let local_exists = branches.iter().any(|b| !b.is_remote && b.name == local_branch);
@@ -321,6 +341,15 @@ async fn ensure_local_branch(
             original_branch
         );
         git.create_branch(local_branch, Some(original_branch))
+            .await
+            .map_err(|e| e.to_string())?;
+    } else if let Some(start_point) = start_point.filter(|point| !point.is_empty()) {
+        log::info!(
+            "Creating branch {} from start point {}",
+            local_branch,
+            start_point
+        );
+        git.create_branch(local_branch, Some(start_point))
             .await
             .map_err(|e| e.to_string())?;
     } else {
@@ -425,9 +454,15 @@ mod tests {
     async fn test_prepare_no_branch_returns_project_path() {
         let (_dir, path) = create_test_repo().await;
         let wm = WorktreeManager::new();
-        let result = prepare_worktree_inner(&wm, path.to_string_lossy().to_string(), None, None)
-            .await
-            .unwrap();
+        let result = prepare_worktree_inner(
+            &wm,
+            path.to_string_lossy().to_string(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(result.working_directory, path.to_string_lossy().to_string());
         assert!(result.worktree_path.is_none());
@@ -443,6 +478,7 @@ mod tests {
             &wm,
             path.to_string_lossy().to_string(),
             Some("".to_string()),
+            None,
             None,
         )
         .await
@@ -468,6 +504,7 @@ mod tests {
             &wm,
             path.to_string_lossy().to_string(),
             Some(current.clone()),
+            None,
             None,
         )
         .await
@@ -510,6 +547,7 @@ mod tests {
             path.to_string_lossy().to_string(),
             Some(current.clone()),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -537,6 +575,7 @@ mod tests {
             &wm,
             path.to_string_lossy().to_string(),
             Some("feature-test".to_string()),
+            None,
             None,
         )
         .await
@@ -569,6 +608,7 @@ mod tests {
             path.to_string_lossy().to_string(),
             Some("reuse-test".to_string()),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -579,6 +619,7 @@ mod tests {
             &wm,
             path.to_string_lossy().to_string(),
             Some("reuse-test".to_string()),
+            None,
             None,
         )
         .await
@@ -601,6 +642,7 @@ mod tests {
             path.to_string_lossy().to_string(),
             Some("brand-new-branch".to_string()),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -618,6 +660,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_ensure_local_branch_uses_start_point() {
+        let (_dir, path) = create_test_repo().await;
+        let git = Git::new(&path);
+        let initial_branch = git.current_branch().await.unwrap();
+
+        create_branch(&git, "feature-base").await;
+        git.checkout_branch("feature-base").await.unwrap();
+        tokio::fs::write(path.join("feature.txt"), "feature-base").await.unwrap();
+        git.run(&["add", "."]).await.unwrap();
+        git.run(&["commit", "-m", "feature base"]).await.unwrap();
+        git.checkout_branch(&initial_branch).await.unwrap();
+
+        let feature_head = git.run(&["rev-parse", "feature-base"]).await.unwrap();
+        let main_head = git.run(&["rev-parse", "HEAD"]).await.unwrap();
+
+        let branches = git.list_branches().await.unwrap();
+
+        ensure_local_branch(
+            &git,
+            "worktree-from-base",
+            "worktree-from-base",
+            &branches,
+            Some("feature-base"),
+        )
+        .await
+        .unwrap();
+
+        let created_head = git.run(&["rev-parse", "worktree-from-base"]).await.unwrap();
+
+        assert!(check_branch_exists(&git, "worktree-from-base").await);
+        assert_eq!(created_head.stdout.trim(), feature_head.stdout.trim());
+        assert_ne!(created_head.stdout.trim(), main_head.stdout.trim());
+    }
+
+    #[tokio::test]
     async fn test_prepare_invalid_repo_falls_back_with_warning() {
         let dir = tempdir().unwrap();
         let path = dir.path().to_path_buf();
@@ -628,6 +705,7 @@ mod tests {
             &wm,
             path.to_string_lossy().to_string(),
             Some("main".to_string()),
+            None,
             None,
         )
         .await

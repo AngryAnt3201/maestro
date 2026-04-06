@@ -54,9 +54,9 @@ export function useProjectStatus(tabId: string): {
       return { status: "idle" as ProjectStatus, sessionCount: 0, activeSessionCount: 0 };
     }
 
-    // Count active sessions (not Done or Error)
+    // Count active sessions (not Done, Error, or Disconnected)
     const activeSessionCount = projectSessions.filter(
-      (s) => s.status !== "Done" && s.status !== "Error"
+      (s) => s.status !== "Done" && s.status !== "Error" && s.status !== "Disconnected"
     ).length;
 
     // Priority-based status aggregation
@@ -68,7 +68,7 @@ export function useProjectStatus(tabId: string): {
       status = "working";
     } else if (hasStatus("NeedsInput")) {
       status = "needs-input";
-    } else if (hasStatus("Error")) {
+    } else if (hasStatus("Error") || hasStatus("Disconnected")) {
       status = "error";
     } else if (projectSessions.every((s) => s.status === "Done")) {
       status = "done";

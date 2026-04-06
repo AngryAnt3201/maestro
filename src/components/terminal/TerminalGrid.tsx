@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 import {
   DndContext,
+  DragOverlay,
   closestCenter,
   PointerSensor,
   useSensor,
@@ -55,6 +56,16 @@ import { SplitPaneView } from "./SplitPaneView";
 import { createLeaf, splitLeaf, removeLeaf, updateRatio, collectSlotIds, findSiblingSlotId, buildGridTree, swapLeaves, type TreeNode, type SplitDirection } from "./splitTree";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { TerminalView } from "./TerminalView";
+import { BrainCircuit, Code2, GitBranch, Sparkles, Terminal } from "lucide-react";
+import { OpenCodeIcon } from "@/components/icons";
+
+const MODE_OVERLAY_CONFIG: Record<AiMode, { icon: React.ElementType; label: string; color: string }> = {
+  Claude: { icon: BrainCircuit, label: "Claude Code", color: "text-violet-500" },
+  Gemini: { icon: Sparkles, label: "Gemini CLI", color: "text-blue-400" },
+  Codex: { icon: Code2, label: "Codex", color: "text-green-400" },
+  OpenCode: { icon: OpenCodeIcon, label: "OpenCode", color: "text-purple-500" },
+  Plain: { icon: Terminal, label: "Terminal", color: "text-maestro-muted" },
+};
 
 /** Stable empty arrays to avoid infinite re-render loops in Zustand selectors. */
 const EMPTY_MCP_SERVERS: McpServerConfig[] = [];
@@ -111,12 +122,51 @@ function createEmptySlot(
     id: generateSlotId(),
     mode: "Claude",
     branch: null,
+    newWorktreeBranch: "",
     sessionId: null,
     worktreePath: null,
     worktreeWarning: null,
     enabledMcpServers: mcpServers.map((s) => s.name), // All enabled by default
     enabledSkills: skills.map((s) => s.id), // All enabled by default
     enabledPlugins: plugins.filter((p) => p.enabled_by_default).map((p) => p.id),
+  };
+}
+
+function isValidLaunchBranchName(name: string): boolean {
+  if (!name || name.length === 0) return false;
+  if (/[\s~^:?*[\]\\]/.test(name)) return false;
+  if (name.includes("..")) return false;
+  if (name.includes("@{")) return false;
+  if (name.startsWith("-") || name.startsWith(".")) return false;
+  if (name.endsWith(".") || name.endsWith("/") || name.endsWith(".lock")) return false;
+  return /^[a-zA-Z0-9._/-]+$/.test(name);
+}
+
+function getSlotConfigBranch(slot: SessionSlot): string | null {
+  const newWorktreeBranch = slot.newWorktreeBranch.trim();
+  if (newWorktreeBranch && !isValidLaunchBranchName(newWorktreeBranch)) {
+    return slot.branch;
+  }
+  return newWorktreeBranch || slot.branch;
+}
+
+function getLaunchBranchConfig(
+  slot: SessionSlot,
+  branches: BranchWithWorktreeStatus[]
+): { branch: string | null; startPoint: string | null } {
+  const newWorktreeBranch = slot.newWorktreeBranch.trim();
+  if (!newWorktreeBranch || !isValidLaunchBranchName(newWorktreeBranch)) {
+    return { branch: slot.branch, startPoint: null };
+  }
+
+  const selectedBranch = slot.branch
+    ? branches.find((candidate) => candidate.name === slot.branch)?.name ?? null
+    : null;
+  const currentBranch = branches.find((candidate) => candidate.isCurrent)?.name ?? null;
+
+  return {
+    branch: newWorktreeBranch,
+    startPoint: selectedBranch ?? currentBranch,
   };
 }
 
@@ -172,11 +222,12 @@ interface TerminalGridProps {
  * - When all sessions are killed by the user, an auto-respawn effect creates
  *   a fresh slot so the user is never left with an empty grid.
  */
-function PlaceholderLeaf({ container, isZoomed, slotId, isDropTarget }: {
+function PlaceholderLeaf({ container, isZoomed, slotId, isDropTarget, isDragSource }: {
   container: HTMLDivElement;
   isZoomed: boolean;
   slotId: string;
   isDropTarget?: boolean;
+  isDragSource?: boolean;
 }) {
   const placeholderRef = useRef<HTMLDivElement>(null);
   const { setNodeRef, isOver } = useDroppable({ id: slotId });
@@ -203,7 +254,7 @@ function PlaceholderLeaf({ container, isZoomed, slotId, isDropTarget }: {
   return (
     <div
       ref={combinedRef}
-      className={`h-full w-full relative ${isOver && isDropTarget ? "ring-2 ring-maestro-accent ring-inset rounded" : ""}`}
+      className={`h-full w-full relative ${isOver && isDropTarget ? "ring-2 ring-maestro-accent ring-inset rounded" : ""} ${isDragSource ? "opacity-30" : ""}`}
     />
   );
 }
@@ -492,7 +543,8 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
    * Called when slot config changes (plugins, skills, MCP servers).
    */
   const debouncedSaveBranchConfig = useCallback((slot: SessionSlot) => {
-    if (!effectiveRepoPath || !slot.branch) return;
+    const configBranch = getSlotConfigBranch(slot);
+    if (!effectiveRepoPath || !configBranch) return;
 
     // Clear existing timer for this slot
     const existingTimer = branchConfigSaveTimers.current.get(slot.id);
@@ -502,7 +554,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
     // Set new timer
     const timer = setTimeout(() => {
-      saveBranchConfig(effectiveRepoPath, slot.branch!, {
+      saveBranchConfig(effectiveRepoPath, configBranch, {
         enabled_plugins: slot.enabledPlugins,
         enabled_skills: slot.enabledSkills,
         enabled_mcp_servers: slot.enabledMcpServers,
@@ -521,17 +573,20 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
   useEffect(() => {
     // Compare each slot's config with previous state
     for (const slot of slots) {
+      const configBranch = getSlotConfigBranch(slot);
       // Skip slots without a branch (non-worktree sessions)
-      if (!slot.branch) continue;
+      if (!configBranch) continue;
       // Skip already-launched sessions (no need to save pre-launch config)
       if (slot.sessionId !== null) continue;
 
       const prevSlot = prevSlotsRef.current.find((s) => s.id === slot.id);
       if (!prevSlot) continue; // New slot, no previous state
 
+      const prevConfigBranch = getSlotConfigBranch(prevSlot);
+
       // Check if config changed (but not the branch itself - that's handled by updateSlotBranch)
       const configChanged =
-        prevSlot.branch === slot.branch && // Same branch
+        prevConfigBranch === configBranch && // Same effective branch
         (
           JSON.stringify(prevSlot.enabledPlugins) !== JSON.stringify(slot.enabledPlugins) ||
           JSON.stringify(prevSlot.enabledSkills) !== JSON.stringify(slot.enabledSkills) ||
@@ -556,9 +611,11 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     if (!slot || slot.sessionId !== null) return;
 
     try {
+      const { branch: launchBranch, startPoint } = getLaunchBranchConfig(slot, branches);
+
       // Save branch config before launching (ensures it's persisted)
-      if (effectiveRepoPath && slot.branch) {
-        await saveBranchConfig(effectiveRepoPath, slot.branch, {
+      if (effectiveRepoPath && launchBranch) {
+        await saveBranchConfig(effectiveRepoPath, launchBranch, {
           enabled_plugins: slot.enabledPlugins,
           enabled_skills: slot.enabledSkills,
           enabled_mcp_servers: slot.enabledMcpServers,
@@ -575,14 +632,19 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       let worktreePath: string | null = null;
       let worktreeWarning: string | null = null;
 
-      if (effectiveRepoPath && slot.branch) {
-        const result = await prepareSessionWorktree(effectiveRepoPath, slot.branch, worktreeBasePath);
+      if (effectiveRepoPath && launchBranch) {
+        const result = await prepareSessionWorktree(
+          effectiveRepoPath,
+          launchBranch,
+          worktreeBasePath,
+          startPoint
+        );
         workingDirectory = result.working_directory;
         worktreePath = result.worktree_path;
         worktreeWarning = result.warning;
 
         if (worktreeWarning) {
-          console.error(`[Worktree] Warning for branch "${slot.branch}": ${worktreeWarning}`);
+          console.error(`[Worktree] Warning for branch "${launchBranch}": ${worktreeWarning}`);
         }
       }
 
@@ -612,8 +674,8 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       }
 
       // Assign the branch to the session so the header displays it
-      if (slot.branch) {
-        const updatedConfig = await assignSessionBranch(sessionId, slot.branch, worktreePath);
+      if (launchBranch) {
+        const updatedConfig = await assignSessionBranch(sessionId, launchBranch, worktreePath);
         useSessionStore.getState().updateSession(sessionId, {
           branch: updatedConfig.branch,
           worktree_path: updatedConfig.worktree_path,
@@ -638,7 +700,16 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       // queries on startup, and xterm.js must be mounted to respond to them.
       setSlots((prev) =>
         prev.map((s) =>
-          s.id === slotId ? { ...s, sessionId, worktreePath, worktreeWarning } : s
+          s.id === slotId
+            ? {
+                ...s,
+                branch: launchBranch,
+                newWorktreeBranch: "",
+                sessionId,
+                worktreePath,
+                worktreeWarning,
+              }
+            : s
         )
       );
 
@@ -758,7 +829,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       console.error("Failed to spawn shell:", err);
       setError("Failed to start terminal session");
     }
-  }, [projectPath, effectiveRepoPath, tabId, addSessionToProject]);
+  }, [projectPath, effectiveRepoPath, tabId, addSessionToProject, branches, worktreeBasePath]);
 
   /**
    * Launches a single slot by spawning a shell with the configured settings.
@@ -973,6 +1044,11 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       )
     );
 
+    const slot = slotsRef.current.find((candidate) => candidate.id === slotId);
+    if (slot?.newWorktreeBranch.trim()) {
+      return;
+    }
+
     // If a branch is selected and we have a repo path, try to load saved config
     if (branch && effectiveRepoPath) {
       try {
@@ -997,6 +1073,14 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       }
     }
   }, [effectiveRepoPath]);
+
+  const updateSlotNewWorktreeBranch = useCallback((slotId: string, newWorktreeBranch: string) => {
+    setSlots((prev) =>
+      prev.map((s) =>
+        s.id === slotId ? { ...s, newWorktreeBranch } : s
+      )
+    );
+  }, []);
 
   /**
    * Toggles an MCP server for a slot.
@@ -1181,6 +1265,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     if (slotsRef.current.length >= MAX_SESSIONS) return;
     const newSlot = createEmptySlot(mcpServers, skills, plugins);
     newSlot.branch = branch;
+    newSlot.newWorktreeBranch = "";
     newSlot.worktreePath = worktreePath;
     setSlots((prev) => {
       if (prev.length >= MAX_SESSIONS) return prev;
@@ -1238,6 +1323,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
           id: generateSlotId(),
           mode: pendingTemplate.mode,
           branch: null,
+          newWorktreeBranch: "",
           sessionId: null,
           worktreePath: null,
           worktreeWarning: null,
@@ -1308,6 +1394,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
           slotId={slot.id}
           isFocused={isThisZoomed || focusedSlotId === slot.id}
           isActive={isActive}
+          isDragging={isDragging}
           onFocus={getFocusCallback(slot.id)}
           onKill={handleKill}
           terminalCount={slots.length}
@@ -1334,6 +1421,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
         onCreateBranch={handleCreateBranch}
         onModeChange={(mode) => updateSlotMode(slot.id, mode)}
         onBranchChange={(branch) => updateSlotBranch(slot.id, branch)}
+        onNewWorktreeBranchChange={(branch) => updateSlotNewWorktreeBranch(slot.id, branch)}
         onMcpToggle={(serverName) => toggleSlotMcp(slot.id, serverName)}
         onSkillToggle={(skillId) => toggleSlotSkill(slot.id, skillId)}
         onPluginToggle={(pluginId) => toggleSlotPlugin(slot.id, pluginId)}
@@ -1351,11 +1439,11 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     return (
       <>
         {createPortal(content, container)}
-        <PlaceholderLeaf container={container} isZoomed={isThisZoomed} slotId={slot.id} isDropTarget={activeDragSlotId !== null && activeDragSlotId !== slot.id} />
+        <PlaceholderLeaf container={container} isZoomed={isThisZoomed} slotId={slot.id} isDropTarget={activeDragSlotId !== null && activeDragSlotId !== slot.id} isDragSource={activeDragSlotId === slot.id} />
       </>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps -- Deps cover all render-affecting state
-  }, [slots, focusedSlotId, isActive, getFocusCallback, handleKill, handleToggleZoom, projectPath, branches, isLoadingBranches, isGitRepo, repositories, workspaceType, effectiveRepoPath, onRepoChange, mcpServers, skills, plugins, handleCreateBranch, updateSlotMode, updateSlotBranch, toggleSlotMcp, toggleSlotSkill, toggleSlotPlugin, selectAllMcp, unselectAllMcp, selectAllPlugins, unselectAllPlugins, launchSlot, removeSlot, zoomedSlotId, getOrCreateContainer, activeDragSlotId]);
+  }, [slots, focusedSlotId, isActive, getFocusCallback, handleKill, handleToggleZoom, projectPath, branches, isLoadingBranches, isGitRepo, repositories, workspaceType, effectiveRepoPath, onRepoChange, mcpServers, skills, plugins, handleCreateBranch, updateSlotMode, updateSlotBranch, updateSlotNewWorktreeBranch, toggleSlotMcp, toggleSlotSkill, toggleSlotPlugin, selectAllMcp, unselectAllMcp, selectAllPlugins, unselectAllPlugins, launchSlot, removeSlot, zoomedSlotId, getOrCreateContainer, activeDragSlotId]);
 
   const handleRatioChange = useCallback((nodeId: string, ratio: number) => {
     setLayoutTree((prev) => updateRatio(prev, nodeId, ratio));
@@ -1478,6 +1566,33 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
               onRatioChange={handleRatioChange}
               onDragStateChange={setIsDragging}
             />
+            <DragOverlay dropAnimation={null}>
+              {activeDragSlotId != null && (() => {
+                const dragSlot = slots.find((s) => s.id === activeDragSlotId);
+                if (!dragSlot) return null;
+                const cfg = MODE_OVERLAY_CONFIG[dragSlot.mode];
+                const ModeIcon = cfg.icon;
+                return (
+                  <div className="pointer-events-none w-48 rounded-lg border border-maestro-border bg-maestro-surface/80 p-3 shadow-lg backdrop-blur-sm opacity-80">
+                    <div className="flex items-center gap-2">
+                      <ModeIcon size={16} className={cfg.color} />
+                      <span className="text-sm font-medium text-maestro-text">{cfg.label}</span>
+                    </div>
+                    {dragSlot.branch && (
+                      <div className="mt-1.5 flex items-center gap-1 text-xs text-maestro-muted">
+                        <GitBranch size={10} />
+                        <span className="truncate">{dragSlot.branch}</span>
+                      </div>
+                    )}
+                    {dragSlot.sessionId != null && (
+                      <div className="mt-1 text-[10px] text-maestro-muted/60">
+                        Session #{dragSlot.sessionId}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </DragOverlay>
           </DndContext>
         </div>
       </div>

@@ -424,3 +424,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 ---
 
 Built with Love by Jack
+
+updated by Eric Sniff

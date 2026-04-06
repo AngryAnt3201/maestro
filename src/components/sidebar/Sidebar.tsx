@@ -85,6 +85,7 @@ const STATUS_DOT_CLASS: Record<BackendSessionStatus, string> = {
   Done: "bg-maestro-green",
   Error: "bg-maestro-red",
   Timeout: "bg-maestro-red",
+  Disconnected: "bg-maestro-red",
 };
 
 const STATUS_LABEL: Record<BackendSessionStatus, string> = {
@@ -95,6 +96,7 @@ const STATUS_LABEL: Record<BackendSessionStatus, string> = {
   Done: "Done",
   Error: "Error",
   Timeout: "Startup Timeout",
+  Disconnected: "Disconnected",
 };
 
 /* ================================================================ */
@@ -701,6 +703,7 @@ const SESSION_STATUSES: BackendSessionStatus[] = [
   "NeedsInput",
   "Done",
   "Error",
+  "Disconnected",
 ];
 
 /** Icon component type for AI mode icons - supports both Lucide and custom icons */

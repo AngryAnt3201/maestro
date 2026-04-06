@@ -17,7 +17,8 @@ export type BackendSessionStatus =
   | "NeedsInput"
   | "Done"
   | "Error"
-  | "Timeout";
+  | "Timeout"
+  | "Disconnected";
 
 /** Timeout in milliseconds for sessions stuck in Starting state (Bug #74) */
 const SESSION_STARTUP_TIMEOUT_MS = 30000;

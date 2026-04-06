@@ -40,6 +40,8 @@ export interface SessionSlot {
   id: string;
   mode: AiMode;
   branch: string | null;
+  /** Optional new branch name to create as a worktree when launching. */
+  newWorktreeBranch: string;
   sessionId: number | null;
   /** Path to the worktree if one was created for this session. */
   worktreePath: string | null;
@@ -75,6 +77,7 @@ interface PreLaunchCardProps {
   onCreateBranch?: (name: string, andCheckout: boolean, repoPath?: string) => Promise<void>;
   onModeChange: (mode: AiMode) => void;
   onBranchChange: (branch: string | null) => void;
+  onNewWorktreeBranchChange: (branch: string) => void;
   onMcpToggle: (serverName: string) => void;
   onSkillToggle: (skillId: string) => void;
   onPluginToggle: (pluginId: string) => void;
@@ -133,6 +136,7 @@ export function PreLaunchCard({
   onCreateBranch,
   onModeChange,
   onBranchChange,
+  onNewWorktreeBranchChange,
   onMcpToggle,
   onSkillToggle,
   onPluginToggle,
@@ -379,19 +383,28 @@ export function PreLaunchCard({
   // Get the selected repo info for display
   const selectedRepo = repositories?.find((r) => r.path === selectedRepoPath);
   const selectedRepoName = selectedRepo?.name ?? getRepoDisplayName(selectedRepoPath ?? "");
+  const trimmedNewWorktreeBranch = slot.newWorktreeBranch.trim();
+  const newWorktreeBranchError =
+    trimmedNewWorktreeBranch.length > 0 && !isValidBranchName(trimmedNewWorktreeBranch)
+      ? "Invalid worktree branch. Use letters, numbers, dots, dashes, slashes."
+      : null;
+  const worktreeBaseBranch =
+    selectedBranchInfo?.name ?? currentBranch?.name ?? "current HEAD";
 
   return (
     <div className={`content-dark terminal-cell flex h-full flex-col items-center justify-center bg-maestro-bg p-4 ${isDragActive ? "opacity-50" : ""}`}>
       {/* Card content */}
       <div className="flex w-full max-w-xs flex-col gap-4">
         {/* Header with remove button */}
-        <div className="flex items-center justify-between">
+        <div
+          ref={setDragRef}
+          {...dragListeners}
+          {...dragAttributes}
+          className="flex items-center justify-between cursor-grab active:cursor-grabbing"
+        >
           <div className="flex items-center gap-1.5">
             <div
-              ref={setDragRef}
-              {...dragListeners}
-              {...dragAttributes}
-              className="shrink-0 cursor-grab active:cursor-grabbing text-maestro-muted/40 hover:text-maestro-muted transition-colors"
+              className="shrink-0 text-maestro-muted/40 hover:text-maestro-muted transition-colors"
               title="Drag to reorder"
             >
               <GripVertical size={14} />
@@ -1097,6 +1110,37 @@ export function PreLaunchCard({
           )}
         </div>
 
+        {(isGitRepo || isMultiRepo) && (
+          <div>
+            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-maestro-muted">
+              Create Worktree
+            </label>
+            <div className="relative">
+              <FolderGit2
+                size={14}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-maestro-orange"
+              />
+              <input
+                type="text"
+                value={slot.newWorktreeBranch}
+                onChange={(e) => onNewWorktreeBranchChange(e.target.value)}
+                placeholder="feature/my-task"
+                className="w-full rounded border border-maestro-border bg-maestro-card py-2 pl-9 pr-3 text-sm text-maestro-text placeholder:text-maestro-muted/60 focus:border-maestro-accent focus:outline-none"
+              />
+            </div>
+            <p
+              className={`mt-1 text-[10px] ${
+                newWorktreeBranchError ? "text-maestro-red" : "text-maestro-muted"
+              }`}
+            >
+              {newWorktreeBranchError ??
+                (trimmedNewWorktreeBranch
+                  ? `Launch creates branch ${trimmedNewWorktreeBranch} as a new worktree from ${worktreeBaseBranch}.`
+                  : "Optional. Create a new branch-backed worktree when this session launches.")}
+            </p>
+          </div>
+        )}
+
         {/* MCP Servers Selector */}
         <div className="relative" ref={mcpDropdownRef}>
           <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-maestro-muted">
@@ -1470,7 +1514,8 @@ export function PreLaunchCard({
             <button
               type="button"
               onClick={onLaunch}
-              className="flex flex-1 items-center justify-center gap-2 rounded bg-maestro-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-maestro-accent/80"
+              disabled={Boolean(newWorktreeBranchError)}
+              className="flex flex-1 items-center justify-center gap-2 rounded bg-maestro-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-maestro-accent/80 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Play size={16} fill="currentColor" />
               Launch Session

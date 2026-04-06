@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use axum::{
     extract::State,
@@ -25,6 +26,12 @@ use super::todo_manager::TodoManager;
 
 /// Maximum number of pending statuses to buffer (prevents memory leaks).
 const MAX_PENDING_STATUSES: usize = 100;
+
+/// How long to wait without a heartbeat before considering a session disconnected.
+const HEARTBEAT_TIMEOUT_SECS: u64 = 90;
+
+/// How often the watchdog checks for stale heartbeats.
+const WATCHDOG_INTERVAL_SECS: u64 = 15;
 
 /// Callback for emitting status events. In production this wraps `AppHandle::emit`;
 /// in tests it captures events into a `Vec`.
@@ -76,6 +83,13 @@ pub struct HookGenericRequest {
     pub extra: serde_json::Value,
 }
 
+/// Heartbeat payload received from MCP server.
+#[derive(Debug, Deserialize)]
+pub struct HeartbeatRequest {
+    pub session_id: u32,
+    pub instance_id: String,
+}
+
 /// State shared with the HTTP handler.
 struct ServerState {
     emit_fn: EmitFn,
@@ -88,6 +102,8 @@ struct ServerState {
     pending_statuses: Arc<RwLock<HashMap<u32, StatusRequest>>>,
     /// Todo manager for MCP-accessible todo operations
     todo_manager: Option<Arc<TodoManager>>,
+    /// Tracks last heartbeat time per session for disconnect detection
+    last_heartbeat: Arc<RwLock<HashMap<u32, Instant>>>,
 }
 
 /// HTTP status server that receives status updates from MCP servers.
@@ -97,12 +113,14 @@ pub struct StatusServer {
     emit_fn: EmitFn,
     session_projects: Arc<RwLock<HashMap<u32, String>>>,
     pending_statuses: Arc<RwLock<HashMap<u32, StatusRequest>>>,
+    last_heartbeat: Arc<RwLock<HashMap<u32, Instant>>>,
 }
 
 /// Build the axum router with the given shared state.
 fn build_router(state: Arc<ServerState>) -> Router {
     Router::new()
         .route("/status", post(handle_status))
+        .route("/heartbeat", post(handle_heartbeat))
         .route("/hook/session-start", post(handle_hook_session_start))
         .route("/hook/session-end", post(handle_hook_session_end))
         .route("/hook/pre-tool", post(handle_hook_pre_tool))
@@ -160,6 +178,7 @@ impl StatusServer {
         let (port, listener) = Self::find_and_bind_port(9900, 9999).await?;
         let session_projects = Arc::new(RwLock::new(HashMap::new()));
         let pending_statuses = Arc::new(RwLock::new(HashMap::new()));
+        let last_heartbeat = Arc::new(RwLock::new(HashMap::new()));
         let emit_fn = emit_fn_from_app_handle(app_handle);
 
         let state = Arc::new(ServerState {
@@ -170,6 +189,7 @@ impl StatusServer {
             session_projects: session_projects.clone(),
             pending_statuses: pending_statuses.clone(),
             todo_manager,
+            last_heartbeat: last_heartbeat.clone(),
         });
 
         let app = build_router(state);
@@ -185,12 +205,23 @@ impl StatusServer {
             }
         });
 
+        // Spawn the heartbeat watchdog
+        {
+            let emit_fn = emit_fn.clone();
+            let session_projects = session_projects.clone();
+            let last_heartbeat = last_heartbeat.clone();
+            tokio::spawn(async move {
+                heartbeat_watchdog(emit_fn, session_projects, last_heartbeat).await;
+            });
+        }
+
         Some(Self {
             port,
             instance_id,
             emit_fn,
             session_projects,
             pending_statuses,
+            last_heartbeat,
         })
     }
 
@@ -244,10 +275,13 @@ impl StatusServer {
         if projects.remove(&session_id).is_some() {
             log::debug!("Unregistered session {}", session_id);
         }
-        // Also clean up any buffered status
+        // Also clean up any buffered status and heartbeat tracking
         drop(projects);
         let mut pending = self.pending_statuses.write().await;
         pending.remove(&session_id);
+        drop(pending);
+        let mut heartbeats = self.last_heartbeat.write().await;
+        heartbeats.remove(&session_id);
     }
 
     /// Get list of registered session IDs (for debugging).
@@ -349,6 +383,85 @@ async fn handle_status(
     emit_status(&state.emit_fn, payload.session_id, &project_path, &payload);
 
     StatusCode::OK
+}
+
+/// Handle incoming heartbeat POST requests from MCP servers.
+async fn handle_heartbeat(
+    State(state): State<Arc<ServerState>>,
+    Json(payload): Json<HeartbeatRequest>,
+) -> StatusCode {
+    // Verify instance
+    if payload.instance_id != state.instance_id {
+        return StatusCode::FORBIDDEN;
+    }
+
+    // Update last-seen timestamp
+    let mut heartbeats = state.last_heartbeat.write().await;
+    heartbeats.insert(payload.session_id, Instant::now());
+
+    log::debug!(
+        "[HEARTBEAT] Received from session {}",
+        payload.session_id
+    );
+
+    StatusCode::OK
+}
+
+/// Background watchdog that detects sessions whose heartbeats have gone stale.
+async fn heartbeat_watchdog(
+    emit_fn: EmitFn,
+    session_projects: Arc<RwLock<HashMap<u32, String>>>,
+    last_heartbeat: Arc<RwLock<HashMap<u32, Instant>>>,
+) {
+    let timeout = std::time::Duration::from_secs(HEARTBEAT_TIMEOUT_SECS);
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(WATCHDOG_INTERVAL_SECS));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    loop {
+        interval.tick().await;
+
+        let now = Instant::now();
+        let mut stale_sessions = Vec::new();
+
+        // Find sessions that have timed out
+        {
+            let heartbeats = last_heartbeat.read().await;
+            for (&session_id, &last_seen) in heartbeats.iter() {
+                if now.duration_since(last_seen) > timeout {
+                    stale_sessions.push(session_id);
+                }
+            }
+        }
+
+        // Emit disconnect events for stale sessions
+        for session_id in &stale_sessions {
+            let project_path = {
+                let projects = session_projects.read().await;
+                projects.get(session_id).cloned()
+            };
+
+            if let Some(project_path) = project_path {
+                eprintln!(
+                    "[HEARTBEAT] Session {} timed out (no heartbeat for {}s) — emitting Disconnected",
+                    session_id, HEARTBEAT_TIMEOUT_SECS
+                );
+
+                let payload = SessionStatusPayload {
+                    session_id: *session_id,
+                    project_path,
+                    status: "Disconnected".to_string(),
+                    message: "MCP server heartbeat lost".to_string(),
+                    needs_input_prompt: None,
+                };
+
+                (emit_fn)(payload);
+            }
+
+            // Remove from heartbeat tracking so we don't keep re-emitting
+            let mut heartbeats = last_heartbeat.write().await;
+            heartbeats.remove(session_id);
+        }
+    }
 }
 
 // ── Hook helpers ─────────────────────────────────────────────────────
@@ -645,6 +758,7 @@ mod tests {
             emit_fn,
             session_projects: Arc::new(RwLock::new(HashMap::new())),
             pending_statuses: Arc::new(RwLock::new(HashMap::new())),
+            last_heartbeat: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -668,6 +782,7 @@ mod tests {
             session_projects: session_projects.clone(),
             pending_statuses: pending_statuses.clone(),
             todo_manager: None,
+            last_heartbeat: Arc::new(RwLock::new(HashMap::new())),
         });
 
         let app = build_router(state);
@@ -964,6 +1079,7 @@ mod tests {
             session_projects: Arc::new(RwLock::new(HashMap::new())),
             pending_statuses: Arc::new(RwLock::new(HashMap::new())),
             todo_manager: None,
+            last_heartbeat: Arc::new(RwLock::new(HashMap::new())),
         });
 
         let app = build_router(state);

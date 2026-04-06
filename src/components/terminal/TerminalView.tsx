@@ -23,6 +23,11 @@ import { useShallow } from "zustand/react/shallow";
 import { QuickActionPills } from "./QuickActionPills";
 import { type AIProvider, type SessionStatus, TerminalHeader } from "./TerminalHeader";
 
+const FIT_SETTLE_DELAY_MS = 150;
+const FIT_RETRY_DELAY_MS = 120;
+const MAX_FIT_RETRIES = 4;
+const PTY_RESIZE_DEBOUNCE_MS = 80;
+
 /**
  * Props for {@link TerminalView}.
  * @property sessionId - Backend PTY session ID used to route stdin/stdout and resize events.
@@ -38,6 +43,7 @@ interface TerminalViewProps {
   status?: SessionStatus;
   isFocused?: boolean;
   isActive?: boolean;
+  isDragging?: boolean;
   onFocus?: () => void;
   onKill: (sessionId: number) => void;
   terminalCount?: number;
@@ -72,6 +78,7 @@ function mapStatus(status: BackendSessionStatus): SessionStatus {
     Done: "done",
     Error: "error",
     Timeout: "timeout",
+    Disconnected: "disconnected",
   };
   const mapped = map[status];
   if (!mapped) {
@@ -93,6 +100,7 @@ function cellStatusClass(status: SessionStatus): string {
     case "done":
       return "terminal-cell-done";
     case "error":
+    case "disconnected":
       return "terminal-cell-error";
     default:
       return "terminal-cell-idle";
@@ -117,6 +125,7 @@ export const TerminalView = memo(function TerminalView({
   status = "idle",
   isFocused = false,
   isActive = true,
+  isDragging = false,
   onFocus,
   onKill,
   terminalCount = 1,
@@ -180,7 +189,9 @@ export const TerminalView = memo(function TerminalView({
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const scheduleFitRef = useRef<(() => void) | null>(null);
   const isAtBottomRef = useRef(true);
+  const isDraggingRef = useRef(isDragging);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   // Quick actions manager modal state
@@ -237,20 +248,27 @@ export const TerminalView = memo(function TerminalView({
       termRef.current.options.fontFamily = builtFontFamily;
       termRef.current.options.lineHeight = lineHeight;
 
-      // Refit terminal to recalculate cell dimensions
-      requestAnimationFrame(() => {
-        const wasAtBottom = isAtBottomRef.current;
-        try {
-          fitAddonRef.current?.fit();
-        } catch {
-          // Ignore fit errors during transition
-        }
-        if (wasAtBottom) {
-          termRef.current?.scrollToBottom();
-        }
-      });
+      // Refit after the updated font metrics have propagated through layout.
+      scheduleFitRef.current?.();
     }
   }, [fontSize, fontFamily, lineHeight, zoomLevel, getEffectiveFontFamily, getEffectiveFontSize]);
+
+  // Keep isDraggingRef in sync and refit when drag ends so TUIs only see the
+  // final stable dimensions (all intermediate ResizeObserver events are suppressed).
+  useEffect(() => {
+    const wasDragging = isDraggingRef.current;
+    isDraggingRef.current = isDragging;
+    if (wasDragging && !isDragging) {
+      scheduleFitRef.current?.();
+    }
+  }, [isDragging]);
+
+  // Structural grid changes can briefly detach/reparent terminal DOM nodes.
+  // Refit after those layout changes settle so TUIs only see the final size.
+  useEffect(() => {
+    if (activeTab !== "terminal") return;
+    scheduleFitRef.current?.();
+  }, [terminalCount, isZoomed, activeTab]);
 
   /**
    * Immediately removes the terminal from UI (optimistic update),
@@ -295,6 +313,8 @@ export const TerminalView = memo(function TerminalView({
     let writeBuffer: string[] = [];
     let rafId: number | null = null;
     let fallbackTimerId: ReturnType<typeof setTimeout> | null = null;
+    let fitTimerId: ReturnType<typeof setTimeout> | null = null;
+    let fitRafId: number | null = null;
 
     // === Activity-based status detection ===
     let activityWorkingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -313,6 +333,72 @@ export const TerminalView = memo(function TerminalView({
     const cancelPendingFlush = () => {
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
       if (fallbackTimerId !== null) { clearTimeout(fallbackTimerId); fallbackTimerId = null; }
+    };
+
+    const cancelPendingFit = () => {
+      if (fitTimerId !== null) {
+        clearTimeout(fitTimerId);
+        fitTimerId = null;
+      }
+      if (fitRafId !== null) {
+        cancelAnimationFrame(fitRafId);
+        fitRafId = null;
+      }
+    };
+
+    const queueFit = (remainingRetries = MAX_FIT_RETRIES) => {
+      cancelPendingFit();
+
+      // Suppress fits while divider is being dragged — the fit will be
+      // triggered once when the drag ends (via the isDragging effect).
+      if (isDraggingRef.current) return;
+
+      fitTimerId = setTimeout(() => {
+        fitTimerId = null;
+        fitRafId = requestAnimationFrame(() => {
+          fitRafId = null;
+          if (disposed || !term || !fitAddon) return;
+
+          // Re-check drag state in case it started during the settle delay
+          if (isDraggingRef.current) return;
+
+          if (!container.isConnected) {
+            if (remainingRetries > 0) {
+              queueFit(remainingRetries - 1);
+            }
+            return;
+          }
+
+          const { width, height } = container.getBoundingClientRect();
+          if (width === 0 || height === 0) {
+            if (remainingRetries > 0) {
+              fitTimerId = setTimeout(() => {
+                fitTimerId = null;
+                queueFit(remainingRetries - 1);
+              }, FIT_RETRY_DELAY_MS);
+            }
+            return;
+          }
+
+          const wasAtBottom = isAtBottomRef.current;
+          try {
+            fitAddon.fit();
+          } catch {
+            if (remainingRetries > 0) {
+              queueFit(remainingRetries - 1);
+            }
+            return;
+          }
+
+          if (wasAtBottom) {
+            term.scrollToBottom();
+          }
+        });
+      }, FIT_SETTLE_DELAY_MS);
+    };
+
+    scheduleFitRef.current = () => {
+      queueFit();
     };
 
     const flushBuffer = () => {
@@ -396,13 +482,7 @@ export const TerminalView = memo(function TerminalView({
       termRef.current = term;
       fitAddonRef.current = fitAddon;
 
-      requestAnimationFrame(() => {
-        try {
-          fitAddon?.fit();
-        } catch {
-          // Container may not be sized yet
-        }
-      });
+      queueFit();
 
       // --- Sticky scroll-to-bottom ---
       const checkIsAtBottom = (): boolean => {
@@ -526,8 +606,16 @@ export const TerminalView = memo(function TerminalView({
         writeStdin(sessionId, data).catch(console.error);
       });
 
+      // Debounce PTY resize so the child process only receives one SIGWINCH
+      // with the final stable dimensions, preventing TUI corruption from
+      // rapid consecutive resize signals.
+      let ptyResizeTimerId: ReturnType<typeof setTimeout> | null = null;
       resizeDisposable = term.onResize(({ rows, cols }) => {
-        resizePty(sessionId, rows, cols).catch(console.error);
+        if (ptyResizeTimerId !== null) clearTimeout(ptyResizeTimerId);
+        ptyResizeTimerId = setTimeout(() => {
+          ptyResizeTimerId = null;
+          resizePty(sessionId, rows, cols).catch(console.error);
+        }, PTY_RESIZE_DEBOUNCE_MS);
       });
 
       // Handle special keyboard shortcuts
@@ -662,22 +750,13 @@ export const TerminalView = memo(function TerminalView({
         });
 
       resizeObserver = new ResizeObserver((entries) => {
-        requestAnimationFrame(() => {
-          if (!disposed && fitAddon) {
-            const entry = entries[0];
-            const { width, height } = entry.contentRect;
-            if (width === 0 || height === 0) return; // Skip fit when hidden
-            const wasAtBottom = isAtBottomRef.current;
-            try {
-              fitAddon.fit();
-            } catch {
-              // Container may have zero dimensions during layout transitions
-            }
-            if (wasAtBottom) {
-              term?.scrollToBottom();
-            }
-          }
-        });
+        const entry = entries[0];
+        const { width, height } = entry.contentRect;
+        if (width === 0 || height === 0) {
+          queueFit();
+          return;
+        }
+        queueFit();
       });
       resizeObserver.observe(container);
     };
@@ -691,6 +770,8 @@ export const TerminalView = memo(function TerminalView({
     return () => {
       disposed = true;
       cancelPendingFlush();
+      cancelPendingFit();
+      scheduleFitRef.current = null;
       if (activityWorkingTimer) clearTimeout(activityWorkingTimer);
       if (activityIdleTimer) clearTimeout(activityIdleTimer);
       // Flush remaining buffered output before disposal

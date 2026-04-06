@@ -87,8 +87,8 @@ impl StatusReporter {
         };
 
         // Send HTTP POST to Maestro's status endpoint
-        eprintln!(
-            "[maestro-mcp-server] Sending status to {}: session_id={}, state={}, message={}",
+        log::info!(
+            "Sending status to {}: session_id={}, state={}, message={}",
             status_url, payload.session_id, payload.state, payload.message
         );
 
@@ -97,8 +97,8 @@ impl StatusReporter {
         for attempt in 0..MAX_RETRIES {
             if attempt > 0 {
                 let backoff = INITIAL_BACKOFF_MS * (1 << (attempt - 1));
-                eprintln!(
-                    "[maestro-mcp-server] Retry attempt {}/{} after {}ms",
+                log::info!(
+                    "Retry attempt {}/{} after {}ms",
                     attempt + 1,
                     MAX_RETRIES,
                     backoff
@@ -116,30 +116,20 @@ impl StatusReporter {
             {
                 Ok(response) => {
                     let status = response.status();
-                    eprintln!(
-                        "[maestro-mcp-server] Status response: {}",
-                        status
-                    );
+                    log::debug!("Status response: {}", status);
                     if status.is_success() || status.as_u16() == 202 {
                         return Ok(());
                     }
                     // 4xx = client error (e.g. 403 wrong instance) — don't retry
                     if status.is_client_error() {
-                        eprintln!(
-                            "[maestro-mcp-server] Client error {} — not retrying",
-                            status
-                        );
+                        log::warn!("Client error {} — not retrying", status);
                         return Ok(());
                     }
                     // 5xx = server error — retry
                     last_error = Some(StatusError::HttpStatus(status.as_u16()));
                 }
                 Err(e) => {
-                    eprintln!(
-                        "[maestro-mcp-server] HTTP error on attempt {}: {}",
-                        attempt + 1,
-                        e
-                    );
+                    log::warn!("HTTP error on attempt {}: {}", attempt + 1, e);
                     last_error = Some(StatusError::HttpError(e));
                 }
             }
@@ -147,10 +137,7 @@ impl StatusReporter {
 
         // All retries exhausted — log error but don't crash
         if let Some(ref err) = last_error {
-            eprintln!(
-                "[maestro-mcp-server] Status report failed after {} attempts: {}",
-                MAX_RETRIES, err
-            );
+            log::error!("Status report failed after {} attempts: {}", MAX_RETRIES, err);
         }
 
         // Graceful degradation: don't crash MCP server for status failures

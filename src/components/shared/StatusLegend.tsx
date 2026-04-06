@@ -12,6 +12,7 @@ const STATUS_DEFS: {
   { key: "Done", label: "Done", colorClass: "bg-maestro-green" },
   { key: "Error", label: "Error", colorClass: "bg-red-400" },
   { key: "Timeout", label: "Timeout", colorClass: "bg-red-400" },
+  { key: "Disconnected", label: "Disconnected", colorClass: "bg-red-400" },
 ];
 
 interface StatusLegendProps {
@@ -33,6 +34,7 @@ export function StatusLegend({ direction = "horizontal" }: StatusLegendProps) {
       Done: 0,
       Error: 0,
       Timeout: 0,
+      Disconnected: 0,
     },
   );
 
