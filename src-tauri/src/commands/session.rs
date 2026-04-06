@@ -63,6 +63,22 @@ pub async fn assign_session_branch(
         .ok_or_else(|| format!("Session {} not found", session_id))
 }
 
+/// Renames a session. Empty or whitespace-only names are treated as `None`,
+/// which resets the display name to the default `{provider} #{id}` format.
+#[tauri::command]
+pub async fn rename_session(
+    state: State<'_, SessionManager>,
+    session_id: u32,
+    name: Option<String>,
+) -> Result<SessionConfig, String> {
+    let normalized = name
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty());
+    state
+        .rename_session(session_id, normalized)
+        .ok_or_else(|| format!("Session {} not found", session_id))
+}
+
 /// Exposes `SessionManager::remove_session` to the frontend.
 /// Returns the removed session config, or `None` if it was not found.
 #[tauri::command]

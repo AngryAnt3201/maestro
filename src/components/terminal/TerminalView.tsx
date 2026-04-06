@@ -130,6 +130,7 @@ export const TerminalView = memo(function TerminalView({
       return {
         status: sess.status,
         mode: sess.mode,
+        name: sess.name,
         projectPath: sess.project_path,
         workingDirectory: sess.working_directory,
         worktreePath: sess.worktree_path,
@@ -321,6 +322,13 @@ export const TerminalView = memo(function TerminalView({
       });
     },
     [onKill],
+  );
+
+  const handleRename = useCallback(
+    (id: number, name: string | null) => {
+      useSessionStore.getState().renameSession(id, name);
+    },
+    [],
   );
 
   /**
@@ -751,11 +759,13 @@ export const TerminalView = memo(function TerminalView({
         sessionId={sessionId}
         provider={effectiveProvider}
         status={effectiveStatus}
+        sessionName={sessionData?.name}
         statusMessage={sessionData?.statusMessage || sessionData?.needsInputPrompt}
         mcpCount={mcpCount}
         branchName={effectiveBranch}
         isWorktree={isWorktree}
         onKill={handleKill}
+        onRename={handleRename}
         terminalCount={terminalCount}
         isZoomed={isZoomed}
         onToggleZoom={onToggleZoom}
