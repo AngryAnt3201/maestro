@@ -230,16 +230,17 @@ export const TerminalHeader = memo(function TerminalHeader({
   const adaptive = getAdaptiveClasses();
 
   return (
-    <div className={`no-select flex ${adaptive.headerHeight} shrink-0 items-center ${adaptive.gapSize} border-b border-maestro-border bg-maestro-surface px-2 ${isDragging ? "opacity-50" : ""}`}>
+    <div
+      ref={slotId && terminalCount > 1 ? setDragRef : undefined}
+      {...(slotId && terminalCount > 1 ? { ...dragListeners, ...dragAttributes } : {})}
+      className={`no-select flex ${adaptive.headerHeight} shrink-0 items-center ${adaptive.gapSize} border-b border-maestro-border bg-maestro-surface px-2 ${isDragging ? "opacity-50" : ""} ${slotId && terminalCount > 1 ? "cursor-grab active:cursor-grabbing" : ""}`}
+    >
       {/* Left cluster */}
       <div className={`flex min-w-0 flex-1 items-center ${adaptive.gapSize}`}>
-        {/* Drag handle for reordering panes */}
+        {/* Drag handle icon (visual hint) */}
         {slotId && terminalCount > 1 && (
           <div
-            ref={setDragRef}
-            {...dragListeners}
-            {...dragAttributes}
-            className="shrink-0 cursor-grab active:cursor-grabbing text-maestro-muted/40 hover:text-maestro-muted transition-colors"
+            className="shrink-0 text-maestro-muted/40 hover:text-maestro-muted transition-colors"
             title="Drag to reorder"
           >
             <GripVertical size={terminalCount <= 4 ? 14 : 12} />

@@ -385,13 +385,15 @@ export function PreLaunchCard({
       {/* Card content */}
       <div className="flex w-full max-w-xs flex-col gap-4">
         {/* Header with remove button */}
-        <div className="flex items-center justify-between">
+        <div
+          ref={setDragRef}
+          {...dragListeners}
+          {...dragAttributes}
+          className="flex items-center justify-between cursor-grab active:cursor-grabbing"
+        >
           <div className="flex items-center gap-1.5">
             <div
-              ref={setDragRef}
-              {...dragListeners}
-              {...dragAttributes}
-              className="shrink-0 cursor-grab active:cursor-grabbing text-maestro-muted/40 hover:text-maestro-muted transition-colors"
+              className="shrink-0 text-maestro-muted/40 hover:text-maestro-muted transition-colors"
               title="Drag to reorder"
             >
               <GripVertical size={14} />

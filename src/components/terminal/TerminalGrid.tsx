@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 import {
   DndContext,
+  DragOverlay,
   closestCenter,
   PointerSensor,
   useSensor,
@@ -54,6 +55,16 @@ import { PreLaunchCard, type SessionSlot } from "./PreLaunchCard";
 import { SplitPaneView } from "./SplitPaneView";
 import { createLeaf, splitLeaf, removeLeaf, updateRatio, collectSlotIds, findSiblingSlotId, buildGridTree, swapLeaves, type TreeNode, type SplitDirection } from "./splitTree";
 import { TerminalView } from "./TerminalView";
+import { BrainCircuit, Code2, GitBranch, Sparkles, Terminal } from "lucide-react";
+import { OpenCodeIcon } from "@/components/icons";
+
+const MODE_OVERLAY_CONFIG: Record<AiMode, { icon: React.ElementType; label: string; color: string }> = {
+  Claude: { icon: BrainCircuit, label: "Claude Code", color: "text-violet-500" },
+  Gemini: { icon: Sparkles, label: "Gemini CLI", color: "text-blue-400" },
+  Codex: { icon: Code2, label: "Codex", color: "text-green-400" },
+  OpenCode: { icon: OpenCodeIcon, label: "OpenCode", color: "text-purple-500" },
+  Plain: { icon: Terminal, label: "Terminal", color: "text-maestro-muted" },
+};
 
 /** Stable empty arrays to avoid infinite re-render loops in Zustand selectors. */
 const EMPTY_MCP_SERVERS: McpServerConfig[] = [];
@@ -171,11 +182,12 @@ interface TerminalGridProps {
  * - When all sessions are killed by the user, an auto-respawn effect creates
  *   a fresh slot so the user is never left with an empty grid.
  */
-function PlaceholderLeaf({ container, isZoomed, slotId, isDropTarget }: {
+function PlaceholderLeaf({ container, isZoomed, slotId, isDropTarget, isDragSource }: {
   container: HTMLDivElement;
   isZoomed: boolean;
   slotId: string;
   isDropTarget?: boolean;
+  isDragSource?: boolean;
 }) {
   const placeholderRef = useRef<HTMLDivElement>(null);
   const { setNodeRef, isOver } = useDroppable({ id: slotId });
@@ -202,7 +214,7 @@ function PlaceholderLeaf({ container, isZoomed, slotId, isDropTarget }: {
   return (
     <div
       ref={combinedRef}
-      className={`h-full w-full relative ${isOver && isDropTarget ? "ring-2 ring-maestro-accent ring-inset rounded" : ""}`}
+      className={`h-full w-full relative ${isOver && isDropTarget ? "ring-2 ring-maestro-accent ring-inset rounded" : ""} ${isDragSource ? "opacity-30" : ""}`}
     />
   );
 }
@@ -1376,7 +1388,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     return (
       <>
         {createPortal(content, container)}
-        <PlaceholderLeaf container={container} isZoomed={isThisZoomed} slotId={slot.id} isDropTarget={activeDragSlotId !== null && activeDragSlotId !== slot.id} />
+        <PlaceholderLeaf container={container} isZoomed={isThisZoomed} slotId={slot.id} isDropTarget={activeDragSlotId !== null && activeDragSlotId !== slot.id} isDragSource={activeDragSlotId === slot.id} />
       </>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps -- Deps cover all render-affecting state
@@ -1475,6 +1487,33 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
               onRatioChange={handleRatioChange}
               onDragStateChange={setIsDragging}
             />
+            <DragOverlay dropAnimation={null}>
+              {activeDragSlotId != null && (() => {
+                const dragSlot = slots.find((s) => s.id === activeDragSlotId);
+                if (!dragSlot) return null;
+                const cfg = MODE_OVERLAY_CONFIG[dragSlot.mode];
+                const ModeIcon = cfg.icon;
+                return (
+                  <div className="pointer-events-none w-48 rounded-lg border border-maestro-border bg-maestro-surface/80 p-3 shadow-lg backdrop-blur-sm opacity-80">
+                    <div className="flex items-center gap-2">
+                      <ModeIcon size={16} className={cfg.color} />
+                      <span className="text-sm font-medium text-maestro-text">{cfg.label}</span>
+                    </div>
+                    {dragSlot.branch && (
+                      <div className="mt-1.5 flex items-center gap-1 text-xs text-maestro-muted">
+                        <GitBranch size={10} />
+                        <span className="truncate">{dragSlot.branch}</span>
+                      </div>
+                    )}
+                    {dragSlot.sessionId != null && (
+                      <div className="mt-1 text-[10px] text-maestro-muted/60">
+                        Session #{dragSlot.sessionId}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </DragOverlay>
           </DndContext>
         </div>
       </div>
