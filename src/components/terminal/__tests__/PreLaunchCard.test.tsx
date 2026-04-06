@@ -13,6 +13,7 @@ describe("PreLaunchCard branch creation", () => {
     id: "slot-1",
     mode: "Claude",
     branch: null,
+    newWorktreeBranch: "",
     sessionId: null,
     worktreePath: null,
     worktreeWarning: null,
@@ -36,6 +37,7 @@ describe("PreLaunchCard branch creation", () => {
     plugins: [],
     onModeChange: vi.fn(),
     onBranchChange: vi.fn(),
+    onNewWorktreeBranchChange: vi.fn(),
     onMcpToggle: vi.fn(),
     onSkillToggle: vi.fn(),
     onPluginToggle: vi.fn(),
@@ -166,6 +168,7 @@ describe("PreLaunchCard AI Mode Selection", () => {
     id: "slot-1",
     mode: "Claude",
     branch: null,
+    newWorktreeBranch: "",
     sessionId: null,
     worktreePath: null,
     worktreeWarning: null,
@@ -189,6 +192,7 @@ describe("PreLaunchCard AI Mode Selection", () => {
     plugins: [],
     onModeChange: vi.fn(),
     onBranchChange: vi.fn(),
+    onNewWorktreeBranchChange: vi.fn(),
     onMcpToggle: vi.fn(),
     onSkillToggle: vi.fn(),
     onPluginToggle: vi.fn(),
@@ -257,5 +261,75 @@ describe("PreLaunchCard AI Mode Selection", () => {
       // Cleanup for next iteration
       cleanup();
     }
+  });
+});
+
+describe("PreLaunchCard worktree launch field", () => {
+  const makeSlot = (overrides?: Partial<SessionSlot>): SessionSlot => ({
+    id: "slot-1",
+    mode: "Claude",
+    branch: "develop",
+    newWorktreeBranch: "",
+    sessionId: null,
+    worktreePath: null,
+    worktreeWarning: null,
+    enabledMcpServers: [],
+    enabledSkills: [],
+    enabledPlugins: [],
+    ...overrides,
+  });
+
+  const defaultProps = {
+    slot: makeSlot(),
+    projectPath: "/tmp/test-repo",
+    branches: [
+      { name: "main", isRemote: false, isCurrent: true, hasWorktree: false },
+      { name: "develop", isRemote: false, isCurrent: false, hasWorktree: false },
+    ],
+    isLoadingBranches: false,
+    isGitRepo: true,
+    mcpServers: [],
+    skills: [],
+    plugins: [],
+    onModeChange: vi.fn(),
+    onBranchChange: vi.fn(),
+    onNewWorktreeBranchChange: vi.fn(),
+    onMcpToggle: vi.fn(),
+    onSkillToggle: vi.fn(),
+    onPluginToggle: vi.fn(),
+    onMcpSelectAll: vi.fn(),
+    onMcpUnselectAll: vi.fn(),
+    onPluginsSelectAll: vi.fn(),
+    onPluginsUnselectAll: vi.fn(),
+    onLaunch: vi.fn(),
+    onRemove: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("updates the new worktree branch field", () => {
+    renderWithDnd(<PreLaunchCard {...defaultProps} />);
+
+    fireEvent.change(screen.getByPlaceholderText("feature/my-task"), {
+      target: { value: "feature/worktree" },
+    });
+
+    expect(defaultProps.onNewWorktreeBranchChange).toHaveBeenCalledWith("feature/worktree");
+  });
+
+  it("disables launch when the new worktree branch is invalid", () => {
+    renderWithDnd(
+      <PreLaunchCard
+        {...defaultProps}
+        slot={makeSlot({ newWorktreeBranch: "bad branch" })}
+      />
+    );
+
+    expect(
+      screen.getByText("Invalid worktree branch. Use letters, numbers, dots, dashes, slashes.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Launch Session" })).toBeDisabled();
   });
 });

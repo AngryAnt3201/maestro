@@ -1,4 +1,5 @@
 pub mod claudemd;
+pub mod shared;
 pub mod fonts;
 pub mod git;
 pub mod github;

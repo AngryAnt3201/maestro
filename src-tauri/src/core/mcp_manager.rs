@@ -299,9 +299,14 @@ impl McpManager {
         self.session_enabled.remove(&key);
     }
 
-    /// Counts enabled MCP servers for a session.
+    /// Counts enabled MCP servers for a session without cloning.
     pub fn get_enabled_count(&self, project_path: &str, session_id: u32) -> usize {
-        self.get_session_enabled(project_path, session_id).len()
+        let key = (project_path.to_string(), session_id);
+        if let Some(enabled) = self.session_enabled.get(&key) {
+            return enabled.len();
+        }
+        // Default: count of all project servers
+        self.get_project_servers(project_path).len()
     }
 }
 

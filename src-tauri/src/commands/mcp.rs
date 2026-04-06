@@ -5,16 +5,22 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use tauri::{AppHandle, State};
 use tauri_plugin_store::StoreExt;
 
+use crate::commands::shared::{canonicalize_path, hash_project_path};
 use crate::core::mcp_config_writer;
 use crate::core::mcp_manager::{McpManager, McpServerConfig};
 use crate::core::status_server::StatusServer;
 
 /// Store filename for custom MCP servers (global, user-level).
 const CUSTOM_MCP_SERVERS_STORE: &str = "mcp-custom-servers.json";
+
+/// Store key for the custom servers list.
+const STORE_KEY_SERVERS: &str = "servers";
+
+/// Store key for enabled MCP servers per project.
+const STORE_KEY_ENABLED_MCP: &str = "enabled_mcp_servers";
 
 /// A custom MCP server configured by the user.
 /// Stored globally (user-level) and available across all projects.
@@ -48,15 +54,6 @@ pub struct StatusServerInfo {
     pub instance_id: String,
 }
 
-/// Creates a stable hash of a project path for use in store filenames.
-fn hash_project_path(path: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(path.as_bytes());
-    let result = hasher.finalize();
-    // Take first 12 hex characters for a reasonably short but unique filename
-    format!("{:x}", &result)[..12].to_string()
-}
-
 /// Discovers and returns MCP servers configured in the project's `.mcp.json`.
 ///
 /// The project path is canonicalized before lookup. Results are cached.
@@ -65,11 +62,7 @@ pub async fn get_project_mcp_servers(
     state: State<'_, McpManager>,
     project_path: String,
 ) -> Result<Vec<McpServerConfig>, String> {
-    let canonical = std::fs::canonicalize(&project_path)
-        .map_err(|e| format!("Invalid project path '{}': {}", project_path, e))?
-        .to_string_lossy()
-        .into_owned();
-
+    let canonical = canonicalize_path(&project_path)?;
     Ok(state.get_project_servers(&canonical))
 }
 
@@ -79,11 +72,7 @@ pub async fn refresh_project_mcp_servers(
     state: State<'_, McpManager>,
     project_path: String,
 ) -> Result<Vec<McpServerConfig>, String> {
-    let canonical = std::fs::canonicalize(&project_path)
-        .map_err(|e| format!("Invalid project path '{}': {}", project_path, e))?
-        .to_string_lossy()
-        .into_owned();
-
+    let canonical = canonicalize_path(&project_path)?;
     Ok(state.refresh_project_servers(&canonical))
 }
 
@@ -96,11 +85,7 @@ pub async fn get_session_mcp_servers(
     project_path: String,
     session_id: u32,
 ) -> Result<Vec<String>, String> {
-    let canonical = std::fs::canonicalize(&project_path)
-        .map_err(|e| format!("Invalid project path '{}': {}", project_path, e))?
-        .to_string_lossy()
-        .into_owned();
-
+    let canonical = canonicalize_path(&project_path)?;
     Ok(state.get_session_enabled(&canonical, session_id))
 }
 
@@ -112,11 +97,7 @@ pub async fn set_session_mcp_servers(
     session_id: u32,
     enabled: Vec<String>,
 ) -> Result<(), String> {
-    let canonical = std::fs::canonicalize(&project_path)
-        .map_err(|e| format!("Invalid project path '{}': {}", project_path, e))?
-        .to_string_lossy()
-        .into_owned();
-
+    let canonical = canonicalize_path(&project_path)?;
     state.set_session_enabled(&canonical, session_id, enabled);
     Ok(())
 }
@@ -128,11 +109,7 @@ pub async fn get_session_mcp_count(
     project_path: String,
     session_id: u32,
 ) -> Result<usize, String> {
-    let canonical = std::fs::canonicalize(&project_path)
-        .map_err(|e| format!("Invalid project path '{}': {}", project_path, e))?
-        .to_string_lossy()
-        .into_owned();
-
+    let canonical = canonicalize_path(&project_path)?;
     Ok(state.get_enabled_count(&canonical, session_id))
 }
 
@@ -146,15 +123,10 @@ pub async fn save_project_mcp_defaults(
     project_path: String,
     enabled_servers: Vec<String>,
 ) -> Result<(), String> {
-    let canonical = std::fs::canonicalize(&project_path)
-        .map_err(|e| format!("Invalid project path '{}': {}", project_path, e))?
-        .to_string_lossy()
-        .into_owned();
+    let canonical = canonicalize_path(&project_path)?;
+    let store = project_store(&app, &canonical)?;
 
-    let store_name = format!("maestro-{}.json", hash_project_path(&canonical));
-    let store = app.store(&store_name).map_err(|e| e.to_string())?;
-
-    store.set("enabled_mcp_servers", serde_json::json!(enabled_servers));
+    store.set(STORE_KEY_ENABLED_MCP, serde_json::json!(enabled_servers));
     store.save().map_err(|e| e.to_string())?;
 
     log::debug!("Saved MCP server defaults for project: {}", canonical);
@@ -169,16 +141,11 @@ pub async fn load_project_mcp_defaults(
     app: AppHandle,
     project_path: String,
 ) -> Result<Option<Vec<String>>, String> {
-    let canonical = std::fs::canonicalize(&project_path)
-        .map_err(|e| format!("Invalid project path '{}': {}", project_path, e))?
-        .to_string_lossy()
-        .into_owned();
-
-    let store_name = format!("maestro-{}.json", hash_project_path(&canonical));
-    let store = app.store(&store_name).map_err(|e| e.to_string())?;
+    let canonical = canonicalize_path(&project_path)?;
+    let store = project_store(&app, &canonical)?;
 
     let result = store
-        .get("enabled_mcp_servers")
+        .get(STORE_KEY_ENABLED_MCP)
         .and_then(|v| v.as_array().cloned())
         .map(|arr| {
             arr.iter()
@@ -191,37 +158,17 @@ pub async fn load_project_mcp_defaults(
 
 /// Registers a project with the status server.
 ///
-/// This is a no-op in the new HTTP-based architecture since we don't need
-/// file-based monitoring anymore. Kept for backwards compatibility.
+/// No-op in the HTTP-based architecture. Kept for backwards compatibility.
 #[tauri::command]
-pub async fn add_mcp_project(project_path: String) -> Result<(), String> {
-    let canonical = std::fs::canonicalize(&project_path)
-        .map_err(|e| format!("Invalid project path '{}': {}", project_path, e))?
-        .to_string_lossy()
-        .into_owned();
-
-    log::debug!(
-        "add_mcp_project called for '{}' (no-op in HTTP architecture)",
-        canonical
-    );
+pub async fn add_mcp_project(_project_path: String) -> Result<(), String> {
     Ok(())
 }
 
 /// Removes a project from monitoring.
 ///
-/// This is a no-op in the new HTTP-based architecture since we don't need
-/// file-based monitoring anymore. Kept for backwards compatibility.
+/// No-op in the HTTP-based architecture. Kept for backwards compatibility.
 #[tauri::command]
-pub async fn remove_mcp_project(project_path: String) -> Result<(), String> {
-    let canonical = std::fs::canonicalize(&project_path)
-        .map_err(|e| format!("Invalid project path '{}': {}", project_path, e))?
-        .to_string_lossy()
-        .into_owned();
-
-    log::debug!(
-        "remove_mcp_project called for '{}' (no-op in HTTP architecture)",
-        canonical
-    );
+pub async fn remove_mcp_project(_project_path: String) -> Result<(), String> {
     Ok(())
 }
 
@@ -261,18 +208,52 @@ pub async fn get_status_server_info(
     })
 }
 
+/// Context prepared for writing MCP session configs.
+struct McpSessionContext {
+    status_url: String,
+    instance_id: String,
+    enabled_discovered: Vec<McpServerConfig>,
+    enabled_custom: Vec<McpCustomServer>,
+}
+
+/// Shared setup for write_session_mcp_config and write_opencode_mcp_config.
+async fn prepare_mcp_session(
+    app: &AppHandle,
+    mcp_state: &McpManager,
+    status_server: &StatusServer,
+    project_path: &str,
+    session_id: u32,
+    enabled_server_names: &[String],
+) -> Result<McpSessionContext, String> {
+    let canonical = canonicalize_path(project_path)?;
+
+    status_server
+        .register_session(session_id, &canonical)
+        .await;
+
+    let all_discovered = mcp_state.get_project_servers(&canonical);
+    let enabled_discovered: Vec<_> = all_discovered
+        .into_iter()
+        .filter(|s| enabled_server_names.contains(&s.name))
+        .collect();
+
+    let enabled_custom: Vec<_> = get_custom_mcp_servers_internal(app)?
+        .into_iter()
+        .filter(|s| s.is_enabled)
+        .collect();
+
+    Ok(McpSessionContext {
+        status_url: status_server.status_url(),
+        instance_id: status_server.instance_id().to_string(),
+        enabled_discovered,
+        enabled_custom,
+    })
+}
+
 /// Writes a session-specific `.mcp.json` file to the working directory.
 ///
-/// This must be called BEFORE launching the Claude CLI so it can discover
-/// and connect to the configured MCP servers, including the Maestro status server.
-///
-/// The written config includes:
-/// - The `maestro` MCP server with HTTP-based status reporting
-/// - All enabled servers from the project's `.mcp.json`
-/// - All enabled custom servers (user-defined, global)
-///
-/// Existing user-defined servers in the working directory's `.mcp.json` are
-/// preserved (only Maestro-managed servers are replaced).
+/// Must be called BEFORE launching the Claude CLI so it can discover
+/// the configured MCP servers, including the Maestro status server.
 #[tauri::command]
 pub async fn write_session_mcp_config(
     app: AppHandle,
@@ -283,58 +264,27 @@ pub async fn write_session_mcp_config(
     project_path: String,
     enabled_server_names: Vec<String>,
 ) -> Result<(), String> {
-    let canonical = std::fs::canonicalize(&project_path)
-        .map_err(|e| format!("Invalid project path '{}': {}", project_path, e))?
-        .to_string_lossy()
-        .into_owned();
-
-    // Register this session with the status server
-    status_server
-        .register_session(session_id, &canonical)
-        .await;
-
-    // Get the status URL and instance ID from the status server
-    let status_url = status_server.status_url();
-    let instance_id = status_server.instance_id();
-
-    // Get full server configs for enabled discovered servers
-    let all_discovered = mcp_state.get_project_servers(&canonical);
-    let enabled_discovered: Vec<_> = all_discovered
-        .into_iter()
-        .filter(|s| enabled_server_names.contains(&s.name))
-        .collect();
-
-    // Get enabled custom servers
-    let custom_servers = get_custom_mcp_servers_internal(&app)?;
-    let enabled_custom: Vec<_> = custom_servers
-        .into_iter()
-        .filter(|s| s.is_enabled)
-        .collect();
+    let ctx = prepare_mcp_session(
+        &app, &mcp_state, &status_server, &project_path, session_id, &enabled_server_names,
+    ).await?;
 
     log::info!(
-        "Writing MCP config for session {} to {} ({} discovered + {} custom servers), status_url={}",
-        session_id,
-        working_dir,
-        enabled_discovered.len(),
-        enabled_custom.len(),
-        status_url
+        "Writing MCP config for session {} to {} ({} discovered + {} custom servers)",
+        session_id, working_dir, ctx.enabled_discovered.len(), ctx.enabled_custom.len(),
     );
 
     mcp_config_writer::write_session_mcp_config(
         Path::new(&working_dir),
         session_id,
-        &status_url,
-        instance_id,
-        &enabled_discovered,
-        &enabled_custom,
+        &ctx.status_url,
+        &ctx.instance_id,
+        &ctx.enabled_discovered,
+        &ctx.enabled_custom,
     )
     .await
 }
 
 /// Writes a session-specific `opencode.json` to the working directory for OpenCode CLI.
-///
-/// This writes the Maestro MCP server configuration plus any enabled user MCP servers,
-/// translated to OpenCode's config format (opencode.json with `mcp` key).
 ///
 /// See write_session_mcp_config for full documentation.
 #[tauri::command]
@@ -347,50 +297,22 @@ pub async fn write_opencode_mcp_config(
     project_path: String,
     enabled_server_names: Vec<String>,
 ) -> Result<(), String> {
-    let canonical = std::fs::canonicalize(&project_path)
-        .map_err(|e| format!("Invalid project path '{}': {}", project_path, e))?
-        .to_string_lossy()
-        .into_owned();
-
-    // Register this session with the status server
-    status_server
-        .register_session(session_id, &canonical)
-        .await;
-
-    // Get the status URL and instance ID from the status server
-    let status_url = status_server.status_url();
-    let instance_id = status_server.instance_id();
-
-    // Get full server configs for enabled discovered servers
-    let all_discovered = mcp_state.get_project_servers(&canonical);
-    let enabled_discovered: Vec<_> = all_discovered
-        .into_iter()
-        .filter(|s| enabled_server_names.contains(&s.name))
-        .collect();
-
-    // Get enabled custom servers
-    let custom_servers = get_custom_mcp_servers_internal(&app)?;
-    let enabled_custom: Vec<_> = custom_servers
-        .into_iter()
-        .filter(|s| s.is_enabled)
-        .collect();
+    let ctx = prepare_mcp_session(
+        &app, &mcp_state, &status_server, &project_path, session_id, &enabled_server_names,
+    ).await?;
 
     log::info!(
-        "Writing OpenCode MCP config for session {} to {} ({} discovered + {} custom servers), status_url={}",
-        session_id,
-        working_dir,
-        enabled_discovered.len(),
-        enabled_custom.len(),
-        status_url
+        "Writing OpenCode MCP config for session {} to {} ({} discovered + {} custom servers)",
+        session_id, working_dir, ctx.enabled_discovered.len(), ctx.enabled_custom.len(),
     );
 
     mcp_config_writer::write_opencode_mcp_config(
         Path::new(&working_dir),
         session_id,
-        &status_url,
-        instance_id,
-        &enabled_discovered,
-        &enabled_custom,
+        &ctx.status_url,
+        &ctx.instance_id,
+        &ctx.enabled_discovered,
+        &ctx.enabled_custom,
     )
     .await
 }
@@ -401,12 +323,19 @@ fn get_custom_mcp_servers_internal(app: &AppHandle) -> Result<Vec<McpCustomServe
         .store(CUSTOM_MCP_SERVERS_STORE)
         .map_err(|e| e.to_string())?;
 
-    let servers = store
-        .get("servers")
+    Ok(store
+        .get(STORE_KEY_SERVERS)
         .and_then(|v| serde_json::from_value::<Vec<McpCustomServer>>(v.clone()).ok())
-        .unwrap_or_default();
+        .unwrap_or_default())
+}
 
-    Ok(servers)
+/// Opens the per-project store using the hashed project path.
+fn project_store(
+    app: &AppHandle,
+    canonical_path: &str,
+) -> Result<std::sync::Arc<tauri_plugin_store::Store<tauri::Wry>>, String> {
+    let store_name = format!("maestro-{}.json", hash_project_path(canonical_path));
+    app.store(&store_name).map_err(|e| e.to_string())
 }
 
 /// Removes a session-specific Maestro server from `.mcp.json`.
@@ -435,11 +364,7 @@ pub async fn remove_opencode_mcp_config(working_dir: String, session_id: u32) ->
 /// and potential future use.
 #[tauri::command]
 pub async fn generate_project_hash(project_path: String) -> Result<String, String> {
-    let canonical = std::fs::canonicalize(&project_path)
-        .map_err(|e| format!("Invalid project path '{}': {}", project_path, e))?
-        .to_string_lossy()
-        .into_owned();
-
+    let canonical = canonicalize_path(&project_path)?;
     Ok(StatusServer::generate_project_hash(&canonical))
 }
 
@@ -448,17 +373,32 @@ pub async fn generate_project_hash(project_path: String) -> Result<String, Strin
 /// Custom servers are stored globally (user-level) and available across all projects.
 #[tauri::command]
 pub async fn get_custom_mcp_servers(app: AppHandle) -> Result<Vec<McpCustomServer>, String> {
+    let servers = get_custom_mcp_servers_internal(&app)?;
+    log::debug!("Loaded {} custom MCP servers", servers.len());
+    Ok(servers)
+}
+
+/// Loads custom servers from the store, applies a mutation, and saves back.
+fn with_custom_servers(
+    app: &AppHandle,
+    f: impl FnOnce(&mut Vec<McpCustomServer>),
+) -> Result<(), String> {
     let store = app
         .store(CUSTOM_MCP_SERVERS_STORE)
         .map_err(|e| e.to_string())?;
 
-    let servers = store
-        .get("servers")
-        .and_then(|v| serde_json::from_value::<Vec<McpCustomServer>>(v.clone()).ok())
+    let mut servers: Vec<McpCustomServer> = store
+        .get(STORE_KEY_SERVERS)
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
-    log::debug!("Loaded {} custom MCP servers", servers.len());
-    Ok(servers)
+    f(&mut servers);
+
+    store.set(
+        STORE_KEY_SERVERS,
+        serde_json::to_value(&servers).map_err(|e| e.to_string())?,
+    );
+    store.save().map_err(|e| e.to_string())
 }
 
 /// Saves a custom MCP server configuration.
@@ -467,62 +407,25 @@ pub async fn get_custom_mcp_servers(app: AppHandle) -> Result<Vec<McpCustomServe
 /// Otherwise, the new server is added to the list.
 #[tauri::command]
 pub async fn save_custom_mcp_server(app: AppHandle, server: McpCustomServer) -> Result<(), String> {
-    let store = app
-        .store(CUSTOM_MCP_SERVERS_STORE)
-        .map_err(|e| e.to_string())?;
-
-    // Load existing servers
-    let mut servers: Vec<McpCustomServer> = store
-        .get("servers")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_default();
-
-    // Update or add the server
-    if let Some(index) = servers.iter().position(|s| s.id == server.id) {
-        servers[index] = server.clone();
-        log::debug!("Updated custom MCP server: {}", server.name);
-    } else {
-        log::debug!("Added new custom MCP server: {}", server.name);
-        servers.push(server);
-    }
-
-    // Save back to store
-    store.set(
-        "servers",
-        serde_json::to_value(&servers).map_err(|e| e.to_string())?,
-    );
-    store.save().map_err(|e| e.to_string())?;
-
-    Ok(())
+    with_custom_servers(&app, |servers| {
+        if let Some(index) = servers.iter().position(|s| s.id == server.id) {
+            log::debug!("Updated custom MCP server: {}", server.name);
+            servers[index] = server;
+        } else {
+            log::debug!("Added new custom MCP server: {}", server.name);
+            servers.push(server);
+        }
+    })
 }
 
 /// Deletes a custom MCP server by ID.
 #[tauri::command]
 pub async fn delete_custom_mcp_server(app: AppHandle, server_id: String) -> Result<(), String> {
-    let store = app
-        .store(CUSTOM_MCP_SERVERS_STORE)
-        .map_err(|e| e.to_string())?;
-
-    // Load existing servers
-    let mut servers: Vec<McpCustomServer> = store
-        .get("servers")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_default();
-
-    // Remove the server
-    let original_len = servers.len();
-    servers.retain(|s| s.id != server_id);
-
-    if servers.len() < original_len {
-        log::debug!("Deleted custom MCP server with ID: {}", server_id);
-    }
-
-    // Save back to store
-    store.set(
-        "servers",
-        serde_json::to_value(&servers).map_err(|e| e.to_string())?,
-    );
-    store.save().map_err(|e| e.to_string())?;
-
-    Ok(())
+    with_custom_servers(&app, |servers| {
+        let before = servers.len();
+        servers.retain(|s| s.id != server_id);
+        if servers.len() < before {
+            log::debug!("Deleted custom MCP server with ID: {}", server_id);
+        }
+    })
 }

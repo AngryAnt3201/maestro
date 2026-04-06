@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, OnceLock};
 
 use dashmap::DashMap;
 use serde_json::{json, Value};
@@ -30,10 +30,11 @@ fn dir_lock(dir: &Path) -> Arc<Mutex<()>> {
 /// Write content to a file atomically: write to a temp file in the same directory, then rename.
 async fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
     let parent = path.parent().ok_or("No parent directory")?;
-    let temp_path = parent.join(format!(
-        ".mcp.json.tmp.{}",
-        std::process::id()
-    ));
+    let file_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("config");
+    let temp_path = parent.join(format!(".{}.tmp.{}", file_name, std::process::id()));
 
     tokio::fs::write(&temp_path, content)
         .await
@@ -50,6 +51,13 @@ async fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Returns the cached path to the maestro-mcp-server binary.
+/// The search is performed once and the result is cached for the process lifetime.
+fn find_maestro_mcp_path() -> Option<PathBuf> {
+    static CACHED: OnceLock<Option<PathBuf>> = OnceLock::new();
+    CACHED.get_or_init(find_maestro_mcp_path_uncached).clone()
+}
+
 /// Finds the maestro-mcp-server binary in common installation locations.
 ///
 /// Searches in order:
@@ -60,7 +68,7 @@ async fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
 /// 3. Development: relative to src-tauri/target/debug or release
 /// 4. macOS Application Support (~Library/Application Support/Claude Maestro/)
 /// 5. Linux local share (~/.local/share/maestro/)
-fn find_maestro_mcp_path() -> Option<PathBuf> {
+fn find_maestro_mcp_path_uncached() -> Option<PathBuf> {
     // Determine the binary name based on platform
     #[cfg(target_os = "windows")]
     let binary_name = "maestro-mcp-server.exe";
@@ -197,7 +205,7 @@ fn custom_server_to_json(server: &McpCustomServer) -> Value {
 /// This follows the Swift pattern: ONE MCP entry per project, session ID in env vars.
 /// Each Claude instance spawns its own MCP server process with the env vars from when
 /// it read the config.
-fn should_remove_server(name: &str, _config: &Value, _session_id: u32) -> bool {
+fn should_remove_server(name: &str) -> bool {
     // Remove the single maestro-status entry (we'll add an updated one)
     if name == "maestro-status" {
         log::debug!("[MCP] should_remove_server('{}') = true (single maestro-status entry)", name);
@@ -231,43 +239,40 @@ fn should_remove_server(name: &str, _config: &Value, _session_id: u32) -> bool {
 /// This function preserves user-defined servers while removing all Maestro-related
 /// entries (they'll be replaced with the new single "maestro-status" entry).
 /// This follows the Swift pattern: ONE MCP entry per project with session ID in env.
-fn merge_with_existing(
+async fn merge_with_existing(
     mcp_path: &Path,
     new_servers: HashMap<String, Value>,
     session_id: u32,
 ) -> Result<Value, String> {
     log::debug!("[MCP] merge_with_existing: {:?} for session {}", mcp_path, session_id);
 
-    let mut final_servers: HashMap<String, Value> = if mcp_path.exists() {
-        let content = std::fs::read_to_string(mcp_path)
-            .map_err(|e| format!("Failed to read existing .mcp.json: {}", e))?;
+    let mut final_servers: HashMap<String, Value> = match tokio::fs::read_to_string(mcp_path).await {
+        Ok(content) => {
+            let existing: Value = serde_json::from_str(&content)
+                .map_err(|e| format!("Failed to parse existing .mcp.json: {}", e))?;
 
-        let existing: Value = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse existing .mcp.json: {}", e))?;
-
-        // Keep all servers EXCEPT this session's Maestro entry
-        existing
-            .get("mcpServers")
-            .and_then(|s| s.as_object())
-            .map(|obj| {
-                obj.iter()
-                    .filter(|(name, v)| {
-                        let should_remove = should_remove_server(name, v, session_id);
-                        if should_remove {
-                            log::info!(
-                                "merge_with_existing: removing session {}'s server '{}'",
-                                session_id,
-                                name
-                            );
-                        }
-                        !should_remove
-                    })
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect::<HashMap<_, _>>()
-            })
-            .unwrap_or_default()
-    } else {
-        HashMap::new()
+            existing
+                .get("mcpServers")
+                .and_then(|s| s.as_object())
+                .map(|obj| {
+                    obj.iter()
+                        .filter(|(name, _v)| {
+                            let remove = should_remove_server(name);
+                            if remove {
+                                log::info!(
+                                    "merge_with_existing: removing server '{}' for session {}",
+                                    name,
+                                    session_id,
+                                );
+                            }
+                            !remove
+                        })
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect::<HashMap<_, _>>()
+                })
+                .unwrap_or_default()
+        }
+        Err(_) => HashMap::new(),
     };
 
     // Add new servers for this session
@@ -361,7 +366,7 @@ pub async fn write_session_mcp_config(
 
     // Merge with existing .mcp.json if present (preserve user servers AND other sessions)
     let mcp_path = working_dir.join(".mcp.json");
-    let final_config = merge_with_existing(&mcp_path, mcp_servers, session_id)?;
+    let final_config = merge_with_existing(&mcp_path, mcp_servers, session_id).await?;
 
     // Write the file atomically (temp file + rename)
     let content = serde_json::to_string_pretty(&final_config)
@@ -489,7 +494,7 @@ pub async fn write_opencode_mcp_config(
 
     // Merge with existing opencode.json if present
     let opencode_path = working_dir.join("opencode.json");
-    let final_config = merge_with_opencode_existing(&opencode_path, mcp_servers, session_id)?;
+    let final_config = merge_with_opencode_existing(&opencode_path, mcp_servers).await?;
 
     // Write the file atomically
     let content = serde_json::to_string_pretty(&final_config)
@@ -507,17 +512,13 @@ pub async fn write_opencode_mcp_config(
 }
 
 /// Merges new MCP servers with an existing `opencode.json` file.
-fn merge_with_opencode_existing(
+async fn merge_with_opencode_existing(
     opencode_path: &Path,
     new_servers: HashMap<String, Value>,
-    session_id: u32,
 ) -> Result<Value, String> {
     let mut final_servers = new_servers;
 
-    if opencode_path.exists() {
-        let content = std::fs::read_to_string(opencode_path)
-            .map_err(|e| format!("Failed to read existing opencode.json: {}", e))?;
-
+    if let Ok(content) = tokio::fs::read_to_string(opencode_path).await {
         match serde_json::from_str::<serde_json::Value>(&content) {
             Ok(existing) => {
                 if let Some(existing_mcp) = existing.get("mcp").and_then(|m| m.as_object()) {
@@ -527,7 +528,7 @@ fn merge_with_opencode_existing(
                     );
 
                     for (name, config) in existing_mcp {
-                        if !name.starts_with("maestro-") {
+                        if !should_remove_server(name) {
                             final_servers.insert(name.clone(), config.clone());
                         }
                     }
@@ -550,17 +551,15 @@ fn merge_with_opencode_existing(
 /// This should be called when a session is killed to clean up the config file.
 pub async fn remove_opencode_mcp_config(working_dir: &Path, session_id: u32) -> Result<(), String> {
     let opencode_path = working_dir.join("opencode.json");
-    if !opencode_path.exists() {
-        return Ok(());
-    }
 
-    // Acquire per-directory lock
     let lock = dir_lock(working_dir);
     let _guard = lock.lock().await;
 
-    let content = tokio::fs::read_to_string(&opencode_path)
-        .await
-        .map_err(|e| format!("Failed to read opencode.json: {}", e))?;
+    let content = match tokio::fs::read_to_string(&opencode_path).await {
+        Ok(c) => c,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(format!("Failed to read opencode.json: {}", e)),
+    };
 
     let parsed: serde_json::Value = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse opencode.json: {}", e))?;
@@ -600,17 +599,15 @@ pub async fn remove_opencode_mcp_config(working_dir: &Path, session_id: u32) -> 
 /// * `session_id` - Session identifier (used for logging, cleanup removes all Maestro entries)
 pub async fn remove_session_mcp_config(working_dir: &Path, session_id: u32) -> Result<(), String> {
     let mcp_path = working_dir.join(".mcp.json");
-    if !mcp_path.exists() {
-        return Ok(());
-    }
 
-    // Acquire per-directory lock to serialize concurrent read-modify-write
     let lock = dir_lock(working_dir);
     let _guard = lock.lock().await;
 
-    let content = tokio::fs::read_to_string(&mcp_path)
-        .await
-        .map_err(|e| format!("Failed to read .mcp.json: {}", e))?;
+    let content = match tokio::fs::read_to_string(&mcp_path).await {
+        Ok(c) => c,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(format!("Failed to read .mcp.json: {}", e)),
+    };
 
     let mut config: Value = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse .mcp.json: {}", e))?;
@@ -704,8 +701,8 @@ mod tests {
         assert!(dir.path().join(".mcp.json").exists());
     }
 
-    #[test]
-    fn test_merge_preserves_user_servers_removes_all_maestro() {
+    #[tokio::test]
+    async fn test_merge_preserves_user_servers_removes_all_maestro() {
         let dir = tempdir().unwrap();
         let mcp_path = dir.path().join(".mcp.json");
 
@@ -766,7 +763,7 @@ mod tests {
             }),
         );
 
-        let result = merge_with_existing(&mcp_path, new_servers, 3).unwrap();
+        let result = merge_with_existing(&mcp_path, new_servers, 3).await.unwrap();
         let servers = result["mcpServers"].as_object().unwrap();
 
         // User server should be preserved
@@ -859,8 +856,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_merge_removes_all_legacy_formats() {
+    #[tokio::test]
+    async fn test_merge_removes_all_legacy_formats() {
         let dir = tempdir().unwrap();
         let mcp_path = dir.path().join(".mcp.json");
 
@@ -906,7 +903,7 @@ mod tests {
             }),
         );
 
-        let result = merge_with_existing(&mcp_path, new_servers, 5).unwrap();
+        let result = merge_with_existing(&mcp_path, new_servers, 5).await.unwrap();
         let servers = result["mcpServers"].as_object().unwrap();
 
         // All legacy entries should be removed

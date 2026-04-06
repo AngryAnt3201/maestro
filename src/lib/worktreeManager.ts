@@ -200,13 +200,15 @@ export async function getWorktreeForBranch(
 export async function prepareSessionWorktree(
   projectPath: string,
   branch: string | null,
-  worktreeBasePath?: string | null
+  worktreeBasePath?: string | null,
+  startPoint?: string | null
 ): Promise<WorktreePreparationResult> {
   try {
     const result = await invoke<WorktreePreparationResult>("prepare_session_worktree", {
       projectPath,
       branch,
       worktreeBasePath: worktreeBasePath ?? null,
+      startPoint: startPoint ?? null,
     });
 
     if (result.warning) {

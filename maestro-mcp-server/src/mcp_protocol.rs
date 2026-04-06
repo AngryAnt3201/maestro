@@ -245,6 +245,14 @@ impl McpServer {
         })
     }
 
+    /// Returns the project path, or an MCP error response value if not configured.
+    fn require_project_path(&self) -> Result<&str, Value> {
+        self.project_path.as_deref().ok_or_else(|| json!({
+            "content": [{ "type": "text", "text": "Error: MAESTRO_PROJECT_PATH not configured" }],
+            "isError": true
+        }))
+    }
+
     /// Handle the tools/call request.
     async fn handle_tools_call(&self, params: &Value) -> Result<Value, McpError> {
         let name = params
@@ -271,7 +279,6 @@ impl McpServer {
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
 
-                // Report status via HTTP
                 self.status_reporter
                     .report_status(state, message, needs_input_prompt)
                     .await?;
@@ -286,15 +293,12 @@ impl McpServer {
                 }))
             }
             "maestro_todos_list" => {
-                let project_path = match &self.project_path {
-                    Some(p) => p.clone(),
-                    None => return Ok(json!({
-                        "content": [{ "type": "text", "text": "Error: MAESTRO_PROJECT_PATH not configured" }],
-                        "isError": true
-                    })),
+                let project_path = match self.require_project_path() {
+                    Ok(p) => p,
+                    Err(err) => return Ok(err),
                 };
 
-                match self.status_reporter.get_todos(&project_path).await {
+                match self.status_reporter.get_todos(project_path).await {
                     Ok(todos) => {
                         let text = if todos.is_empty() {
                             "No to-do items.".to_string()
@@ -319,18 +323,15 @@ impl McpServer {
                 }
             }
             "maestro_todos_add" => {
-                let project_path = match &self.project_path {
-                    Some(p) => p.clone(),
-                    None => return Ok(json!({
-                        "content": [{ "type": "text", "text": "Error: MAESTRO_PROJECT_PATH not configured" }],
-                        "isError": true
-                    })),
+                let project_path = match self.require_project_path() {
+                    Ok(p) => p,
+                    Err(err) => return Ok(err),
                 };
 
                 let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
                 let text = arguments.get("text").and_then(|v| v.as_str()).unwrap_or("");
 
-                match self.status_reporter.add_todo(&project_path, text).await {
+                match self.status_reporter.add_todo(project_path, text).await {
                     Ok(item) => {
                         let id = item["id"].as_str().unwrap_or("?");
                         Ok(json!({
@@ -344,12 +345,9 @@ impl McpServer {
                 }
             }
             "maestro_todos_update" => {
-                let project_path = match &self.project_path {
-                    Some(p) => p.clone(),
-                    None => return Ok(json!({
-                        "content": [{ "type": "text", "text": "Error: MAESTRO_PROJECT_PATH not configured" }],
-                        "isError": true
-                    })),
+                let project_path = match self.require_project_path() {
+                    Ok(p) => p,
+                    Err(err) => return Ok(err),
                 };
 
                 let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
@@ -357,7 +355,7 @@ impl McpServer {
                 let completed = arguments.get("completed").and_then(|v| v.as_bool());
                 let text = arguments.get("text").and_then(|v| v.as_str());
 
-                match self.status_reporter.update_todo(&project_path, id, completed, text).await {
+                match self.status_reporter.update_todo(project_path, id, completed, text).await {
                     Ok(item) => {
                         let item_text = item["text"].as_str().unwrap_or("?");
                         let is_completed = item["completed"].as_bool().unwrap_or(false);

@@ -23,9 +23,10 @@ import { useShallow } from "zustand/react/shallow";
 import { QuickActionPills } from "./QuickActionPills";
 import { type AIProvider, type SessionStatus, TerminalHeader } from "./TerminalHeader";
 
-const FIT_SETTLE_DELAY_MS = 48;
-const FIT_RETRY_DELAY_MS = 80;
+const FIT_SETTLE_DELAY_MS = 150;
+const FIT_RETRY_DELAY_MS = 120;
 const MAX_FIT_RETRIES = 4;
+const PTY_RESIZE_DEBOUNCE_MS = 80;
 
 /**
  * Props for {@link TerminalView}.
@@ -42,6 +43,7 @@ interface TerminalViewProps {
   status?: SessionStatus;
   isFocused?: boolean;
   isActive?: boolean;
+  isDragging?: boolean;
   onFocus?: () => void;
   onKill: (sessionId: number) => void;
   terminalCount?: number;
@@ -123,6 +125,7 @@ export const TerminalView = memo(function TerminalView({
   status = "idle",
   isFocused = false,
   isActive = true,
+  isDragging = false,
   onFocus,
   onKill,
   terminalCount = 1,
@@ -188,6 +191,7 @@ export const TerminalView = memo(function TerminalView({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const scheduleFitRef = useRef<(() => void) | null>(null);
   const isAtBottomRef = useRef(true);
+  const isDraggingRef = useRef(isDragging);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   // Quick actions manager modal state
@@ -248,6 +252,16 @@ export const TerminalView = memo(function TerminalView({
       scheduleFitRef.current?.();
     }
   }, [fontSize, fontFamily, lineHeight, zoomLevel, getEffectiveFontFamily, getEffectiveFontSize]);
+
+  // Keep isDraggingRef in sync and refit when drag ends so TUIs only see the
+  // final stable dimensions (all intermediate ResizeObserver events are suppressed).
+  useEffect(() => {
+    const wasDragging = isDraggingRef.current;
+    isDraggingRef.current = isDragging;
+    if (wasDragging && !isDragging) {
+      scheduleFitRef.current?.();
+    }
+  }, [isDragging]);
 
   // Structural grid changes can briefly detach/reparent terminal DOM nodes.
   // Refit after those layout changes settle so TUIs only see the final size.
@@ -334,11 +348,20 @@ export const TerminalView = memo(function TerminalView({
 
     const queueFit = (remainingRetries = MAX_FIT_RETRIES) => {
       cancelPendingFit();
+
+      // Suppress fits while divider is being dragged — the fit will be
+      // triggered once when the drag ends (via the isDragging effect).
+      if (isDraggingRef.current) return;
+
       fitTimerId = setTimeout(() => {
         fitTimerId = null;
         fitRafId = requestAnimationFrame(() => {
           fitRafId = null;
           if (disposed || !term || !fitAddon) return;
+
+          // Re-check drag state in case it started during the settle delay
+          if (isDraggingRef.current) return;
+
           if (!container.isConnected) {
             if (remainingRetries > 0) {
               queueFit(remainingRetries - 1);
@@ -583,8 +606,16 @@ export const TerminalView = memo(function TerminalView({
         writeStdin(sessionId, data).catch(console.error);
       });
 
+      // Debounce PTY resize so the child process only receives one SIGWINCH
+      // with the final stable dimensions, preventing TUI corruption from
+      // rapid consecutive resize signals.
+      let ptyResizeTimerId: ReturnType<typeof setTimeout> | null = null;
       resizeDisposable = term.onResize(({ rows, cols }) => {
-        resizePty(sessionId, rows, cols).catch(console.error);
+        if (ptyResizeTimerId !== null) clearTimeout(ptyResizeTimerId);
+        ptyResizeTimerId = setTimeout(() => {
+          ptyResizeTimerId = null;
+          resizePty(sessionId, rows, cols).catch(console.error);
+        }, PTY_RESIZE_DEBOUNCE_MS);
       });
 
       // Handle special keyboard shortcuts
