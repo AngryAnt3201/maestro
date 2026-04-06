@@ -23,6 +23,10 @@ import { useShallow } from "zustand/react/shallow";
 import { QuickActionPills } from "./QuickActionPills";
 import { type AIProvider, type SessionStatus, TerminalHeader } from "./TerminalHeader";
 
+const FIT_SETTLE_DELAY_MS = 48;
+const FIT_RETRY_DELAY_MS = 80;
+const MAX_FIT_RETRIES = 4;
+
 /**
  * Props for {@link TerminalView}.
  * @property sessionId - Backend PTY session ID used to route stdin/stdout and resize events.
@@ -182,6 +186,7 @@ export const TerminalView = memo(function TerminalView({
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const scheduleFitRef = useRef<(() => void) | null>(null);
   const isAtBottomRef = useRef(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
@@ -239,20 +244,17 @@ export const TerminalView = memo(function TerminalView({
       termRef.current.options.fontFamily = builtFontFamily;
       termRef.current.options.lineHeight = lineHeight;
 
-      // Refit terminal to recalculate cell dimensions
-      requestAnimationFrame(() => {
-        const wasAtBottom = isAtBottomRef.current;
-        try {
-          fitAddonRef.current?.fit();
-        } catch {
-          // Ignore fit errors during transition
-        }
-        if (wasAtBottom) {
-          termRef.current?.scrollToBottom();
-        }
-      });
+      // Refit after the updated font metrics have propagated through layout.
+      scheduleFitRef.current?.();
     }
   }, [fontSize, fontFamily, lineHeight, zoomLevel, getEffectiveFontFamily, getEffectiveFontSize]);
+
+  // Structural grid changes can briefly detach/reparent terminal DOM nodes.
+  // Refit after those layout changes settle so TUIs only see the final size.
+  useEffect(() => {
+    if (activeTab !== "terminal") return;
+    scheduleFitRef.current?.();
+  }, [terminalCount, isZoomed, activeTab]);
 
   /**
    * Immediately removes the terminal from UI (optimistic update),
@@ -297,6 +299,8 @@ export const TerminalView = memo(function TerminalView({
     let writeBuffer: string[] = [];
     let rafId: number | null = null;
     let fallbackTimerId: ReturnType<typeof setTimeout> | null = null;
+    let fitTimerId: ReturnType<typeof setTimeout> | null = null;
+    let fitRafId: number | null = null;
 
     // === Activity-based status detection ===
     let activityWorkingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -315,6 +319,63 @@ export const TerminalView = memo(function TerminalView({
     const cancelPendingFlush = () => {
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
       if (fallbackTimerId !== null) { clearTimeout(fallbackTimerId); fallbackTimerId = null; }
+    };
+
+    const cancelPendingFit = () => {
+      if (fitTimerId !== null) {
+        clearTimeout(fitTimerId);
+        fitTimerId = null;
+      }
+      if (fitRafId !== null) {
+        cancelAnimationFrame(fitRafId);
+        fitRafId = null;
+      }
+    };
+
+    const queueFit = (remainingRetries = MAX_FIT_RETRIES) => {
+      cancelPendingFit();
+      fitTimerId = setTimeout(() => {
+        fitTimerId = null;
+        fitRafId = requestAnimationFrame(() => {
+          fitRafId = null;
+          if (disposed || !term || !fitAddon) return;
+          if (!container.isConnected) {
+            if (remainingRetries > 0) {
+              queueFit(remainingRetries - 1);
+            }
+            return;
+          }
+
+          const { width, height } = container.getBoundingClientRect();
+          if (width === 0 || height === 0) {
+            if (remainingRetries > 0) {
+              fitTimerId = setTimeout(() => {
+                fitTimerId = null;
+                queueFit(remainingRetries - 1);
+              }, FIT_RETRY_DELAY_MS);
+            }
+            return;
+          }
+
+          const wasAtBottom = isAtBottomRef.current;
+          try {
+            fitAddon.fit();
+          } catch {
+            if (remainingRetries > 0) {
+              queueFit(remainingRetries - 1);
+            }
+            return;
+          }
+
+          if (wasAtBottom) {
+            term.scrollToBottom();
+          }
+        });
+      }, FIT_SETTLE_DELAY_MS);
+    };
+
+    scheduleFitRef.current = () => {
+      queueFit();
     };
 
     const flushBuffer = () => {
@@ -398,13 +459,7 @@ export const TerminalView = memo(function TerminalView({
       termRef.current = term;
       fitAddonRef.current = fitAddon;
 
-      requestAnimationFrame(() => {
-        try {
-          fitAddon?.fit();
-        } catch {
-          // Container may not be sized yet
-        }
-      });
+      queueFit();
 
       // --- Sticky scroll-to-bottom ---
       const checkIsAtBottom = (): boolean => {
@@ -664,22 +719,13 @@ export const TerminalView = memo(function TerminalView({
         });
 
       resizeObserver = new ResizeObserver((entries) => {
-        requestAnimationFrame(() => {
-          if (!disposed && fitAddon) {
-            const entry = entries[0];
-            const { width, height } = entry.contentRect;
-            if (width === 0 || height === 0) return; // Skip fit when hidden
-            const wasAtBottom = isAtBottomRef.current;
-            try {
-              fitAddon.fit();
-            } catch {
-              // Container may have zero dimensions during layout transitions
-            }
-            if (wasAtBottom) {
-              term?.scrollToBottom();
-            }
-          }
-        });
+        const entry = entries[0];
+        const { width, height } = entry.contentRect;
+        if (width === 0 || height === 0) {
+          queueFit();
+          return;
+        }
+        queueFit();
       });
       resizeObserver.observe(container);
     };
@@ -693,6 +739,8 @@ export const TerminalView = memo(function TerminalView({
     return () => {
       disposed = true;
       cancelPendingFlush();
+      cancelPendingFit();
+      scheduleFitRef.current = null;
       if (activityWorkingTimer) clearTimeout(activityWorkingTimer);
       if (activityIdleTimer) clearTimeout(activityIdleTimer);
       // Flush remaining buffered output before disposal
