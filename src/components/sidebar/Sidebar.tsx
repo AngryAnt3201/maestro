@@ -32,7 +32,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { type AiMode, type BackendSessionStatus, useSessionStore } from "@/stores/useSessionStore";
 import { useGitStore } from "@/stores/useGitStore";
@@ -63,7 +63,6 @@ type SidebarTab = "config" | "processes";
 
 interface SidebarProps {
   collapsed?: boolean;
-  onCollapse?: () => void;
   theme?: "dark" | "light";
   onToggleTheme?: () => void;
 }
@@ -73,11 +72,6 @@ export const cardClass =
   "sidebar-card-link rounded-lg border border-maestro-border/60 bg-maestro-card p-3 overflow-hidden shadow-[0_1px_4px_rgb(0_0_0/0.15),0_0_0_1px_rgb(255_255_255/0.03)_inset] transition-shadow hover:shadow-[0_2px_8px_rgb(0_0_0/0.25),0_0_0_1px_rgb(255_255_255/0.05)_inset]";
 
 const divider = <div className="h-px bg-maestro-border/30 my-1" />;
-
-const SIDEBAR_MIN_WIDTH = 180;
-const SIDEBAR_MAX_WIDTH = 320;
-const SIDEBAR_COLLAPSE_THRESHOLD = 60;
-const SIDEBAR_WIDTH_STEP = 4;
 
 const STATUS_DOT_CLASS: Record<BackendSessionStatus, string> = {
   Starting: "bg-maestro-orange",
@@ -105,100 +99,17 @@ const STATUS_LABEL: Record<BackendSessionStatus, string> = {
 /*  SIDEBAR ROOT                                                     */
 /* ================================================================ */
 
-export function Sidebar({ collapsed, onCollapse, theme, onToggleTheme }: SidebarProps) {
+export function Sidebar({ collapsed, theme, onToggleTheme }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<SidebarTab>("config");
-  const [width, setWidth] = useState(240);
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef<{ x: number; w: number } | null>(null);
-  const sidebarWidthClass = collapsed ? "w-0" : `sidebar-w-${width}`;
-
-  const handleDragStart = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      setIsDragging(true);
-      dragStartRef.current = { x: e.clientX, w: width };
-    },
-    [width],
-  );
-
-  const clampWidth = useCallback((value: number) => {
-    const clamped = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, value));
-    const snapped = Math.round(clamped / SIDEBAR_WIDTH_STEP) * SIDEBAR_WIDTH_STEP;
-    return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, snapped));
-  }, []);
-
-  const handleResizeKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      let next = width;
-      const smallStep = 8;
-      const largeStep = 24;
-
-      switch (e.key) {
-        case "ArrowLeft":
-          next = width - smallStep;
-          break;
-        case "ArrowRight":
-          next = width + smallStep;
-          break;
-        case "PageDown":
-          next = width - largeStep;
-          break;
-        case "PageUp":
-          next = width + largeStep;
-          break;
-        case "Home":
-          next = SIDEBAR_MIN_WIDTH;
-          break;
-        case "End":
-          next = SIDEBAR_MAX_WIDTH;
-          break;
-        default:
-          return;
-      }
-
-      e.preventDefault();
-      if (next < SIDEBAR_COLLAPSE_THRESHOLD) {
-        onCollapse?.();
-        return;
-      }
-      setWidth(clampWidth(next));
-    },
-    [width, onCollapse, clampWidth],
-  );
-
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const onMove = (e: MouseEvent) => {
-      if (!dragStartRef.current) return;
-      const raw = dragStartRef.current.w + (e.clientX - dragStartRef.current.x);
-      if (raw < SIDEBAR_COLLAPSE_THRESHOLD) {
-        setIsDragging(false);
-        onCollapse?.();
-        return;
-      }
-      setWidth(clampWidth(raw));
-    };
-
-    const onUp = () => setIsDragging(false);
-
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    return () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-  }, [isDragging, onCollapse, clampWidth]);
 
   return (
-    // Use a class-based width to avoid inline styles (CSP-friendly).
     <aside
-      className={`theme-transition no-select relative flex h-full flex-col border-r border-maestro-border bg-maestro-surface ${sidebarWidthClass} ${
-        isDragging ? "" : "transition-all duration-200 ease-out"
-      } ${collapsed ? "overflow-hidden border-r-0 opacity-0" : "opacity-100"}`}
+      className={`theme-transition no-select relative flex h-full w-full min-w-0 flex-col overflow-hidden border-r border-maestro-border bg-maestro-surface ${
+        collapsed ? "overflow-hidden border-r-0 opacity-0" : "opacity-100 transition-all duration-200 ease-out"
+      }`}
     >
       {/* Tab switcher */}
-      <div className="flex shrink-0 border-b border-maestro-border">
+      <div className="flex min-w-0 shrink-0 border-b border-maestro-border">
         <button
           type="button"
           onClick={() => setActiveTab("config")}
@@ -226,7 +137,7 @@ export function Sidebar({ collapsed, onCollapse, theme, onToggleTheme }: Sidebar
       </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto px-2.5 py-3">
+      <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2.5 py-3">
         {activeTab === "config" ? (
           <ConfigTab theme={theme} onToggleTheme={onToggleTheme} />
         ) : (
@@ -236,24 +147,6 @@ export function Sidebar({ collapsed, onCollapse, theme, onToggleTheme }: Sidebar
 
       {/* Tamagotchi widget - fixed footer */}
       {!collapsed && <Tamagotchi />}
-
-      {/* Drag handle */}
-      {!collapsed && (
-        // biome-ignore lint/a11y/useSemanticElements: Vertical resizer requires interactive div for pointer/keyboard handling.
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-valuemin={SIDEBAR_MIN_WIDTH}
-          aria-valuemax={SIDEBAR_MAX_WIDTH}
-          aria-valuenow={Math.round(width)}
-          aria-valuetext={`${Math.round(width)} pixels`}
-          tabIndex={0}
-          aria-label="Resize sidebar"
-          className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-maestro-accent/30 active:bg-maestro-accent/40"
-          onMouseDown={handleDragStart}
-          onKeyDown={handleResizeKeyDown}
-        />
-      )}
     </aside>
   );
 }

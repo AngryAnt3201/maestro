@@ -5,6 +5,7 @@ import { killSession } from "@/lib/terminal";
 import { useOpenProject } from "@/lib/useOpenProject";
 import { useFDAStore } from "@/stores/useFDAStore";
 import { useSessionStore } from "@/stores/useSessionStore";
+import { useLayoutStore } from "@/stores/useLayoutStore";
 import { useWorkspaceStore } from "@/stores/useWorkspaceStore";
 import { useTerminalSettingsStore } from "./stores/useTerminalSettingsStore";
 import { useAppKeyboard } from "./hooks/useAppKeyboard";
@@ -23,6 +24,14 @@ import { ErrorBoundary } from "./components/shared/ErrorBoundary";
 import { Sidebar } from "./components/sidebar/Sidebar";
 
 const DEFAULT_SESSION_COUNT = 6;
+const SIDEBAR_MIN_WIDTH = 180;
+const SIDEBAR_MAX_WIDTH = 320;
+const SIDEBAR_COLLAPSE_THRESHOLD = 60;
+const SIDEBAR_WIDTH_STEP = 4;
+const RIGHT_PANEL_MIN_WIDTH = 200;
+const RIGHT_PANEL_MAX_WIDTH = SIDEBAR_MAX_WIDTH * 2;
+const RIGHT_PANEL_COLLAPSE_THRESHOLD = 60;
+const RIGHT_PANEL_WIDTH_STEP = 4;
 
 type Theme = "dark" | "light";
 
@@ -47,7 +56,17 @@ function App() {
   const retryAfterFDAGrant = useFDAStore((s) => s.retryAfterGrant);
   const multiProjectRef = useRef<MultiProjectViewHandle>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const sidebarWidth = useLayoutStore((s) => s.sidebarWidth);
+  const setSidebarWidth = useLayoutStore((s) => s.setSidebarWidth);
+  const rightPanelWidth = useLayoutStore((s) => s.rightPanelWidth);
+  const setRightPanelWidth = useLayoutStore((s) => s.setRightPanelWidth);
+  const rightPanelOpen = useLayoutStore((s) => s.rightPanelOpen);
+  const toggleRightPanel = useLayoutStore((s) => s.toggleRightPanel);
+  const setRightPanelOpen = useLayoutStore((s) => s.setRightPanelOpen);
+  const [isSidebarDragging, setIsSidebarDragging] = useState(false);
+  const sidebarDragStartRef = useRef<{ x: number; w: number } | null>(null);
+  const [isRightPanelDragging, setIsRightPanelDragging] = useState(false);
+  const rightPanelDragStartRef = useRef<{ x: number; w: number } | null>(null);
   const [sessionCounts, setSessionCounts] = useState<Map<string, { slotCount: number; launchedCount: number }>>(new Map());
   const [isStoppingAll, setIsStoppingAll] = useState(false);
   const [currentBranch, setCurrentBranch] = useState<string | undefined>(undefined);
@@ -219,6 +238,178 @@ function App() {
     });
   }, []);
 
+  const clampSidebarWidth = useCallback((value: number) => {
+    const clamped = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, value));
+    const snapped = Math.round(clamped / SIDEBAR_WIDTH_STEP) * SIDEBAR_WIDTH_STEP;
+    return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, snapped));
+  }, []);
+
+  const handleSidebarResizeStart = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      sidebarDragStartRef.current = { x: e.clientX, w: sidebarWidth };
+      setIsSidebarDragging(true);
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+    },
+    [sidebarWidth],
+  );
+
+  const handleSidebarResizeKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      let next = sidebarWidth;
+      const smallStep = 8;
+      const largeStep = 24;
+
+      switch (e.key) {
+        case "ArrowLeft":
+          next = sidebarWidth - smallStep;
+          break;
+        case "ArrowRight":
+          next = sidebarWidth + smallStep;
+          break;
+        case "PageDown":
+          next = sidebarWidth - largeStep;
+          break;
+        case "PageUp":
+          next = sidebarWidth + largeStep;
+          break;
+        case "Home":
+          next = SIDEBAR_MIN_WIDTH;
+          break;
+        case "End":
+          next = SIDEBAR_MAX_WIDTH;
+          break;
+        default:
+          return;
+      }
+
+      e.preventDefault();
+      if (next < SIDEBAR_COLLAPSE_THRESHOLD) {
+        setSidebarOpen(false);
+        return;
+      }
+      setSidebarWidth(clampSidebarWidth(next));
+    },
+    [sidebarWidth, clampSidebarWidth, setSidebarWidth],
+  );
+
+  useEffect(() => {
+    if (!isSidebarDragging) return;
+
+    const onMove = (e: PointerEvent) => {
+      if (!sidebarDragStartRef.current) return;
+      const raw = sidebarDragStartRef.current.w + (e.clientX - sidebarDragStartRef.current.x);
+      if (raw < SIDEBAR_COLLAPSE_THRESHOLD) {
+        setSidebarOpen(false);
+        setIsSidebarDragging(false);
+        sidebarDragStartRef.current = null;
+        return;
+      }
+      setSidebarWidth(clampSidebarWidth(raw));
+    };
+
+    const onUp = () => {
+      setIsSidebarDragging(false);
+      sidebarDragStartRef.current = null;
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [isSidebarDragging, clampSidebarWidth, setSidebarWidth]);
+
+  const clampRightPanelWidth = useCallback((value: number) => {
+    const clamped = Math.min(RIGHT_PANEL_MAX_WIDTH, Math.max(RIGHT_PANEL_MIN_WIDTH, value));
+    const snapped = Math.round(clamped / RIGHT_PANEL_WIDTH_STEP) * RIGHT_PANEL_WIDTH_STEP;
+    return Math.min(RIGHT_PANEL_MAX_WIDTH, Math.max(RIGHT_PANEL_MIN_WIDTH, snapped));
+  }, []);
+
+  const handleRightPanelResizeStart = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      rightPanelDragStartRef.current = { x: e.clientX, w: rightPanelWidth };
+      setIsRightPanelDragging(true);
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+    },
+    [rightPanelWidth],
+  );
+
+  const handleRightPanelResizeKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      let next = rightPanelWidth;
+      const smallStep = 8;
+      const largeStep = 24;
+
+      switch (e.key) {
+        case "ArrowLeft":
+          next = rightPanelWidth + smallStep;
+          break;
+        case "ArrowRight":
+          next = rightPanelWidth - smallStep;
+          break;
+        case "PageUp":
+          next = rightPanelWidth + largeStep;
+          break;
+        case "PageDown":
+          next = rightPanelWidth - largeStep;
+          break;
+        case "Home":
+          next = RIGHT_PANEL_MAX_WIDTH;
+          break;
+        case "End":
+          next = RIGHT_PANEL_MIN_WIDTH;
+          break;
+        default:
+          return;
+      }
+
+      e.preventDefault();
+      if (next < RIGHT_PANEL_COLLAPSE_THRESHOLD) {
+        setRightPanelOpen(false);
+        return;
+      }
+      setRightPanelWidth(clampRightPanelWidth(next));
+    },
+    [rightPanelWidth, clampRightPanelWidth, setRightPanelOpen, setRightPanelWidth],
+  );
+
+  useEffect(() => {
+    if (!isRightPanelDragging) return;
+
+    const onMove = (e: PointerEvent) => {
+      if (!rightPanelDragStartRef.current) return;
+      const raw = rightPanelDragStartRef.current.w - (e.clientX - rightPanelDragStartRef.current.x);
+      if (raw < RIGHT_PANEL_COLLAPSE_THRESHOLD) {
+        setRightPanelOpen(false);
+        setIsRightPanelDragging(false);
+        rightPanelDragStartRef.current = null;
+        return;
+      }
+      setRightPanelWidth(clampRightPanelWidth(raw));
+    };
+
+    const onUp = () => {
+      setIsRightPanelDragging(false);
+      rightPanelDragStartRef.current = null;
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [isRightPanelDragging, clampRightPanelWidth, setRightPanelOpen, setRightPanelWidth]);
+
   const macTitleBarInset =
     isMac() && macTitleBarPadding ? `${MAC_TITLE_BAR_INSET_PX}px` : "0";
 
@@ -237,19 +428,49 @@ function App() {
         sidebarOpen={sidebarOpen}
         onReorderTab={reorderTabs}
         onMoveTab={moveTab}
-        onToggleRightPanel={() => setRightPanelOpen((prev) => !prev)}
+        onToggleRightPanel={toggleRightPanel}
         rightPanelOpen={rightPanelOpen}
       />
 
       {/* Main area: sidebar + content + right panel */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar — below project tabs */}
-        <Sidebar
-          collapsed={!sidebarOpen}
-          onCollapse={() => setSidebarOpen(false)}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-        />
+        <div
+          className="relative shrink-0 overflow-visible"
+          style={{
+            width: sidebarOpen ? sidebarWidth : 0,
+            minWidth: sidebarOpen ? sidebarWidth : 0,
+            flexBasis: sidebarOpen ? sidebarWidth : 0,
+            maxWidth: sidebarOpen ? sidebarWidth : 0,
+          }}
+        >
+          <Sidebar
+            collapsed={!sidebarOpen}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+          />
+          {sidebarOpen && (
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-valuemin={SIDEBAR_MIN_WIDTH}
+              aria-valuemax={SIDEBAR_MAX_WIDTH}
+              aria-valuenow={Math.round(sidebarWidth)}
+              aria-valuetext={`${Math.round(sidebarWidth)} pixels`}
+              tabIndex={0}
+              aria-label="Resize sidebar"
+              className="absolute -right-1.5 top-0 z-50 h-full w-3 cursor-col-resize touch-none"
+              onPointerDown={handleSidebarResizeStart}
+              onKeyDown={handleSidebarResizeKeyDown}
+            >
+              <div
+                className={`absolute left-1/2 top-0 h-full w-px -translate-x-1/2 ${
+                  isSidebarDragging ? "bg-maestro-accent" : "bg-maestro-border/70"
+                }`}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Center column: content + bottom bar */}
         <div className="flex flex-1 flex-col overflow-hidden">
@@ -309,26 +530,56 @@ function App() {
         </div>
 
         {/* Right panel */}
-        <RightPanel
-          collapsed={!rightPanelOpen}
-          onCollapse={() => setRightPanelOpen(false)}
-          branchName={currentBranch}
-          repoPath={activeTab ? activeTab.projectPath : undefined}
-          onBranchChanged={(newBranch) => {
-            setCurrentBranch(newBranch);
-            multiProjectRef.current?.refreshBranchesInActiveProject();
+        <div
+          className="relative shrink-0 overflow-visible"
+          style={{
+            width: rightPanelOpen ? rightPanelWidth : 0,
+            minWidth: rightPanelOpen ? rightPanelWidth : 0,
+            flexBasis: rightPanelOpen ? rightPanelWidth : 0,
+            maxWidth: rightPanelOpen ? rightPanelWidth : 0,
           }}
-          currentBranch={currentBranch}
-          onFocusSession={(sessionId) => {
-            multiProjectRef.current?.focusSessionInActiveProject(sessionId);
-          }}
-          onLaunchSession={(branch, worktreePath) => {
-            if (activeTab && !activeTabSessionsLaunched) {
-              setSessionsLaunched(activeTab.id, true);
-            }
-            multiProjectRef.current?.addSessionWithConfigToActiveProject(branch, worktreePath);
-          }}
-        />
+        >
+          {rightPanelOpen && (
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
+              aria-valuemax={RIGHT_PANEL_MAX_WIDTH}
+              aria-valuenow={Math.round(rightPanelWidth)}
+              aria-valuetext={`${Math.round(rightPanelWidth)} pixels`}
+              tabIndex={0}
+              aria-label="Resize right panel"
+              className="absolute -left-1.5 top-0 z-50 h-full w-3 cursor-col-resize touch-none"
+              onPointerDown={handleRightPanelResizeStart}
+              onKeyDown={handleRightPanelResizeKeyDown}
+            >
+              <div
+                className={`absolute left-1/2 top-0 h-full w-px -translate-x-1/2 ${
+                  isRightPanelDragging ? "bg-maestro-accent" : "bg-maestro-border/70"
+                }`}
+              />
+            </div>
+          )}
+          <RightPanel
+            collapsed={!rightPanelOpen}
+            branchName={currentBranch}
+            repoPath={activeTab ? activeTab.projectPath : undefined}
+            onBranchChanged={(newBranch) => {
+              setCurrentBranch(newBranch);
+              multiProjectRef.current?.refreshBranchesInActiveProject();
+            }}
+            currentBranch={currentBranch}
+            onFocusSession={(sessionId) => {
+              multiProjectRef.current?.focusSessionInActiveProject(sessionId);
+            }}
+            onLaunchSession={(branch, worktreePath) => {
+              if (activeTab && !activeTabSessionsLaunched) {
+                setSessionsLaunched(activeTab.id, true);
+              }
+              multiProjectRef.current?.addSessionWithConfigToActiveProject(branch, worktreePath);
+            }}
+          />
+        </div>
       </div>
 
       {/* FDA Dialog for macOS TCC-protected paths */}

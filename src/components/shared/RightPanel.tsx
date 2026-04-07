@@ -9,7 +9,7 @@ import {
   RefreshCw,
   Terminal,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { GraphNode } from "@/lib/graphLayout";
 import { useGitStore } from "@/stores/useGitStore";
 import { useGitHubStore } from "@/stores/useGitHubStore";
@@ -29,7 +29,6 @@ type RightPanelTab = "status" | "git" | "todo";
 
 interface RightPanelProps {
   collapsed: boolean;
-  onCollapse: () => void;
   branchName?: string;
   repoPath?: string;
   onBranchChanged?: (newBranch: string) => void;
@@ -38,14 +37,8 @@ interface RightPanelProps {
   onLaunchSession?: (branch: string, worktreePath: string) => void;
 }
 
-const PANEL_MIN_WIDTH = 200;
-const PANEL_MAX_WIDTH = 560;
-const PANEL_COLLAPSE_THRESHOLD = 60;
-const PANEL_WIDTH_STEP = 4;
-
 export function RightPanel({
   collapsed,
-  onCollapse,
   branchName,
   repoPath,
   onBranchChanged,
@@ -54,10 +47,6 @@ export function RightPanel({
   onLaunchSession,
 }: RightPanelProps) {
   const [activeTab, setActiveTab] = useState<RightPanelTab>("status");
-  const [width, setWidth] = useState(308);
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef<{ x: number; w: number } | null>(null);
-  const panelWidthClass = collapsed ? "w-0" : `rpanel-w-${width}`;
 
   // ── Branch selector state (from TopBar) ──
   const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
@@ -88,88 +77,6 @@ export function RightPanel({
     clearSelectedIssue,
     clearSelectedDiscussion,
   } = useGitHubStore();
-
-  // ── Resize logic (mirrored from Sidebar, drag direction inverted) ──
-
-  const clampWidth = useCallback((value: number) => {
-    const clamped = Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, value));
-    const snapped = Math.round(clamped / PANEL_WIDTH_STEP) * PANEL_WIDTH_STEP;
-    return Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, snapped));
-  }, []);
-
-  const handleDragStart = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      setIsDragging(true);
-      dragStartRef.current = { x: e.clientX, w: width };
-    },
-    [width],
-  );
-
-  const handleResizeKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      let next = width;
-      const smallStep = 8;
-      const largeStep = 24;
-
-      switch (e.key) {
-        // Inverted: ArrowLeft = wider, ArrowRight = narrower
-        case "ArrowLeft":
-          next = width + smallStep;
-          break;
-        case "ArrowRight":
-          next = width - smallStep;
-          break;
-        case "PageUp":
-          next = width + largeStep;
-          break;
-        case "PageDown":
-          next = width - largeStep;
-          break;
-        case "Home":
-          next = PANEL_MAX_WIDTH;
-          break;
-        case "End":
-          next = PANEL_MIN_WIDTH;
-          break;
-        default:
-          return;
-      }
-
-      e.preventDefault();
-      if (next < PANEL_COLLAPSE_THRESHOLD) {
-        onCollapse();
-        return;
-      }
-      setWidth(clampWidth(next));
-    },
-    [width, onCollapse, clampWidth],
-  );
-
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const onMove = (e: MouseEvent) => {
-      if (!dragStartRef.current) return;
-      // Inverted: dragging left = wider
-      const raw = dragStartRef.current.w - (e.clientX - dragStartRef.current.x);
-      if (raw < PANEL_COLLAPSE_THRESHOLD) {
-        setIsDragging(false);
-        onCollapse();
-        return;
-      }
-      setWidth(clampWidth(raw));
-    };
-
-    const onUp = () => setIsDragging(false);
-
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    return () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-  }, [isDragging, onCollapse, clampWidth]);
 
   // ── Branch selector logic (from TopBar) ──
 
@@ -346,9 +253,9 @@ export function RightPanel({
 
   return (
     <aside
-      className={`theme-transition no-select relative flex h-full flex-col border-l border-maestro-border bg-maestro-surface ${panelWidthClass} ${
-        isDragging ? "" : "transition-all duration-200 ease-out"
-      } ${collapsed ? "overflow-hidden border-l-0 opacity-0" : "opacity-100"}`}
+      className={`theme-transition no-select relative flex h-full w-full min-w-0 flex-col overflow-hidden border-l border-maestro-border bg-maestro-surface ${
+        collapsed ? "overflow-hidden border-l-0 opacity-0" : "opacity-100 transition-all duration-200 ease-out"
+      }`}
     >
       {/* Top-level tab switcher (Status / Git) */}
       <div className="flex shrink-0 border-b border-maestro-border">
@@ -455,23 +362,6 @@ export function RightPanel({
         />
       )}
 
-      {/* Drag handle on left edge */}
-      {!collapsed && (
-        // biome-ignore lint/a11y/useSemanticElements: Vertical resizer requires interactive div for pointer/keyboard handling.
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-valuemin={PANEL_MIN_WIDTH}
-          aria-valuemax={PANEL_MAX_WIDTH}
-          aria-valuenow={Math.round(width)}
-          aria-valuetext={`${Math.round(width)} pixels`}
-          tabIndex={0}
-          aria-label="Resize right panel"
-          className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-maestro-accent/30 active:bg-maestro-accent/40"
-          onMouseDown={handleDragStart}
-          onKeyDown={handleResizeKeyDown}
-        />
-      )}
     </aside>
   );
 }
