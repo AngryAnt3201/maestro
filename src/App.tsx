@@ -13,7 +13,6 @@ import { useAppKeyboard } from "./hooks/useAppKeyboard";
 import { useSwipeNavigation } from "./hooks/useSwipeNavigation";
 import { useUpdateStore } from "./stores/useUpdateStore";
 import { initActivityListener, stopActivityListener } from "./stores/useActivityStore";
-import { initClaudeSessionUuidListener } from "./stores/useSessionStore";
 import { UpdateNotification } from "./components/update/UpdateNotification";
 import { GitGraphPanel } from "./components/git/GitGraphPanel";
 import { BottomBar } from "./components/shared/BottomBar";
@@ -133,9 +132,6 @@ function App() {
   useEffect(() => {
     initActivityListener().catch((err) => {
       console.error("Failed to initialize activity listener:", err);
-    });
-    initClaudeSessionUuidListener().catch((err) => {
-      console.error("Failed to initialize Claude session UUID listener:", err);
     });
     return () => {
       stopActivityListener();

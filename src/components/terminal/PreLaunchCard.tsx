@@ -29,7 +29,6 @@ import { OpenCodeIcon, type IconComponent } from "@/components/icons";
 import type { BranchWithWorktreeStatus } from "@/lib/git";
 import type { McpServerConfig } from "@/lib/mcp";
 import type { PluginConfig, SkillConfig } from "@/lib/plugins";
-import { removeSessionDirs } from "@/lib/sessionDirs";
 import { listClaudeSessions, deleteClaudeSession, type ClaudeSessionInfo } from "@/lib/terminal";
 import type { AiMode } from "@/stores/useSessionStore";
 import type { RepositoryInfo, WorkspaceType } from "@/stores/useWorkspaceStore";
@@ -1527,7 +1526,6 @@ export function PreLaunchCard({
                         e.stopPropagation();
                         if (isSelected) onResumeSessionChange(null);
                         deleteClaudeSession(selectedRepoPath || projectPath, session.session_id).then(() => {
-                          removeSessionDirs(session.session_id).catch(console.error);
                           setClaudeSessions((prev) => prev.filter((s) => s.session_id !== session.session_id));
                         });
                       }}

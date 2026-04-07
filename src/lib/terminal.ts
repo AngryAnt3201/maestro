@@ -130,8 +130,6 @@ export interface SessionConfig {
   status: string;
   worktree_path: string | null;
   project_path: string;
-  /** Additional directories added to this session via /add-dir. */
-  additionalDirs?: string[];
 }
 
 /** Creates a session in the SessionManager (separate from PTY spawning). */

@@ -7,9 +7,6 @@ vi.mock("@/lib/terminal", () => ({
   deleteClaudeSession: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("@/lib/sessionDirs", () => ({
-  removeSessionDirs: vi.fn().mockResolvedValue(undefined),
-}));
 
 describe("PreLaunchCard branch creation", () => {
   const makeSlot = (overrides?: Partial<SessionSlot>): SessionSlot => ({

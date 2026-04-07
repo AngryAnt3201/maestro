@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { create } from "zustand";
-import type { ClaudeEvent } from "@/types/claude-events";
 
 /** AI provider variants supported by the backend orchestrator. */
 export type AiMode = "Claude" | "Gemini" | "Codex" | "OpenCode" | "Plain";
@@ -47,10 +46,6 @@ export interface SessionConfig {
   needsInputPrompt?: string;
   /** Timestamp of the last MCP-driven status update (used by activity heuristic). */
   lastMcpUpdateTime?: number;
-  /** Additional directories added to this session via /add-dir. */
-  additionalDirs?: string[];
-  /** Claude session UUID (from SessionStarted hook event). Used to persist per-session data. */
-  claudeSessionUuid?: string;
 }
 
 /** Shape of the Tauri `session-status-changed` event payload. */
@@ -350,23 +345,3 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   },
 }));
 
-/**
- * Listens for `claude-event` SessionStarted events and stores the Claude session UUID
- * on the corresponding Maestro session. This allows per-session data (like additional
- * directories) to be persisted and restored when resuming.
- */
-let claudeEventUnlisten: UnlistenFn | null = null;
-export async function initClaudeSessionUuidListener(): Promise<void> {
-  if (claudeEventUnlisten) return;
-  claudeEventUnlisten = await listen<ClaudeEvent>("claude-event", (event) => {
-    const payload = event.payload;
-    if (payload.event_type === "SessionStarted") {
-      const { session_id, claude_session_uuid } = payload;
-      const store = useSessionStore.getState();
-      const session = store.sessions.find((s) => s.id === session_id);
-      if (session) {
-        store.updateSession(session_id, { claudeSessionUuid: claude_session_uuid });
-      }
-    }
-  });
-}

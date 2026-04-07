@@ -15,7 +15,6 @@ import {
   type PluginConfig,
   type SkillConfig,
 } from "@/lib/plugins";
-import { getSessionDirs } from "@/lib/sessionDirs";
 import {
   AI_CLI_CONFIG,
   assignSessionBranch,
@@ -717,19 +716,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             // a minimal delay for general CLI startup.
             await new Promise((resolve) => setTimeout(resolve, 500));
 
-            // When resuming a session, restore persisted additional directories
-            if (slot.resumeSessionId) {
-              try {
-                const savedDirs = await getSessionDirs(slot.resumeSessionId);
-                if (savedDirs.length > 0) {
-                  useSessionStore.getState().updateSession(sessionId, {
-                    additionalDirs: savedDirs,
-                  });
-                }
-              } catch (err) {
-                console.warn("Failed to restore session directories:", err);
-              }
-            }
+
           } else {
             console.warn(
               `CLI '${cliConfig.command}' not found. Install with: ${cliConfig.installHint}`
