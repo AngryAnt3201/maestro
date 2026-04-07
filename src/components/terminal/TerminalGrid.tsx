@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -276,7 +276,7 @@ function PlaceholderLeaf({ container, isZoomed, slotId, isDropTarget, isDragSour
     [setNodeRef],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const placeholder = placeholderRef.current;
     if (!placeholder || isZoomed) return;
     placeholder.appendChild(container);
@@ -1663,6 +1663,12 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     zoomedContainerRef.current.appendChild(container);
   }, [zoomedSlotId]);
 
+  /**
+   * renderLeaf only positions the persistent container div via PlaceholderLeaf.
+   * Slot content (TerminalView / PreLaunchCard) is rendered via stable portals
+   * in the main JSX below — this decoupling prevents React from unmounting
+   * TerminalView instances when the layout tree swaps slot positions (DnD).
+   */
   const renderLeaf = useCallback((slotId: string) => {
     const slot = slots.find((s) => s.id === slotId);
     if (!slot) return null;
@@ -1670,87 +1676,10 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     const container = getOrCreateContainer(slotId);
     const isThisZoomed = zoomedSlotId === slotId;
 
-    const content = slot.sessionId !== null ? (
-      <ErrorBoundary>
-        {slot.mode === "OpenFile" && slot.filePath ? (
-          <FileEditorView
-            key={slot.id}
-            sessionId={slot.sessionId}
-            slotId={slot.id}
-            filePath={slot.filePath}
-            content={slot.fileContent ?? ""}
-            isDirty={(slot.fileContent ?? "") !== (slot.savedFileContent ?? "")}
-            isSaving={slot.fileSaving}
-            error={slot.fileError}
-            isFocused={isThisZoomed || focusedSlotId === slot.id}
-            terminalCount={slots.length}
-            isZoomed={isThisZoomed}
-            onFocus={getFocusCallback(slot.id)}
-            onChange={(content) => updateFileContent(slot.id, content)}
-            onSave={() => saveFileSession(slot.sessionId!)}
-            onClose={requestCloseFileSession}
-            onToggleZoom={() => handleToggleZoom(slot.id)}
-          />
-        ) : (
-          <TerminalView
-            key={slot.id}
-            sessionId={slot.sessionId}
-            slotId={slot.id}
-            isFocused={isThisZoomed || focusedSlotId === slot.id}
-            isActive={isActive}
-            isDragging={isDragging}
-            onFocus={getFocusCallback(slot.id)}
-            onKill={handleKill}
-            terminalCount={slots.length}
-            isZoomed={isThisZoomed}
-            onToggleZoom={() => handleToggleZoom(slot.id)}
-            layoutVersion={layoutVersion}
-          />
-        )}
-      </ErrorBoundary>
-    ) : (
-      <PreLaunchCard
-        key={slot.id}
-        slot={slot}
-        projectPath={projectPath ?? ""}
-        branches={branches}
-        isLoadingBranches={isLoadingBranches}
-        isGitRepo={isGitRepo}
-        repositories={repositories}
-        workspaceType={workspaceType}
-        selectedRepoPath={effectiveRepoPath}
-        onRepoChange={onRepoChange}
-        fetchBranchesForRepo={getBranchesWithWorktreeStatus}
-        mcpServers={mcpServers}
-        skills={skills}
-        plugins={plugins}
-        onCreateBranch={handleCreateBranch}
-        onModeChange={(mode) => updateSlotMode(slot.id, mode)}
-        onBranchChange={(branch) => updateSlotBranch(slot.id, branch)}
-        onNewWorktreeBranchChange={(branch) => updateSlotNewWorktreeBranch(slot.id, branch)}
-        onPickFile={() => pickFileForSlot(slot.id)}
-        onMcpToggle={(serverName) => toggleSlotMcp(slot.id, serverName)}
-        onSkillToggle={(skillId) => toggleSlotSkill(slot.id, skillId)}
-        onPluginToggle={(pluginId) => toggleSlotPlugin(slot.id, pluginId)}
-        onMcpSelectAll={() => selectAllMcp(slot.id)}
-        onMcpUnselectAll={() => unselectAllMcp(slot.id)}
-        onPluginsSelectAll={() => selectAllPlugins(slot.id)}
-        onPluginsUnselectAll={() => unselectAllPlugins(slot.id)}
-        onLaunch={() => launchSlot(slot.id)}
-        onRemove={() => removeSlot(slot.id)}
-        isZoomed={isThisZoomed}
-        onToggleZoom={() => handleToggleZoom(slot.id)}
-      />
-    );
-
     return (
-      <>
-        {createPortal(content, container)}
-        <PlaceholderLeaf container={container} isZoomed={isThisZoomed} slotId={slot.id} isDropTarget={activeDragSlotId !== null && activeDragSlotId !== slot.id} isDragSource={activeDragSlotId === slot.id} />
-      </>
+      <PlaceholderLeaf container={container} isZoomed={isThisZoomed} slotId={slot.id} isDropTarget={activeDragSlotId !== null && activeDragSlotId !== slot.id} isDragSource={activeDragSlotId === slot.id} />
     );
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- Deps cover all render-affecting state
-  }, [slots, focusedSlotId, isActive, getFocusCallback, handleCloseFileSession, requestCloseFileSession, handleKill, handleToggleZoom, projectPath, branches, isLoadingBranches, isGitRepo, repositories, workspaceType, effectiveRepoPath, onRepoChange, mcpServers, skills, plugins, handleCreateBranch, updateSlotMode, updateSlotBranch, updateSlotNewWorktreeBranch, pickFileForSlot, toggleSlotMcp, toggleSlotSkill, toggleSlotPlugin, updateFileContent, saveFileSession, selectAllMcp, unselectAllMcp, selectAllPlugins, unselectAllPlugins, launchSlot, removeSlot, zoomedSlotId, getOrCreateContainer, activeDragSlotId, layoutVersion]);
+  }, [slots, zoomedSlotId, getOrCreateContainer, activeDragSlotId]);
 
   const handleRatioChange = useCallback((nodeId: string, ratio: number) => {
     setLayoutTree((prev) => updateRatio(prev, nodeId, ratio));
@@ -1784,8 +1713,96 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     );
   }
 
+  /**
+   * Stable portals: slot content is rendered into persistent container divs
+   * at a FIXED position in the React tree (this flat list). Because the key
+   * is always `slot.id` and the portal target is always that slot's container,
+   * React never unmounts these components — even when `swapLeaves` changes
+   * which tree position a slot occupies. PlaceholderLeaf (inside renderLeaf)
+   * handles physically moving the container div to the correct DOM position.
+   */
+  const slotPortals = slots.map((slot) => {
+    const container = getOrCreateContainer(slot.id);
+    const isThisZoomed = zoomedSlotId === slot.id;
+
+    const content = slot.sessionId !== null ? (
+      <ErrorBoundary>
+        {slot.mode === "OpenFile" && slot.filePath ? (
+          <FileEditorView
+            sessionId={slot.sessionId}
+            slotId={slot.id}
+            filePath={slot.filePath}
+            content={slot.fileContent ?? ""}
+            isDirty={(slot.fileContent ?? "") !== (slot.savedFileContent ?? "")}
+            isSaving={slot.fileSaving}
+            error={slot.fileError}
+            isFocused={isThisZoomed || focusedSlotId === slot.id}
+            terminalCount={slots.length}
+            isZoomed={isThisZoomed}
+            onFocus={getFocusCallback(slot.id)}
+            onChange={(c) => updateFileContent(slot.id, c)}
+            onSave={() => saveFileSession(slot.sessionId!)}
+            onClose={requestCloseFileSession}
+            onToggleZoom={() => handleToggleZoom(slot.id)}
+          />
+        ) : (
+          <TerminalView
+            sessionId={slot.sessionId}
+            slotId={slot.id}
+            isFocused={isThisZoomed || focusedSlotId === slot.id}
+            isActive={isActive}
+            isDragging={isDragging}
+            onFocus={getFocusCallback(slot.id)}
+            onKill={handleKill}
+            terminalCount={slots.length}
+            isZoomed={isThisZoomed}
+            onToggleZoom={() => handleToggleZoom(slot.id)}
+            layoutVersion={layoutVersion}
+          />
+        )}
+      </ErrorBoundary>
+    ) : (
+      <PreLaunchCard
+        slot={slot}
+        projectPath={projectPath ?? ""}
+        branches={branches}
+        isLoadingBranches={isLoadingBranches}
+        isGitRepo={isGitRepo}
+        repositories={repositories}
+        workspaceType={workspaceType}
+        selectedRepoPath={effectiveRepoPath}
+        onRepoChange={onRepoChange}
+        fetchBranchesForRepo={getBranchesWithWorktreeStatus}
+        mcpServers={mcpServers}
+        skills={skills}
+        plugins={plugins}
+        onCreateBranch={handleCreateBranch}
+        onModeChange={(mode) => updateSlotMode(slot.id, mode)}
+        onBranchChange={(branch) => updateSlotBranch(slot.id, branch)}
+        onNewWorktreeBranchChange={(branch) => updateSlotNewWorktreeBranch(slot.id, branch)}
+        onPickFile={() => pickFileForSlot(slot.id)}
+        onMcpToggle={(serverName) => toggleSlotMcp(slot.id, serverName)}
+        onSkillToggle={(skillId) => toggleSlotSkill(slot.id, skillId)}
+        onPluginToggle={(pluginId) => toggleSlotPlugin(slot.id, pluginId)}
+        onMcpSelectAll={() => selectAllMcp(slot.id)}
+        onMcpUnselectAll={() => unselectAllMcp(slot.id)}
+        onPluginsSelectAll={() => selectAllPlugins(slot.id)}
+        onPluginsUnselectAll={() => unselectAllPlugins(slot.id)}
+        onLaunch={() => launchSlot(slot.id)}
+        onRemove={() => removeSlot(slot.id)}
+        isZoomed={isThisZoomed}
+        onToggleZoom={() => handleToggleZoom(slot.id)}
+      />
+    );
+
+    return createPortal(content, container, slot.id);
+  });
+
   return (
     <div className="flex h-full flex-col bg-maestro-bg">
+      {/* Stable portals — keyed by slot.id, never unmount on tree swaps */}
+      {slotPortals}
+
       {/* Zoom navigation bar */}
       {zoomedSlotId && (() => {
         const zoomedOrderedSlots = orderedSlotIds
