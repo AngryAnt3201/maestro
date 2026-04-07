@@ -1,4 +1,9 @@
 import { useEffect } from "react";
+import {
+  type HotkeyAction,
+  useHotkeySettingsStore,
+  matchesHotkey,
+} from "@/stores/useHotkeySettingsStore";
 
 interface UseTerminalKeyboardOptions {
   /** Total number of launched terminals */
@@ -21,20 +26,31 @@ interface UseTerminalKeyboardOptions {
   enabled?: boolean;
 }
 
-/**
- * Detect whether the current platform uses Cmd (Mac) or Ctrl (Windows/Linux) as the modifier key.
- */
-function isMac(): boolean {
-  return navigator.platform.toLowerCase().includes("mac");
-}
+/** Map jump-to-terminal actions to their 0-based index. */
+const JUMP_ACTIONS: [HotkeyAction, number][] = [
+  ["jumpToTerminal1", 0],
+  ["jumpToTerminal2", 1],
+  ["jumpToTerminal3", 2],
+  ["jumpToTerminal4", 3],
+  ["jumpToTerminal5", 4],
+  ["jumpToTerminal6", 5],
+  ["jumpToTerminal7", 6],
+  ["jumpToTerminal8", 7],
+  ["jumpToTerminal9", 8],
+  ["jumpToTerminal10", 9],
+];
 
 /**
  * Global keyboard shortcut handler for terminal navigation.
  *
- * Shortcuts:
- * - Cmd/Ctrl+1-9,0: Jump to terminal N (1-9 for terminals 1-9, 0 for terminal 10)
+ * All shortcuts are configurable via Keyboard Shortcuts settings.
+ * Defaults:
+ * - Cmd/Ctrl+1-9,0: Jump to terminal N
  * - Cmd/Ctrl+[: Cycle to previous terminal
  * - Cmd/Ctrl+]: Cycle to next terminal
+ * - Cmd/Ctrl+D: Split pane vertically
+ * - Cmd/Ctrl+Shift+D: Split pane horizontally
+ * - Cmd/Ctrl+W: Close focused pane
  */
 export function useTerminalKeyboard({
   terminalCount,
@@ -47,28 +63,29 @@ export function useTerminalKeyboard({
   onClosePane,
   enabled = true,
 }: UseTerminalKeyboardOptions): void {
+  const hotkeys = useHotkeySettingsStore((s) => s.hotkeys);
+
   useEffect(() => {
     if (!enabled) return;
 
     function handleKeyDown(event: KeyboardEvent) {
-      const modifierKey = isMac() ? event.metaKey : event.ctrlKey;
-      if (!modifierKey) return;
-
-      // Cmd/Ctrl+D: split pane (Shift = horizontal, no Shift = vertical)
-      // Works even with 0 launched terminals (splits pre-launch cards too)
-      if (event.key === "d" && !event.altKey) {
+      // Split pane shortcuts — work even with 0 launched terminals
+      if (matchesHotkey(event, hotkeys.splitHorizontal)) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        if (event.shiftKey) {
-          onSplitHorizontal?.();
-        } else {
-          onSplitVertical?.();
-        }
+        onSplitHorizontal?.();
         return;
       }
 
-      // Cmd/Ctrl+W: close the focused pane
-      if (event.key === "w" && !event.altKey && !event.shiftKey) {
+      if (matchesHotkey(event, hotkeys.splitVertical)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        onSplitVertical?.();
+        return;
+      }
+
+      // Close pane
+      if (matchesHotkey(event, hotkeys.closePane)) {
         event.preventDefault();
         event.stopImmediatePropagation();
         onClosePane?.();
@@ -78,37 +95,25 @@ export function useTerminalKeyboard({
       // Navigation shortcuts only apply when terminals exist
       if (terminalCount === 0) return;
 
-      // Don't interfere with other modifier combinations
-      if (event.altKey || event.shiftKey) return;
-
-      // Handle number keys 1-9 and 0 for terminal jumping
-      if (event.key >= "1" && event.key <= "9") {
-        const targetIndex = parseInt(event.key, 10) - 1;
-        if (targetIndex < terminalCount) {
-          event.preventDefault();
-          onFocusTerminal(targetIndex);
+      // Jump to terminal N
+      for (const [action, index] of JUMP_ACTIONS) {
+        if (matchesHotkey(event, hotkeys[action])) {
+          if (index < terminalCount) {
+            event.preventDefault();
+            onFocusTerminal(index);
+          }
+          return;
         }
-        return;
       }
 
-      if (event.key === "0") {
-        // 0 maps to terminal 10 (index 9)
-        const targetIndex = 9;
-        if (targetIndex < terminalCount) {
-          event.preventDefault();
-          onFocusTerminal(targetIndex);
-        }
-        return;
-      }
-
-      // Handle bracket keys for cycling
-      if (event.key === "]") {
+      // Cycle terminals
+      if (matchesHotkey(event, hotkeys.cycleNextSession)) {
         event.preventDefault();
         onCycleNext();
         return;
       }
 
-      if (event.key === "[") {
+      if (matchesHotkey(event, hotkeys.cyclePrevSession)) {
         event.preventDefault();
         onCyclePrevious();
         return;
@@ -117,5 +122,16 @@ export function useTerminalKeyboard({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [enabled, terminalCount, focusedIndex, onFocusTerminal, onCycleNext, onCyclePrevious, onSplitVertical, onSplitHorizontal, onClosePane]);
+  }, [
+    enabled,
+    hotkeys,
+    terminalCount,
+    focusedIndex,
+    onFocusTerminal,
+    onCycleNext,
+    onCyclePrevious,
+    onSplitVertical,
+    onSplitHorizontal,
+    onClosePane,
+  ]);
 }

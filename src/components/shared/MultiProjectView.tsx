@@ -1,5 +1,6 @@
 import { useRef, forwardRef, useImperativeHandle, useMemo } from "react";
 import { useWorkspaceStore } from "@/stores/useWorkspaceStore";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { IdleLandingView } from "./IdleLandingView";
 import { TerminalGrid, type TerminalGridHandle } from "../terminal/TerminalGrid";
 
@@ -170,24 +171,26 @@ export const MultiProjectView = forwardRef<MultiProjectViewHandle, MultiProjectV
             visibility: tab.active ? "visible" : "hidden",
           }}
         >
-          {tab.sessionsLaunched ? (
-            <TerminalGrid
-              ref={gridRefSetters.get(tab.id)}
-              tabId={tab.id}
-              projectPath={tab.projectPath}
-              repoPath={tab.selectedRepoPath ?? undefined}
-              repositories={tab.repositories}
-              workspaceType={tab.workspaceType}
-              onRepoChange={repoChangeCallbacks.get(tab.id)}
-              preserveOnHide={true}
-              isActive={tab.active}
-              onSessionCountChange={sessionCountChangeCallbacks.get(tab.id)}
-              onAllSessionsClosed={allSessionsClosedCallbacks.get(tab.id)}
-              onZoomChange={zoomChangeCallbacks.get(tab.id)}
-            />
-          ) : (
-            <IdleLandingView onAdd={launchCallbacks.get(tab.id)!} />
-          )}
+          <ErrorBoundary>
+            {tab.sessionsLaunched ? (
+              <TerminalGrid
+                ref={gridRefSetters.get(tab.id)}
+                tabId={tab.id}
+                projectPath={tab.projectPath}
+                repoPath={tab.selectedRepoPath ?? undefined}
+                repositories={tab.repositories}
+                workspaceType={tab.workspaceType}
+                onRepoChange={repoChangeCallbacks.get(tab.id)}
+                preserveOnHide={true}
+                isActive={tab.active}
+                onSessionCountChange={sessionCountChangeCallbacks.get(tab.id)}
+                onAllSessionsClosed={allSessionsClosedCallbacks.get(tab.id)}
+                onZoomChange={zoomChangeCallbacks.get(tab.id)}
+              />
+            ) : (
+              <IdleLandingView onAdd={launchCallbacks.get(tab.id)!} />
+            )}
+          </ErrorBoundary>
         </div>
       ))}
     </div>

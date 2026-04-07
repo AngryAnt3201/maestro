@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Code2,
   Expand,
+  FileText,
   FolderGit2,
   FolderOpen,
   GitBranch,
@@ -35,14 +36,21 @@ import type { AiMode } from "@/stores/useSessionStore";
 import { useTemplateStore } from "@/stores/useTemplateStore";
 import type { RepositoryInfo, WorkspaceType } from "@/stores/useWorkspaceStore";
 
+export type SessionLaunchMode = AiMode | "OpenFile";
+
 /** Pre-launch session slot configuration. */
 export interface SessionSlot {
   id: string;
-  mode: AiMode;
+  mode: SessionLaunchMode;
   branch: string | null;
   /** Optional new branch name to create as a worktree when launching. */
   newWorktreeBranch: string;
   sessionId: number | null;
+  filePath: string | null;
+  savedFileContent?: string | null;
+  fileContent?: string | null;
+  fileError?: string | null;
+  fileSaving?: boolean;
   /** Path to the worktree if one was created for this session. */
   worktreePath: string | null;
   /** Warning message from worktree preparation (e.g., fallback to project path). */
@@ -75,9 +83,10 @@ interface PreLaunchCardProps {
   skills: SkillConfig[];
   plugins: PluginConfig[];
   onCreateBranch?: (name: string, andCheckout: boolean, repoPath?: string) => Promise<void>;
-  onModeChange: (mode: AiMode) => void;
+  onModeChange: (mode: SessionLaunchMode) => void;
   onBranchChange: (branch: string | null) => void;
   onNewWorktreeBranchChange: (branch: string) => void;
+  onPickFile: () => void;
   onMcpToggle: (serverName: string) => void;
   onSkillToggle: (skillId: string) => void;
   onPluginToggle: (pluginId: string) => void;
@@ -92,7 +101,7 @@ interface PreLaunchCardProps {
 }
 
 const AI_MODES: {
-  mode: AiMode;
+  mode: SessionLaunchMode;
   icon: IconComponent;
   label: string;
   color: string;
@@ -102,9 +111,10 @@ const AI_MODES: {
   { mode: "Codex", icon: Code2, label: "Codex", color: "text-green-400" },
   { mode: "OpenCode", icon: OpenCodeIcon, label: "OpenCode", color: "text-purple-500" },
   { mode: "Plain", icon: Terminal, label: "Terminal", color: "text-maestro-muted" },
+  { mode: "OpenFile", icon: FileText, label: "Open File", color: "text-maestro-accent" },
 ];
 
-function getModeConfig(mode: AiMode) {
+function getModeConfig(mode: SessionLaunchMode) {
   return AI_MODES.find((m) => m.mode === mode) ?? AI_MODES[0];
 }
 
@@ -137,6 +147,7 @@ export function PreLaunchCard({
   onModeChange,
   onBranchChange,
   onNewWorktreeBranchChange,
+  onPickFile,
   onMcpToggle,
   onSkillToggle,
   onPluginToggle,
@@ -175,6 +186,7 @@ export function PreLaunchCard({
   const templateNameInputRef = useRef<HTMLInputElement>(null);
 
   const handleSaveTemplate = () => {
+    if (slot.mode === "OpenFile") return;
     const name = templateName.trim();
     if (!name) return;
     addTemplate({
@@ -207,6 +219,7 @@ export function PreLaunchCard({
 
   const modeConfig = getModeConfig(slot.mode);
   const ModeIcon = modeConfig.icon;
+  const isOpenFileMode = slot.mode === "OpenFile";
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -292,6 +305,7 @@ export function PreLaunchCard({
   const enabledPluginsCount = slot.enabledPlugins.length;
   const enabledSkillsCount = slot.enabledSkills.length;
   const hasPluginsOrSkills = plugins.length > 0 || skills.length > 0;
+  const launchDisabled = isOpenFileMode ? !slot.filePath : false;
 
   // Find current branch display info
   const currentBranch = branches.find((b) => b.isCurrent);
@@ -481,6 +495,8 @@ export function PreLaunchCard({
           )}
         </div>
 
+        {!isOpenFileMode && (
+          <>
         {/* Repository & Branch Selector */}
         <div className="relative" ref={branchDropdownRef}>
           <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-maestro-muted">
@@ -1465,8 +1481,43 @@ export function PreLaunchCard({
           )}
         </div>
 
+          </>
+        )}
+
+        {isOpenFileMode && (
+          <div className="rounded border border-maestro-border bg-maestro-card/60 p-3">
+            <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-maestro-muted">
+              File
+            </div>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={onPickFile}
+                className="flex w-full items-center justify-center gap-2 rounded border border-maestro-border px-3 py-2 text-sm text-maestro-text transition-colors hover:border-maestro-accent/50 hover:bg-maestro-surface"
+              >
+                <FileText size={15} className="text-maestro-accent" />
+                {slot.filePath ? "Choose Different File" : "Choose File"}
+              </button>
+              <div className="rounded border border-dashed border-maestro-border/70 bg-maestro-bg/40 px-3 py-2">
+                {slot.filePath ? (
+                  <>
+                    <div className="truncate text-sm font-medium text-maestro-text">
+                      {slot.filePath.split(/[\\/]/).pop()}
+                    </div>
+                    <div className="truncate text-xs text-maestro-muted">{slot.filePath}</div>
+                  </>
+                ) : (
+                  <div className="text-sm text-maestro-muted">
+                    Select an existing UTF-8 text file to open and edit.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Save Template / Launch Buttons */}
-        {showTemplateName ? (
+        {!isOpenFileMode && showTemplateName ? (
           <div className="flex items-center gap-2">
             <input
               ref={templateNameInputRef}
@@ -1503,22 +1554,24 @@ export function PreLaunchCard({
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowTemplateName(true)}
-              className="flex items-center justify-center gap-2 rounded border border-maestro-border px-4 py-2.5 text-sm font-medium text-maestro-text transition-colors hover:bg-maestro-border/40"
-            >
-              <Save size={16} />
-              Save Template
-            </button>
+            {!isOpenFileMode && (
+              <button
+                type="button"
+                onClick={() => setShowTemplateName(true)}
+                className="flex items-center justify-center gap-2 rounded border border-maestro-border px-4 py-2.5 text-sm font-medium text-maestro-text transition-colors hover:bg-maestro-border/40"
+              >
+                <Save size={16} />
+                Save Template
+              </button>
+            )}
             <button
               type="button"
               onClick={onLaunch}
-              disabled={Boolean(newWorktreeBranchError)}
-              className="flex flex-1 items-center justify-center gap-2 rounded bg-maestro-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-maestro-accent/80 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={launchDisabled || Boolean(newWorktreeBranchError)}
+              className="flex flex-1 items-center justify-center gap-2 rounded bg-maestro-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-maestro-accent/80 disabled:cursor-default disabled:opacity-50"
             >
               <Play size={16} fill="currentColor" />
-              Launch Session
+              {isOpenFileMode ? "Open File" : "Launch Session"}
             </button>
           </div>
         )}

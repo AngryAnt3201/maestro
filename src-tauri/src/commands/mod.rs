@@ -6,6 +6,7 @@ pub mod github;
 pub mod hooks;
 pub mod marketplace;
 pub mod mcp;
+pub mod open_file;
 pub mod plugin;
 pub mod session;
 pub mod terminal;

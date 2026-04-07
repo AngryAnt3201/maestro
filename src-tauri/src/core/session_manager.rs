@@ -1,5 +1,7 @@
-use dashmap::DashMap;
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use dashmap::mapref::entry::Entry;
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 
 /// Which AI backend a session is configured to use.
@@ -13,6 +15,13 @@ pub enum AiMode {
     Codex,
     OpenCode,
     Plain,
+}
+
+/// High-level kind of session pane shown in the UI.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SessionKind {
+    Terminal,
+    OpenFile,
 }
 
 /// Lifecycle state of a session, tracked for UI status indicators.
@@ -37,10 +46,12 @@ pub enum SessionStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionConfig {
     pub id: u32,
+    pub kind: SessionKind,
     pub mode: AiMode,
     pub branch: Option<String>,
     pub status: SessionStatus,
     pub worktree_path: Option<String>,
+    pub file_path: Option<String>,
     /// The project directory this session belongs to.
     /// Canonicalized absolute path for reliable comparison.
     pub project_path: String,
@@ -53,6 +64,7 @@ pub struct SessionConfig {
 /// multiple async command handlers.
 pub struct SessionManager {
     sessions: DashMap<u32, SessionConfig>,
+    next_virtual_id: AtomicU32,
 }
 
 impl Default for SessionManager {
@@ -66,18 +78,57 @@ impl SessionManager {
     pub fn new() -> Self {
         Self {
             sessions: DashMap::new(),
+            next_virtual_id: AtomicU32::new(1_000_000_000),
         }
     }
 
     /// Inserts a new session with `Idle` status and no branch assigned.
     /// Returns `Err` with the existing config if a session with this ID already exists.
-    pub fn create_session(&self, id: u32, mode: AiMode, project_path: String) -> Result<SessionConfig, SessionConfig> {
+    pub fn create_session(
+        &self,
+        id: u32,
+        mode: AiMode,
+        project_path: String,
+    ) -> Result<SessionConfig, SessionConfig> {
         let config = SessionConfig {
             id,
+            kind: SessionKind::Terminal,
             mode,
             branch: None,
             status: SessionStatus::Idle,
             worktree_path: None,
+            file_path: None,
+            project_path,
+        };
+        match self.sessions.entry(id) {
+            Entry::Occupied(e) => Err(e.get().clone()),
+            Entry::Vacant(e) => {
+                e.insert(config.clone());
+                Ok(config)
+            }
+        }
+    }
+
+    /// Allocates a virtual session ID for non-PTY sessions.
+    pub fn allocate_virtual_session_id(&self) -> u32 {
+        self.next_virtual_id.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// Inserts a file-backed session with a virtual ID.
+    pub fn create_file_session(
+        &self,
+        project_path: String,
+        file_path: String,
+    ) -> Result<SessionConfig, SessionConfig> {
+        let id = self.allocate_virtual_session_id();
+        let config = SessionConfig {
+            id,
+            kind: SessionKind::OpenFile,
+            mode: AiMode::Plain,
+            branch: None,
+            status: SessionStatus::Idle,
+            worktree_path: None,
+            file_path: Some(file_path),
             project_path,
         };
         match self.sessions.entry(id) {

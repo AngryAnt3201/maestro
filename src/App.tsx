@@ -19,6 +19,7 @@ import { MAC_TITLE_BAR_INSET_PX, useMacTitleBarPadding } from "@/hooks/useMacTit
 import { isMac } from "@/lib/platform";
 import { ProjectTabs } from "./components/shared/ProjectTabs";
 import { RightPanel } from "./components/shared/RightPanel";
+import { ErrorBoundary } from "./components/shared/ErrorBoundary";
 import { Sidebar } from "./components/sidebar/Sidebar";
 
 const DEFAULT_SESSION_COUNT = 6;
@@ -199,6 +200,8 @@ function App() {
   useAppKeyboard({
     onAddSession: handleAddSessionShortcut,
     canAddSession: activeTabSessionsLaunched,
+    onCycleNextProject: switchToNextTab,
+    onCyclePrevProject: switchToPrevTab,
   });
 
   // Handler to enter grid view for the active project
@@ -251,10 +254,12 @@ function App() {
         {/* Center column: content + bottom bar */}
         <div className="flex flex-1 flex-col overflow-hidden">
           <main className="relative flex-1 overflow-hidden bg-maestro-bg">
-            <MultiProjectView
-              ref={multiProjectRef}
-              onSessionCountChange={handleSessionCountChange}
-            />
+            <ErrorBoundary>
+              <MultiProjectView
+                ref={multiProjectRef}
+                onSessionCountChange={handleSessionCountChange}
+              />
+            </ErrorBoundary>
           </main>
 
           {/* Bottom action bar */}

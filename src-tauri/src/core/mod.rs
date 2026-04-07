@@ -5,6 +5,7 @@ pub mod transcript_parser;
 pub mod transcript_watcher;
 pub mod font_detector;
 pub mod hook_config_writer;
+pub mod launch_diagnostics;
 pub mod marketplace_error;
 pub mod marketplace_manager;
 pub mod marketplace_models;

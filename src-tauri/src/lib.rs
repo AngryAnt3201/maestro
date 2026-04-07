@@ -116,6 +116,7 @@ pub fn run() {
             // Create TodoManager with persistence in app data dir
             let app_data_dir = app.path().app_data_dir()
                 .expect("Failed to resolve app data directory");
+            core::launch_diagnostics::init(app_data_dir.clone());
             let todo_manager = Arc::new(TodoManager::new(app_data_dir));
             app.manage(todo_manager.clone());
 
@@ -231,11 +232,15 @@ pub fn run() {
             // Session commands (new)
             commands::session::get_sessions,
             commands::session::create_session,
+            commands::session::create_file_session,
             commands::session::update_session_status,
             commands::session::assign_session_branch,
             commands::session::remove_session,
             commands::session::get_sessions_for_project,
             commands::session::remove_sessions_for_project,
+            // OpenFile commands
+            commands::open_file::read_text_file,
+            commands::open_file::write_text_file,
             // Worktree commands
             commands::worktree::prepare_session_worktree,
             commands::worktree::cleanup_session_worktree,

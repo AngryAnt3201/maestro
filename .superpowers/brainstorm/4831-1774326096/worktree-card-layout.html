@@ -1,0 +1,123 @@
+<h2>Worktrees Card — Compact Layout</h2>
+<p class="subtitle">Each worktree is one row. Click to expand for details and actions. Which style feels right?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Branch-first with status dot</h3>
+      <p>Branch name is the primary label, colored dot shows session status, orphaned badge on the right</p>
+      <div style="margin-top: 12px; background: #1a1a2e; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 13px; color: #e0e0e0;">
+        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 10px; font-family: sans-serif;">Worktrees</div>
+
+        <!-- Active worktree row -->
+        <div style="display: flex; align-items: center; padding: 6px 8px; border-radius: 4px; background: #252540; margin-bottom: 4px; cursor: pointer;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #4ade80; margin-right: 10px; flex-shrink: 0;"></span>
+          <span style="flex: 1; font-family: sans-serif; font-size: 13px;">feature/auth-flow</span>
+          <span style="font-size: 11px; color: #888; font-family: sans-serif;">Session 2</span>
+          <span style="margin-left: 8px; color: #555;">&#9662;</span>
+        </div>
+
+        <!-- Active worktree row - working -->
+        <div style="display: flex; align-items: center; padding: 6px 8px; border-radius: 4px; background: #252540; margin-bottom: 4px; cursor: pointer;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #facc15; margin-right: 10px; flex-shrink: 0;"></span>
+          <span style="flex: 1; font-family: sans-serif; font-size: 13px;">fix/login-bug</span>
+          <span style="font-size: 11px; color: #888; font-family: sans-serif;">Session 4</span>
+          <span style="margin-left: 8px; color: #555;">&#9662;</span>
+        </div>
+
+        <!-- Main worktree -->
+        <div style="display: flex; align-items: center; padding: 6px 8px; border-radius: 4px; background: #252540; margin-bottom: 4px; cursor: pointer;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #4ade80; margin-right: 10px; flex-shrink: 0;"></span>
+          <span style="flex: 1; font-family: sans-serif; font-size: 13px;">main</span>
+          <span style="font-size: 11px; color: #888; font-family: sans-serif;">Session 1</span>
+          <span style="margin-left: 8px; color: #555;">&#9662;</span>
+        </div>
+
+        <!-- Orphaned worktree -->
+        <div style="display: flex; align-items: center; padding: 6px 8px; border-radius: 4px; background: #252540; margin-bottom: 4px; cursor: pointer;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #555; margin-right: 10px; flex-shrink: 0;"></span>
+          <span style="flex: 1; font-family: sans-serif; font-size: 13px; color: #888;">refactor/db-layer</span>
+          <span style="font-size: 10px; color: #f87171; background: #f8717120; padding: 1px 6px; border-radius: 3px; font-family: sans-serif;">orphaned</span>
+          <span style="margin-left: 8px; color: #555;">&#9662;</span>
+        </div>
+
+        <!-- Expanded row example -->
+        <div style="padding: 6px 8px; border-radius: 4px; background: #2a2a4a; margin-bottom: 4px; border: 1px solid #444;">
+          <div style="display: flex; align-items: center; cursor: pointer;">
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: #555; margin-right: 10px; flex-shrink: 0;"></span>
+            <span style="flex: 1; font-family: sans-serif; font-size: 13px; color: #888;">experiment/new-ui</span>
+            <span style="font-size: 10px; color: #f87171; background: #f8717120; padding: 1px 6px; border-radius: 3px; font-family: sans-serif;">orphaned</span>
+            <span style="margin-left: 8px; color: #555;">&#9652;</span>
+          </div>
+          <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #333; font-family: sans-serif; font-size: 12px; color: #999;">
+            <div style="margin-bottom: 4px;">Path: ~/.local/share/maestro/worktrees/a1b2c3/experiment-new-ui/</div>
+            <div style="display: flex; gap: 8px; margin-top: 8px;">
+              <span style="padding: 3px 10px; border-radius: 4px; background: #4ade8030; color: #4ade80; cursor: pointer; font-size: 11px;">Launch Session</span>
+              <span style="padding: 3px 10px; border-radius: 4px; background: #60a5fa30; color: #60a5fa; cursor: pointer; font-size: 11px;">Open in Finder</span>
+              <span style="padding: 3px 10px; border-radius: 4px; background: #f8717130; color: #f87171; cursor: pointer; font-size: 11px;">Delete</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Session-first with branch as secondary</h3>
+      <p>Session name/number is primary, branch name underneath. Groups by "active" vs "orphaned" sections.</p>
+      <div style="margin-top: 12px; background: #1a1a2e; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 13px; color: #e0e0e0;">
+        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 10px; font-family: sans-serif;">Worktrees</div>
+
+        <div style="font-size: 11px; color: #4ade80; margin-bottom: 6px; font-family: sans-serif; font-weight: 600;">ACTIVE (3)</div>
+
+        <div style="display: flex; align-items: center; padding: 6px 8px; border-radius: 4px; background: #252540; margin-bottom: 4px; cursor: pointer;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #4ade80; margin-right: 10px; flex-shrink: 0;"></span>
+          <div style="flex: 1; font-family: sans-serif;">
+            <div style="font-size: 13px;">Session 1 — Claude</div>
+            <div style="font-size: 11px; color: #888;">main</div>
+          </div>
+          <span style="color: #555;">&#9662;</span>
+        </div>
+
+        <div style="display: flex; align-items: center; padding: 6px 8px; border-radius: 4px; background: #252540; margin-bottom: 4px; cursor: pointer;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #4ade80; margin-right: 10px; flex-shrink: 0;"></span>
+          <div style="flex: 1; font-family: sans-serif;">
+            <div style="font-size: 13px;">Session 2 — Gemini</div>
+            <div style="font-size: 11px; color: #888;">feature/auth-flow</div>
+          </div>
+          <span style="color: #555;">&#9662;</span>
+        </div>
+
+        <div style="display: flex; align-items: center; padding: 6px 8px; border-radius: 4px; background: #252540; margin-bottom: 4px; cursor: pointer;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #facc15; margin-right: 10px; flex-shrink: 0;"></span>
+          <div style="flex: 1; font-family: sans-serif;">
+            <div style="font-size: 13px;">Session 4 — Claude</div>
+            <div style="font-size: 11px; color: #888;">fix/login-bug</div>
+          </div>
+          <span style="color: #555;">&#9662;</span>
+        </div>
+
+        <div style="font-size: 11px; color: #f87171; margin-top: 12px; margin-bottom: 6px; font-family: sans-serif; font-weight: 600;">ORPHANED (2)</div>
+
+        <div style="display: flex; align-items: center; padding: 6px 8px; border-radius: 4px; background: #252540; margin-bottom: 4px; cursor: pointer; opacity: 0.7;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #555; margin-right: 10px; flex-shrink: 0;"></span>
+          <div style="flex: 1; font-family: sans-serif;">
+            <div style="font-size: 13px; color: #888;">refactor/db-layer</div>
+          </div>
+          <span style="color: #555;">&#9662;</span>
+        </div>
+
+        <div style="display: flex; align-items: center; padding: 6px 8px; border-radius: 4px; background: #252540; margin-bottom: 4px; cursor: pointer; opacity: 0.7;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #555; margin-right: 10px; flex-shrink: 0;"></span>
+          <div style="flex: 1; font-family: sans-serif;">
+            <div style="font-size: 13px; color: #888;">experiment/new-ui</div>
+          </div>
+          <span style="color: #555;">&#9662;</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

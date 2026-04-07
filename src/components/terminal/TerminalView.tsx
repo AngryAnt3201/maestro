@@ -19,6 +19,11 @@ import { DEFAULT_THEME, LIGHT_THEME, toXtermTheme } from "@/lib/terminalTheme";
 import { useMcpStore } from "@/stores/useMcpStore";
 import { type AiMode, type BackendSessionStatus, useSessionStore } from "@/stores/useSessionStore";
 import { useTerminalSettingsStore } from "@/stores/useTerminalSettingsStore";
+import {
+  matchesHotkey,
+  shouldBlockForXterm,
+  useHotkeySettingsStore,
+} from "@/stores/useHotkeySettingsStore";
 import { useShallow } from "zustand/react/shallow";
 import { QuickActionPills } from "./QuickActionPills";
 import { type AIProvider, type SessionStatus, TerminalHeader } from "./TerminalHeader";
@@ -49,6 +54,8 @@ interface TerminalViewProps {
   terminalCount?: number;
   isZoomed?: boolean;
   onToggleZoom?: () => void;
+  /** Incremented on layout swaps (DnD reorder) to trigger a refit after DOM reparenting. */
+  layoutVersion?: number;
 }
 
 /** Map backend AiMode to frontend AIProvider */
@@ -131,6 +138,7 @@ export const TerminalView = memo(function TerminalView({
   terminalCount = 1,
   isZoomed = false,
   onToggleZoom,
+  layoutVersion = 0,
 }: TerminalViewProps) {
   const renameSession = useSessionStore((s) => s.renameSession);
   const sessionData = useSessionStore(
@@ -268,7 +276,7 @@ export const TerminalView = memo(function TerminalView({
   useEffect(() => {
     if (activeTab !== "terminal") return;
     scheduleFitRef.current?.();
-  }, [terminalCount, isZoomed, activeTab]);
+  }, [terminalCount, isZoomed, activeTab, layoutVersion]);
 
   /**
    * Immediately removes the terminal from UI (optimistic update),
@@ -291,7 +299,7 @@ export const TerminalView = memo(function TerminalView({
    */
   const handleQuickAction = useCallback(
     (prompt: string) => {
-      writeStdin(sessionId, prompt + "\n").catch(console.error);
+      writeStdin(sessionId, prompt + "\r").catch(console.error);
     },
     [sessionId],
   );
@@ -641,26 +649,16 @@ export const TerminalView = memo(function TerminalView({
           return false; // Don't send to PTY
         }
 
-        // Cmd/Ctrl+T: add new session — block xterm so 't' isn't sent to PTY.
-        // The DOM event still bubbles to window where useAppKeyboard handles it.
-        if (event.key === "t" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.type === "keydown") {
-          return false;
-        }
-
-        // Cmd/Ctrl+D (with or without Shift): split pane — block xterm so 'd' isn't sent to PTY.
-        // The DOM event bubbles to window where useTerminalKeyboard handles it.
-        if (event.key === "d" && (event.metaKey || event.ctrlKey) && !event.altKey && event.type === "keydown") {
-          return false;
-        }
-
-        // Cmd/Ctrl+W: close pane — block xterm so 'w' isn't sent to PTY.
-        if (event.key === "w" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.type === "keydown") {
-          return false;
-        }
-
-        // Cmd+K (Mac) or Ctrl+K (Linux/Windows): clear terminal scrollback + viewport
-        if (event.key === "k" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.type === "keydown") {
+        // Clear terminal: executes action inline AND blocks from PTY
+        const { hotkeys } = useHotkeySettingsStore.getState();
+        if (matchesHotkey(event, hotkeys.clearTerminal) && event.type === "keydown") {
           term?.clear();
+          return false;
+        }
+
+        // Block all configured hotkeys from reaching PTY.
+        // The DOM event still bubbles to window where useAppKeyboard/useTerminalKeyboard handle it.
+        if (shouldBlockForXterm(event)) {
           return false;
         }
 

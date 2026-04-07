@@ -7,7 +7,7 @@ use crate::core::mcp_config_writer;
 use crate::core::mcp_manager::McpManager;
 use crate::core::plugin_manager::PluginManager;
 use crate::core::process_manager::ProcessManager;
-use crate::core::session_manager::{AiMode, SessionConfig, SessionManager, SessionStatus};
+use crate::core::session_manager::{AiMode, SessionConfig, SessionKind, SessionManager, SessionStatus};
 use crate::core::status_server::StatusServer;
 
 /// Exposes `SessionManager::all_sessions` to the frontend.
@@ -28,12 +28,47 @@ pub async fn create_session(
     project_path: String,
 ) -> Result<SessionConfig, String> {
     // Canonicalize path for consistent storage
-    let canonical = std::fs::canonicalize(&project_path)
+    let canonical = match std::fs::canonicalize(&project_path) {
+        Ok(path) => path.to_string_lossy().into_owned(),
+        Err(e) => {
+            crate::core::launch_diagnostics::append(
+                "create_session.invalid_project_path",
+                &format!(
+                    "session_id={} mode={:?} project_path='{}' error={}",
+                    id, mode, project_path, e
+                ),
+            );
+            return Err(format!("Invalid project path '{}': {}", project_path, e));
+        }
+    };
+
+    state.create_session(id, mode, canonical)
+        .map_err(|existing| format!("Session {} already exists", existing.id))
+}
+
+/// Registers a new file-backed session with a virtual session ID.
+#[tauri::command]
+pub async fn create_file_session(
+    state: State<'_, SessionManager>,
+    project_path: String,
+    file_path: String,
+) -> Result<SessionConfig, String> {
+    let canonical_project = std::fs::canonicalize(&project_path)
         .map_err(|e| format!("Invalid project path '{}': {}", project_path, e))?
         .to_string_lossy()
         .into_owned();
+    let canonical_file = std::fs::canonicalize(&file_path)
+        .map_err(|e| format!("Invalid file path '{}': {}", file_path, e))?;
 
-    state.create_session(id, mode, canonical)
+    if !canonical_file.is_file() {
+        return Err(format!("Path '{}' is not a file", canonical_file.display()));
+    }
+
+    state
+        .create_file_session(
+            canonical_project,
+            canonical_file.to_string_lossy().into_owned(),
+        )
         .map_err(|existing| format!("Session {} already exists", existing.id))
 }
 
@@ -107,31 +142,33 @@ pub async fn remove_sessions_for_project(
 
     // Clean up MCP, plugin, and PTY state for each removed session
     for session in &removed {
-        // Clean up in-memory MCP and plugin state
-        mcp_manager.remove_session(&canonical, session.id);
-        plugin_manager.remove_session(&canonical, session.id);
+        if session.kind == SessionKind::Terminal {
+            // Clean up in-memory MCP and plugin state
+            mcp_manager.remove_session(&canonical, session.id);
+            plugin_manager.remove_session(&canonical, session.id);
 
-        // Unregister session from status server
-        status_server.unregister_session(session.id).await;
+            // Unregister session from status server
+            status_server.unregister_session(session.id).await;
 
-        // Clean up .mcp.json entry (use worktree_path if set, otherwise project_path)
-        let working_dir = session
-            .worktree_path
-            .as_deref()
-            .unwrap_or(&session.project_path);
-        if let Err(e) =
-            mcp_config_writer::remove_session_mcp_config(Path::new(working_dir), session.id).await
-        {
-            log::warn!(
-                "Failed to remove MCP config for session {}: {}",
-                session.id,
-                e
-            );
-        }
+            // Clean up .mcp.json entry (use worktree_path if set, otherwise project_path)
+            let working_dir = session
+                .worktree_path
+                .as_deref()
+                .unwrap_or(&session.project_path);
+            if let Err(e) =
+                mcp_config_writer::remove_session_mcp_config(Path::new(working_dir), session.id).await
+            {
+                log::warn!(
+                    "Failed to remove MCP config for session {}: {}",
+                    session.id,
+                    e
+                );
+            }
 
-        // Fire-and-forget kill -- log errors but don't fail the removal
-        if let Err(e) = process_manager.kill_session(session.id).await {
-            log::warn!("Failed to kill PTY for session {}: {}", session.id, e);
+            // Fire-and-forget kill -- log errors but don't fail the removal
+            if let Err(e) = process_manager.kill_session(session.id).await {
+                log::warn!("Failed to kill PTY for session {}: {}", session.id, e);
+            }
         }
     }
 

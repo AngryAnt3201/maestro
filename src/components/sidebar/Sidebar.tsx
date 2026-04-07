@@ -13,6 +13,7 @@ import {
   Globe,
   Home,
   Info,
+  Keyboard,
   Loader2,
   Moon,
   Package,
@@ -50,10 +51,11 @@ import { McpServerEditorModal } from "@/components/mcp";
 import { ClaudeMdEditorModal } from "@/components/claudemd";
 import { CliSettingsModal } from "@/components/terminal/CliSettingsModal";
 import { TerminalSettingsModal } from "@/components/terminal/TerminalSettingsModal";
-import { MaestroSettingsModal } from "@/components/settings";
+import { HotkeySettingsModal, MaestroSettingsModal } from "@/components/settings";
 import { Tamagotchi } from "@/components/tamagotchi";
 import type { McpCustomServer } from "@/lib/mcp";
 import { checkClaudeMd, type ClaudeMdStatus } from "@/lib/claudemd";
+import { writeStdin } from "@/lib/terminal";
 import { OpenCodeIcon } from "@/components/icons/OpenCodeIcon";
 import { TemplatesSection } from "./TemplatesSection";
 
@@ -652,7 +654,11 @@ function SessionsSection() {
                 className="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-maestro-text hover:bg-maestro-border/40"
               >
                 <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT_CLASS[s.status]}`} />
-                <Bot size={12} className="text-maestro-purple shrink-0" />
+                {s.kind === "OpenFile" ? (
+                  <FileText size={12} className="text-maestro-accent shrink-0" />
+                ) : (
+                  <Bot size={12} className="text-maestro-purple shrink-0" />
+                )}
                 {editingId === s.id ? (
                   <input
                     autoFocus
@@ -672,15 +678,15 @@ function SessionsSection() {
                     onDoubleClick={(e) => {
                       e.preventDefault();
                       setEditingId(s.id);
-                      setEditValue(s.name || `#${s.id}`);
+                      setEditValue(s.name || s.file_path?.split(/[\\/]/).pop() || `#${s.id}`);
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       setEditingId(s.id);
-                      setEditValue(s.name || `#${s.id}`);
+                      setEditValue(s.name || s.file_path?.split(/[\\/]/).pop() || `#${s.id}`);
                     }}
                   >
-                    {s.name || `#${s.id}`}
+                    {s.name || (s.file_path ? s.file_path.split(/[\\/]/).pop() : `#${s.id}`)}
                   </span>
                 )}
                 <span className="text-[10px] text-maestro-muted">{STATUS_LABEL[s.status]}</span>
@@ -695,7 +701,7 @@ function SessionsSection() {
 
 /* ── 4. Status ── */
 
-const AI_MODES: AiMode[] = ["Claude", "Gemini", "Codex", "OpenCode", "Plain"];
+const AI_MODES: Array<AiMode | "OpenFile"> = ["Claude", "Gemini", "Codex", "OpenCode", "Plain", "OpenFile"];
 const SESSION_STATUSES: BackendSessionStatus[] = [
   "Starting",
   "Idle",
@@ -707,12 +713,13 @@ const SESSION_STATUSES: BackendSessionStatus[] = [
 ];
 
 /** Icon component type for AI mode icons - supports both Lucide and custom icons */
-const MODE_ICON: Record<AiMode, React.ElementType> = {
+const MODE_ICON: Record<AiMode | "OpenFile", React.ElementType> = {
   Claude: Bot,
   Gemini: Sparkles,
   Codex: Cpu,
   OpenCode: OpenCodeIcon,
   Plain: Globe,
+  OpenFile: FileText,
 };
 
 function StatusSection() {
@@ -726,7 +733,8 @@ function StatusSection() {
   const counts = sessions.reduce(
     (acc, session) => {
       acc.status[session.status] = (acc.status[session.status] ?? 0) + 1;
-      acc.mode[session.mode] = (acc.mode[session.mode] ?? 0) + 1;
+      const modeKey = session.kind === "OpenFile" ? "OpenFile" : session.mode;
+      acc.mode[modeKey] = (acc.mode[modeKey] ?? 0) + 1;
       return acc;
     },
     {
@@ -742,8 +750,10 @@ function StatusSection() {
         Claude: 0,
         Gemini: 0,
         Codex: 0,
+        OpenCode: 0,
         Plain: 0,
-      } as Record<AiMode, number>,
+        OpenFile: 0,
+      } as Record<AiMode | "OpenFile", number>,
     },
   );
 
@@ -1378,6 +1388,7 @@ function PluginsSection() {
 function QuickActionsSection() {
   const [showManager, setShowManager] = useState(false);
   const actions = useQuickActionStore((s) => s.actions);
+  const focusedSessionId = useSessionStore((s) => s.focusedSessionId);
 
   const sortedActions = useMemo(
     () =>
@@ -1386,6 +1397,12 @@ function QuickActionsSection() {
         .sort((a, b) => a.sortOrder - b.sortOrder),
     [actions]
   );
+
+  const handleQuickAction = useCallback((prompt: string) => {
+    const sessionId = useSessionStore.getState().focusedSessionId;
+    if (sessionId === null) return;
+    writeStdin(sessionId, `${prompt}\r`).catch(console.error);
+  }, []);
 
   return (
     <>
@@ -1414,7 +1431,9 @@ function QuickActionsSection() {
             <button
               type="button"
               key={a.id}
-              className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-maestro-text transition-colors hover:bg-maestro-border/40"
+              disabled={focusedSessionId === null}
+              onClick={() => handleQuickAction(a.prompt)}
+              className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-maestro-text transition-colors hover:bg-maestro-border/40${focusedSessionId === null ? " opacity-50 cursor-not-allowed" : ""}`}
             >
               <DynamicIcon name={a.icon} size={14} style={{ color: a.colorHex }} />
               <span>{a.name}</span>
@@ -1443,6 +1462,7 @@ function AppearanceSection({
   const [showTerminalSettings, setShowTerminalSettings] = useState(false);
   const [showCliSettings, setShowCliSettings] = useState(false);
   const [showMaestroSettings, setShowMaestroSettings] = useState(false);
+  const [showHotkeySettings, setShowHotkeySettings] = useState(false);
   const { showCharacter, toggleCharacter } = useUsageStore();
 
   return (
@@ -1496,6 +1516,14 @@ function AppearanceSection({
           <Info size={14} className="text-maestro-accent" />
           <span>Maestro Settings</span>
         </button>
+        <button
+          type="button"
+          onClick={() => setShowHotkeySettings(true)}
+          className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-maestro-text transition-colors hover:bg-maestro-border/40"
+        >
+          <Keyboard size={14} className="text-maestro-muted" />
+          <span>Keyboard Shortcuts</span>
+        </button>
       </div>
 
       {showTerminalSettings && (
@@ -1506,6 +1534,9 @@ function AppearanceSection({
       )}
       {showMaestroSettings && (
         <MaestroSettingsModal onClose={() => setShowMaestroSettings(false)} />
+      )}
+      {showHotkeySettings && (
+        <HotkeySettingsModal onClose={() => setShowHotkeySettings(false)} />
       )}
     </>
   );

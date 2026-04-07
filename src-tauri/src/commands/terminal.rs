@@ -94,10 +94,21 @@ pub async fn spawn_shell(
     // Validate cwd if provided: must exist and be a directory
     let canonical_cwd = if let Some(ref dir) = cwd {
         let path = std::path::Path::new(dir);
-        let canonical = path
-            .canonicalize()
-            .map_err(|e| PtyError::spawn_failed(format!("Invalid cwd '{dir}': {e}")))?;
+        let canonical = match path.canonicalize() {
+            Ok(path) => path,
+            Err(e) => {
+                crate::core::launch_diagnostics::append(
+                    "spawn_shell.invalid_cwd",
+                    &format!("cwd='{}' error={}", dir, e),
+                );
+                return Err(PtyError::spawn_failed(format!("Invalid cwd '{dir}': {e}")));
+            }
+        };
         if !canonical.is_dir() {
+            crate::core::launch_diagnostics::append(
+                "spawn_shell.cwd_not_directory",
+                &format!("cwd='{}' canonical='{}'", dir, canonical.display()),
+            );
             return Err(PtyError::spawn_failed(format!(
                 "cwd '{dir}' is not a directory"
             )));
@@ -120,7 +131,13 @@ pub async fn spawn_shell(
         None
     };
     let pm = state.inner().clone();
-    pm.spawn_shell(app_handle, canonical_cwd, env)
+    pm.spawn_shell(app_handle, canonical_cwd.clone(), env)
+        .inspect_err(|err| {
+            crate::core::launch_diagnostics::append(
+                "spawn_shell.failed",
+                &format!("cwd={:?} error={}", canonical_cwd, err),
+            );
+        })
 }
 
 /// Exposes `ProcessManager::write_stdin` to the frontend.

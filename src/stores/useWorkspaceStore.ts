@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import { arrayMove } from "@dnd-kit/sortable";
 import { killSession } from "@/lib/terminal";
+import { useSessionStore } from "@/stores/useSessionStore";
 
 // --- Types ---
 
@@ -221,9 +222,17 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
       closeTab: (id: string) => {
         const tabToClose = get().tabs.find((t) => t.id === id);
 
-        // Kill all sessions belonging to this project (fire-and-forget)
+        // Kill only terminal-backed sessions belonging to this project (fire-and-forget)
         if (tabToClose && tabToClose.sessionIds.length > 0) {
-          Promise.allSettled(tabToClose.sessionIds.map((sessionId) => killSession(sessionId)))
+          const terminalSessionIds = useSessionStore
+            .getState()
+            .sessions.filter(
+              (session) =>
+                session.kind === "Terminal" && tabToClose.sessionIds.includes(session.id)
+            )
+            .map((session) => session.id);
+
+          Promise.allSettled(terminalSessionIds.map((sessionId) => killSession(sessionId)))
             .then((results) => {
               for (const result of results) {
                 if (result.status === "rejected") {

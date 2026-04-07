@@ -8,6 +8,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { BackendCapabilities, BackendType } from "./terminalTheme";
+import type { SessionKind } from "@/stores/useSessionStore";
 
 /**
  * Spawns a new PTY shell session on the backend.
@@ -106,10 +107,12 @@ export async function checkCliAvailable(command: string): Promise<boolean> {
 /** Session config returned by createSession. */
 export interface SessionConfig {
   id: number;
+  kind: SessionKind;
   mode: AiMode;
   branch: string | null;
   status: string;
   worktree_path: string | null;
+  file_path: string | null;
   project_path: string;
 }
 
@@ -120,6 +123,19 @@ export async function createSession(
   projectPath: string
 ): Promise<SessionConfig> {
   return invoke<SessionConfig>("create_session", { id, mode, projectPath });
+}
+
+/** Creates a non-PTY file session in the SessionManager. */
+export async function createFileSession(
+  projectPath: string,
+  filePath: string
+): Promise<SessionConfig> {
+  return invoke<SessionConfig>("create_file_session", { projectPath, filePath });
+}
+
+/** Removes a session registration from the backend SessionManager. */
+export async function removeSessionRegistration(sessionId: number): Promise<void> {
+  await invoke("remove_session", { sessionId });
 }
 
 /** Assigns a branch and optional worktree path to a session. */

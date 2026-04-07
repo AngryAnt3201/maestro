@@ -4,6 +4,7 @@ import { create } from "zustand";
 
 /** AI provider variants supported by the backend orchestrator. */
 export type AiMode = "Claude" | "Gemini" | "Codex" | "OpenCode" | "Plain";
+export type SessionKind = "Terminal" | "OpenFile";
 
 /**
  * Backend-emitted session lifecycle states.
@@ -35,10 +36,12 @@ const SESSION_STARTUP_TIMEOUT_MS = 30000;
  */
 export interface SessionConfig {
   id: number;
+  kind: SessionKind;
   mode: AiMode;
   branch: string | null;
   status: BackendSessionStatus;
   worktree_path: string | null;
+  file_path: string | null;
   project_path: string;
   statusMessage?: string;
   needsInputPrompt?: string;
@@ -70,6 +73,8 @@ interface SessionState {
   sessions: SessionConfig[];
   isLoading: boolean;
   error: string | null;
+  /** The session ID of the currently focused terminal (global, cross-component). */
+  focusedSessionId: number | null;
   fetchSessions: () => Promise<void>;
   fetchSessionsForProject: (projectPath: string) => Promise<void>;
   addSession: (session: SessionConfig) => void;
@@ -78,6 +83,7 @@ interface SessionState {
   updateSession: (sessionId: number, updates: Partial<SessionConfig>) => void;
   getSessionsByProject: (projectPath: string) => SessionConfig[];
   renameSession: (sessionId: number, name: string) => void;
+  setFocusedSessionId: (sessionId: number | null) => void;
   initListeners: () => Promise<UnlistenFn>;
 }
 
@@ -123,6 +129,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   sessions: [],
   isLoading: false,
   error: null,
+  focusedSessionId: null,
 
   fetchSessions: async () => {
     set({ isLoading: true, error: null });
@@ -177,6 +184,14 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
         status: bufferedStatus.status,
         statusMessage: bufferedStatus.message,
         needsInputPrompt: bufferedStatus.needs_input_prompt,
+      };
+    }
+
+    if (!session.name && session.file_path) {
+      const segments = session.file_path.split(/[\\/]/);
+      session = {
+        ...session,
+        name: segments[segments.length - 1] || session.file_path,
       };
     }
 
@@ -268,6 +283,12 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
         s.id === sessionId ? { ...s, name: trimmed || undefined } : s
       ),
     }));
+  },
+
+  setFocusedSessionId: (sessionId: number | null) => {
+    if (get().focusedSessionId !== sessionId) {
+      set({ focusedSessionId: sessionId });
+    }
   },
 
   getSessionsByProject: (projectPath: string) => {

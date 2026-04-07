@@ -15,8 +15,11 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { ask } from "@tauri-apps/plugin-dialog";
 
+import { FileEditorView } from "@/components/session/FileEditorView";
+import { pickTextFile } from "@/lib/dialog";
 import { getBranchesWithWorktreeStatus, type BranchWithWorktreeStatus } from "@/lib/git";
 import { removeSessionMcpConfig, removeOpenCodeMcpConfig, setSessionMcpServers, writeSessionMcpConfig, writeOpenCodeMcpConfig, type McpServerConfig } from "@/lib/mcp";
+import { readTextFile, writeTextFile } from "@/lib/openFile";
 import {
   loadBranchConfig,
   removeSessionPluginConfig,
@@ -32,8 +35,10 @@ import {
   assignSessionBranch,
   buildCliCommand,
   checkCliAvailable,
+  createFileSession,
   createSession,
   killSession,
+  removeSessionRegistration,
   removeSessionHooksConfig,
   spawnShell,
   waitForTerminalReady,
@@ -48,23 +53,23 @@ import { useTerminalKeyboard } from "@/hooks/useTerminalKeyboard";
 import { useMcpStore } from "@/stores/useMcpStore";
 import { usePluginStore } from "@/stores/usePluginStore";
 import { useSessionStore } from "@/stores/useSessionStore";
-import type { AiMode } from "@/stores/useSessionStore";
 import { useTemplateStore } from "@/stores/useTemplateStore";
 import { useWorkspaceStore, type RepositoryInfo, type WorkspaceType } from "@/stores/useWorkspaceStore";
-import { PreLaunchCard, type SessionSlot } from "./PreLaunchCard";
+import { PreLaunchCard, type SessionLaunchMode, type SessionSlot } from "./PreLaunchCard";
 import { SplitPaneView } from "./SplitPaneView";
 import { createLeaf, splitLeaf, removeLeaf, updateRatio, collectSlotIds, findSiblingSlotId, buildGridTree, swapLeaves, type TreeNode, type SplitDirection } from "./splitTree";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { TerminalView } from "./TerminalView";
-import { BrainCircuit, Code2, GitBranch, Sparkles, Terminal } from "lucide-react";
+import { BrainCircuit, Code2, FileText, GitBranch, Sparkles, Terminal } from "lucide-react";
 import { OpenCodeIcon } from "@/components/icons";
 
-const MODE_OVERLAY_CONFIG: Record<AiMode, { icon: React.ElementType; label: string; color: string }> = {
+const MODE_OVERLAY_CONFIG: Record<SessionLaunchMode, { icon: React.ElementType; label: string; color: string }> = {
   Claude: { icon: BrainCircuit, label: "Claude Code", color: "text-violet-500" },
   Gemini: { icon: Sparkles, label: "Gemini CLI", color: "text-blue-400" },
   Codex: { icon: Code2, label: "Codex", color: "text-green-400" },
   OpenCode: { icon: OpenCodeIcon, label: "OpenCode", color: "text-purple-500" },
   Plain: { icon: Terminal, label: "Terminal", color: "text-maestro-muted" },
+  OpenFile: { icon: FileText, label: "Open File", color: "text-maestro-muted" },
 };
 
 /** Stable empty arrays to avoid infinite re-render loops in Zustand selectors. */
@@ -81,6 +86,31 @@ const MAX_SESSIONS = 6;
  * Without worktrees, sessions can overwrite each other's MCP config before Claude CLI reads it.
  */
 const projectLaunchLocks = new Map<string, Promise<void>>();
+
+function getLaunchErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (error && typeof error === "object") {
+    const maybeMessage = "message" in error ? error.message : null;
+    if (typeof maybeMessage === "string" && maybeMessage.length > 0) {
+      return maybeMessage;
+    }
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+
+  return String(error);
+}
 
 async function withProjectLock<T>(projectPath: string, fn: () => Promise<T>): Promise<T> {
   // Wait for any pending launches to complete.
@@ -112,6 +142,11 @@ function generateSlotId(): string {
   return `slot-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function basename(path: string): string {
+  const segments = path.split(/[\\/]/);
+  return segments[segments.length - 1] || path;
+}
+
 /** Creates a new empty session slot with default configuration. */
 function createEmptySlot(
   mcpServers: McpServerConfig[] = [],
@@ -124,6 +159,7 @@ function createEmptySlot(
     branch: null,
     newWorktreeBranch: "",
     sessionId: null,
+    filePath: null,
     worktreePath: null,
     worktreeWarning: null,
     enabledMcpServers: mcpServers.map((s) => s.name), // All enabled by default
@@ -320,6 +356,9 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
   // Binary split tree layout (drives pane arrangement)
   const [layoutTree, setLayoutTree] = useState<TreeNode>(() => createLeaf(slots[0].id));
 
+  // Incremented on DnD swaps so TerminalView knows to refit after DOM reparenting
+  const [layoutVersion, setLayoutVersion] = useState(0);
+
   // Track whether a divider is being dragged (disables xterm pointer events)
   const [isDragging, setIsDragging] = useState(false);
 
@@ -425,6 +464,12 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     const launchedCount = slots.filter((s) => s.sessionId !== null).length;
     onSessionCountChange?.(slots.length, launchedCount);
   }, [slots, onSessionCountChange]);
+
+  // Sync focused session ID to global store so sidebar quick actions can target it
+  useEffect(() => {
+    const slot = focusedSlotId ? slots.find((s) => s.id === focusedSlotId) : null;
+    useSessionStore.getState().setFocusedSessionId(slot?.sessionId ?? null);
+  }, [focusedSlotId, slots]);
 
   // Refresh branches callback (used by useEffect and exposed via handle)
   const refreshBranches = useCallback(() => {
@@ -610,6 +655,55 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     const slot = slotsRef.current.find((s) => s.id === slotId);
     if (!slot || slot.sessionId !== null) return;
 
+    if (slot.mode === "OpenFile") {
+      if (!projectPath || !slot.filePath) return;
+
+      try {
+        const opened = await readTextFile(slot.filePath);
+        const sessionConfig = await createFileSession(projectPath, opened.path);
+        useSessionStore.getState().addSession({
+          ...sessionConfig,
+          status: sessionConfig.status as import("@/stores/useSessionStore").BackendSessionStatus,
+        });
+
+        setSlots((prev) =>
+          prev.map((s) =>
+            s.id === slotId
+              ? {
+                  ...s,
+                  sessionId: sessionConfig.id,
+                  filePath: opened.path,
+                  savedFileContent: opened.content,
+                  fileContent: opened.content,
+                  fileError: null,
+                  fileSaving: false,
+                }
+              : s
+          )
+        );
+
+        if (tabId) {
+          addSessionToProject(tabId, sessionConfig.id);
+        }
+      } catch (err) {
+        const errorMessage = getLaunchErrorMessage(err);
+        console.error("[TerminalGrid] Failed to open file session", {
+          slotId,
+          projectPath,
+          filePath: slot.filePath,
+          errorMessage,
+          error: err,
+        });
+        setError(`Failed to open file: ${errorMessage}`);
+      }
+      return;
+    }
+
+    let launchStage = "save branch config";
+    let workingDirectory = effectiveRepoPath ?? projectPath ?? null;
+    let worktreePath: string | null = null;
+    let sessionId: number | null = null;
+
     try {
       const { branch: launchBranch, startPoint } = getLaunchBranchConfig(slot, branches);
 
@@ -628,11 +722,11 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       // Determine the working directory
       // If a branch is selected, prepare a worktree first
       // For multi-repo workspaces, use effectiveRepoPath for git operations
-      let workingDirectory = effectiveRepoPath ?? projectPath;
-      let worktreePath: string | null = null;
+      launchStage = "prepare working directory";
       let worktreeWarning: string | null = null;
 
       if (effectiveRepoPath && launchBranch) {
+        launchStage = "prepare worktree";
         const result = await prepareSessionWorktree(
           effectiveRepoPath,
           launchBranch,
@@ -653,18 +747,22 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       // session identification (avoiding .mcp.json race conditions)
       let envVars: Record<string, string> | undefined;
       if (projectPath) {
+        launchStage = "generate project hash";
         const projectHash = await invoke<string>("generate_project_hash", { projectPath });
         envVars = { MAESTRO_PROJECT_HASH: projectHash };
       }
 
       // Spawn the shell in the correct directory (worktree or project path)
       // MAESTRO_SESSION_ID is automatically injected by the backend
-      const sessionId = await spawnShell(workingDirectory, envVars);
+      launchStage = "spawn shell";
+      sessionId = await spawnShell(workingDirectory ?? undefined, envVars);
 
       // Register the session in SessionManager (required before assigning branch)
       if (projectPath) {
-        const sessionConfig = await createSession(sessionId, slot.mode, projectPath);
+        launchStage = "register session";
+        const sessionConfig = await createSession(sessionId!, slot.mode, projectPath);
         // Add project to MCP status monitor for polling status updates
+        launchStage = "register MCP project";
         await invoke("add_mcp_project", { projectPath });
         // Add session to store directly (don't refetch all sessions to avoid status reset)
         useSessionStore.getState().addSession({
@@ -675,6 +773,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
       // Assign the branch to the session so the header displays it
       if (launchBranch) {
+        launchStage = "assign branch";
         const updatedConfig = await assignSessionBranch(sessionId, launchBranch, worktreePath);
         useSessionStore.getState().updateSession(sessionId, {
           branch: updatedConfig.branch,
@@ -684,13 +783,15 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
       // Save enabled MCP servers for this session
       if (projectPath) {
-        await setSessionMcpServers(projectPath, sessionId, slot.enabledMcpServers);
+        launchStage = "save session MCP settings";
+        await setSessionMcpServers(projectPath, sessionId!, slot.enabledMcpServers);
       }
 
       // Save enabled skills and plugins for this session
       if (projectPath) {
-        await setSessionSkills(projectPath, sessionId, slot.enabledSkills);
-        await setSessionPlugins(projectPath, sessionId, slot.enabledPlugins);
+        launchStage = "save session plugin settings";
+        await setSessionSkills(projectPath, sessionId!, slot.enabledSkills);
+        await setSessionPlugins(projectPath, sessionId!, slot.enabledPlugins);
       }
 
       // Update slot state FIRST to mount TerminalView and initialize xterm.js.
@@ -715,7 +816,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
       // Register session with the project
       if (tabId) {
-        addSessionToProject(tabId, sessionId);
+        addSessionToProject(tabId, sessionId!);
       }
 
       // Auto-launch AI CLI after shell initializes
@@ -726,6 +827,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       // 2. Launch CLI immediately (before any other session can overwrite .mcp.json)
       // 3. Wait for CLI to read the config
       if (slot.mode !== "Plain") {
+        launchStage = "launch AI CLI";
         const cliConfig = AI_CLI_CONFIG[slot.mode];
         if (cliConfig.command) {
           const isAvailable = await checkCliAvailable(cliConfig.command);
@@ -737,7 +839,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
               try {
                 await writeSessionMcpConfig(
                   workingDirectory,
-                  sessionId,
+                  sessionId!,
                   projectPath ?? workingDirectory,
                   slot.enabledMcpServers
                 );
@@ -762,7 +864,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
               // Write hooks config for Claude sessions
               // This configures Claude Code to POST hook events back to Maestro's status server
               try {
-                await writeSessionHooksConfig(workingDirectory, sessionId);
+                await writeSessionHooksConfig(workingDirectory, sessionId!);
               } catch (err) {
                 console.warn("Failed to write hooks config:", err);
                 // Non-fatal: hooks are enhancement, session can work without them
@@ -772,7 +874,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
               try {
                 await writeOpenCodeMcpConfig(
                   workingDirectory,
-                  sessionId,
+                  sessionId!,
                   projectPath ?? workingDirectory,
                   slot.enabledMcpServers
                 );
@@ -798,7 +900,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             // This ensures we don't send CLI commands before the terminal is ready
             // (which would cause output to be lost since Tauri events aren't buffered)
             try {
-              await waitForTerminalReady(sessionId);
+              await waitForTerminalReady(sessionId!);
             } catch (err) {
               console.warn("Terminal ready timeout, proceeding anyway:", err);
             }
@@ -811,7 +913,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             const cliCommand = buildCliCommand(slot.mode, cliFlags);
 
             // Send CLI launch command
-            await writeStdin(sessionId, `${cliCommand}\r`);
+            await writeStdin(sessionId!, `${cliCommand}\r`);
 
             // Brief delay for CLI initialization.
             // With session-specific MCP server names (maestro-1, maestro-2, etc.),
@@ -826,8 +928,22 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
         }
       }
     } catch (err) {
-      console.error("Failed to spawn shell:", err);
-      setError("Failed to start terminal session");
+      const errorMessage = getLaunchErrorMessage(err);
+      console.error("[TerminalGrid] Failed to start terminal session", {
+        slotId,
+        launchStage,
+        tabId,
+        mode: slot.mode,
+        branch: slot.branch,
+        projectPath,
+        repoPath: effectiveRepoPath,
+        workingDirectory,
+        worktreePath,
+        sessionId,
+        errorMessage,
+        error: err,
+      });
+      setError(`Failed to start terminal session during ${launchStage}: ${errorMessage}`);
     }
   }, [projectPath, effectiveRepoPath, tabId, addSessionToProject, branches, worktreeBasePath]);
 
@@ -884,6 +1000,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       // Clean up focus callback
       if (slot) {
         focusCallbacksRef.current.delete(slot.id);
+        terminalContainersRef.current.delete(slot.id);
       }
       setZoomedSlotId(null);
       onAllSessionsClosedRef.current();
@@ -891,6 +1008,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       // Clean up cached focus callback for this slot
       if (slot) {
         focusCallbacksRef.current.delete(slot.id);
+        terminalContainersRef.current.delete(slot.id);
 
         // If the closed pane was zoomed, switch zoom to its sibling
         setZoomedSlotId((prev) => {
@@ -916,6 +1034,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
     // Remove session from the session store
     useSessionStore.getState().removeSession(sessionId);
+    removeSessionRegistration(sessionId).catch(console.error);
 
     // Unregister session from the project
     if (tabId) {
@@ -961,6 +1080,69 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     }
   }, [tabId, effectiveRepoPath, projectPath, removeSessionFromProject, refreshBranches, focusedSlotId, layoutTree]);
 
+  const handleCloseFileSession = useCallback((sessionId: number) => {
+    const slot = slotsRef.current.find((s) => s.sessionId === sessionId);
+
+    if (slotsRef.current.length <= 1 && onAllSessionsClosedRef.current) {
+      if (slot) {
+        focusCallbacksRef.current.delete(slot.id);
+        terminalContainersRef.current.delete(slot.id);
+      }
+      setZoomedSlotId(null);
+      onAllSessionsClosedRef.current();
+    } else if (slot) {
+      focusCallbacksRef.current.delete(slot.id);
+      terminalContainersRef.current.delete(slot.id);
+      setZoomedSlotId((prev) => {
+        if (prev !== slot.id) return prev;
+        return findSiblingSlotId(layoutTree, slot.id);
+      });
+
+      if (focusedSlotId === slot.id) {
+        const sibling = findSiblingSlotId(layoutTree, slot.id);
+        setFocusedSlotId(sibling);
+      }
+
+      setLayoutTree((prev) => {
+        const result = removeLeaf(prev, slot.id);
+        return result ?? prev;
+      });
+
+      setSlots((prev) => prev.filter((s) => s.sessionId !== sessionId));
+    }
+
+    useSessionStore.getState().removeSession(sessionId);
+    removeSessionRegistration(sessionId).catch(console.error);
+
+    if (tabId) {
+      removeSessionFromProject(tabId, sessionId);
+    }
+  }, [focusedSlotId, layoutTree, removeSessionFromProject, tabId]);
+
+  const requestCloseFileSession = useCallback((sessionId: number) => {
+    const slot = slotsRef.current.find((s) => s.sessionId === sessionId);
+    if (!slot) return;
+
+    const isDirtyFile = (slot.fileContent ?? "") !== (slot.savedFileContent ?? "");
+    const proceed = () => handleCloseFileSession(sessionId);
+
+    if (!isDirtyFile) {
+      proceed();
+      return;
+    }
+
+    ask("Close this file without saving your changes?", {
+      title: "Close File",
+      kind: "warning",
+    })
+      .then((confirmed) => {
+        if (confirmed) {
+          proceed();
+        }
+      })
+      .catch(console.error);
+  }, [handleCloseFileSession]);
+
   /**
    * Removes a pre-launch slot (before it's launched).
    */
@@ -997,7 +1179,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     setSlots((prev) => prev.filter((s) => s.id !== slotId));
   }, [focusedSlotId, layoutTree]);
 
-  // Keep closePaneRef in sync with latest handleKill/removeSlot
+  // Keep closePaneRef in sync with latest close handlers
   closePaneRef.current = () => {
     const targetId = focusedSlotId ?? slotsRef.current[0]?.id;
     if (!targetId) return;
@@ -1007,6 +1189,11 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
     if (slot.sessionId !== null) {
       // Confirm before closing a launched session (async native dialog)
+      if (slot.mode === "OpenFile") {
+        requestCloseFileSession(slot.sessionId!);
+        return;
+      }
+
       ask("Are you sure you want to close this session?", {
         title: "Close Session",
         kind: "warning",
@@ -1024,10 +1211,16 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
   /**
    * Updates the AI mode for a slot.
    */
-  const updateSlotMode = useCallback((slotId: string, mode: AiMode) => {
+  const updateSlotMode = useCallback((slotId: string, mode: SessionLaunchMode) => {
     setSlots((prev) =>
       prev.map((s) =>
-        s.id === slotId ? { ...s, mode } : s
+        s.id === slotId
+          ? {
+              ...s,
+              mode,
+              branch: mode === "OpenFile" ? null : s.branch,
+            }
+          : s
       )
     );
   }, []);
@@ -1082,6 +1275,93 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     );
   }, []);
 
+  const pickFileForSlot = useCallback(async (slotId: string) => {
+    try {
+      const selected = await pickTextFile();
+      if (!selected) return;
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.id === slotId
+            ? {
+                ...s,
+                filePath: selected,
+                fileError: null,
+              }
+            : s
+        )
+      );
+    } catch (err) {
+      const message = getLaunchErrorMessage(err);
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.id === slotId
+            ? {
+                ...s,
+                fileError: message,
+              }
+            : s
+        )
+      );
+    }
+  }, []);
+
+  const updateFileContent = useCallback((slotId: string, content: string) => {
+    setSlots((prev) =>
+      prev.map((s) =>
+        s.id === slotId
+          ? {
+              ...s,
+              fileContent: content,
+            }
+          : s
+      )
+    );
+  }, []);
+
+  const saveFileSession = useCallback(async (sessionId: number) => {
+    const slot = slotsRef.current.find((s) => s.sessionId === sessionId);
+    if (!slot?.filePath) return;
+
+    setSlots((prev) =>
+      prev.map((s) =>
+        s.id === slot.id
+          ? {
+              ...s,
+              fileSaving: true,
+              fileError: null,
+            }
+          : s
+      )
+    );
+
+    try {
+      await writeTextFile(slot.filePath, slot.fileContent ?? "");
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.id === slot.id
+            ? {
+                ...s,
+                fileSaving: false,
+                fileError: null,
+                savedFileContent: s.fileContent ?? "",
+              }
+            : s
+        )
+      );
+    } catch (err) {
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.id === slot.id
+            ? {
+                ...s,
+                fileSaving: false,
+                fileError: getLaunchErrorMessage(err),
+              }
+            : s
+        )
+      );
+    }
+  }, []);
   /**
    * Toggles an MCP server for a slot.
    */
@@ -1325,6 +1605,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
           branch: null,
           newWorktreeBranch: "",
           sessionId: null,
+          filePath: null,
           worktreePath: null,
           worktreeWarning: null,
           enabledMcpServers: pendingTemplate.enabledMcpServers,
@@ -1351,6 +1632,9 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
     const { active, over } = event;
     if (over && active.id !== over.id) {
       setLayoutTree((prev) => swapLeaves(prev, active.id as string, over.id as string));
+      // Bump layout version so TerminalView refits after DOM reparenting
+      // (the swap moves container divs, which can lose the WebGL context)
+      setLayoutVersion((v) => v + 1);
     }
   }, []);
 
@@ -1388,19 +1672,41 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
     const content = slot.sessionId !== null ? (
       <ErrorBoundary>
-        <TerminalView
-          key={slot.id}
-          sessionId={slot.sessionId}
-          slotId={slot.id}
-          isFocused={isThisZoomed || focusedSlotId === slot.id}
-          isActive={isActive}
-          isDragging={isDragging}
-          onFocus={getFocusCallback(slot.id)}
-          onKill={handleKill}
-          terminalCount={slots.length}
-          isZoomed={isThisZoomed}
-          onToggleZoom={() => handleToggleZoom(slot.id)}
-        />
+        {slot.mode === "OpenFile" && slot.filePath ? (
+          <FileEditorView
+            key={slot.id}
+            sessionId={slot.sessionId}
+            slotId={slot.id}
+            filePath={slot.filePath}
+            content={slot.fileContent ?? ""}
+            isDirty={(slot.fileContent ?? "") !== (slot.savedFileContent ?? "")}
+            isSaving={slot.fileSaving}
+            error={slot.fileError}
+            isFocused={isThisZoomed || focusedSlotId === slot.id}
+            terminalCount={slots.length}
+            isZoomed={isThisZoomed}
+            onFocus={getFocusCallback(slot.id)}
+            onChange={(content) => updateFileContent(slot.id, content)}
+            onSave={() => saveFileSession(slot.sessionId!)}
+            onClose={requestCloseFileSession}
+            onToggleZoom={() => handleToggleZoom(slot.id)}
+          />
+        ) : (
+          <TerminalView
+            key={slot.id}
+            sessionId={slot.sessionId}
+            slotId={slot.id}
+            isFocused={isThisZoomed || focusedSlotId === slot.id}
+            isActive={isActive}
+            isDragging={isDragging}
+            onFocus={getFocusCallback(slot.id)}
+            onKill={handleKill}
+            terminalCount={slots.length}
+            isZoomed={isThisZoomed}
+            onToggleZoom={() => handleToggleZoom(slot.id)}
+            layoutVersion={layoutVersion}
+          />
+        )}
       </ErrorBoundary>
     ) : (
       <PreLaunchCard
@@ -1422,6 +1728,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
         onModeChange={(mode) => updateSlotMode(slot.id, mode)}
         onBranchChange={(branch) => updateSlotBranch(slot.id, branch)}
         onNewWorktreeBranchChange={(branch) => updateSlotNewWorktreeBranch(slot.id, branch)}
+        onPickFile={() => pickFileForSlot(slot.id)}
         onMcpToggle={(serverName) => toggleSlotMcp(slot.id, serverName)}
         onSkillToggle={(skillId) => toggleSlotSkill(slot.id, skillId)}
         onPluginToggle={(pluginId) => toggleSlotPlugin(slot.id, pluginId)}
@@ -1443,7 +1750,7 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
       </>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps -- Deps cover all render-affecting state
-  }, [slots, focusedSlotId, isActive, getFocusCallback, handleKill, handleToggleZoom, projectPath, branches, isLoadingBranches, isGitRepo, repositories, workspaceType, effectiveRepoPath, onRepoChange, mcpServers, skills, plugins, handleCreateBranch, updateSlotMode, updateSlotBranch, updateSlotNewWorktreeBranch, toggleSlotMcp, toggleSlotSkill, toggleSlotPlugin, selectAllMcp, unselectAllMcp, selectAllPlugins, unselectAllPlugins, launchSlot, removeSlot, zoomedSlotId, getOrCreateContainer, activeDragSlotId]);
+  }, [slots, focusedSlotId, isActive, getFocusCallback, handleCloseFileSession, requestCloseFileSession, handleKill, handleToggleZoom, projectPath, branches, isLoadingBranches, isGitRepo, repositories, workspaceType, effectiveRepoPath, onRepoChange, mcpServers, skills, plugins, handleCreateBranch, updateSlotMode, updateSlotBranch, updateSlotNewWorktreeBranch, pickFileForSlot, toggleSlotMcp, toggleSlotSkill, toggleSlotPlugin, updateFileContent, saveFileSession, selectAllMcp, unselectAllMcp, selectAllPlugins, unselectAllPlugins, launchSlot, removeSlot, zoomedSlotId, getOrCreateContainer, activeDragSlotId, layoutVersion]);
 
   const handleRatioChange = useCallback((nodeId: string, ratio: number) => {
     setLayoutTree((prev) => updateRatio(prev, nodeId, ratio));
@@ -1491,8 +1798,12 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
           if (slot.sessionId !== null) {
             const session = sessions.find((s) => s.id === slot.sessionId);
             if (session?.name) return session.name;
+            if (session?.file_path) return basename(session.file_path);
           }
-          return `Terminal ${index + 1}`;
+          if (slot.mode === "OpenFile" && slot.filePath) {
+            return basename(slot.filePath);
+          }
+          return `${slot.mode === "OpenFile" ? "File" : "Terminal"} ${index + 1}`;
         };
 
         return (
