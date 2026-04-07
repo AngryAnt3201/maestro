@@ -22,6 +22,7 @@ export type AIProvider = "claude" | "gemini" | "codex" | "opencode" | "plain";
 
 interface TerminalHeaderProps {
   sessionId: number;
+  sessionName?: string | null;
   provider?: AIProvider;
   status?: SessionStatus;
   mcpCount?: number;
@@ -31,6 +32,7 @@ interface TerminalHeaderProps {
   showLaunch?: boolean;
   isWorktree?: boolean;
   onKill: (sessionId: number) => void;
+  onRename?: (sessionId: number, name: string | null) => void;
   onLaunch?: () => void;
   terminalCount?: number;
   isZoomed?: boolean;
@@ -71,6 +73,7 @@ const providerConfig: Record<AIProvider, { icon: IconComponent; label: string }>
 
 export const TerminalHeader = memo(function TerminalHeader({
   sessionId,
+  sessionName,
   provider = "claude",
   status = "idle",
   mcpCount = 1,
@@ -80,6 +83,7 @@ export const TerminalHeader = memo(function TerminalHeader({
   showLaunch = false,
   isWorktree = false,
   onKill,
+  onRename,
   onLaunch,
   terminalCount = 1,
   isZoomed = false,
@@ -92,6 +96,29 @@ export const TerminalHeader = memo(function TerminalHeader({
   const { icon: ProviderIcon, label: providerLabel } = providerConfig[provider];
   const [showZoomMenu, setShowZoomMenu] = useState(false);
   const zoomMenuRef = useRef<HTMLDivElement>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState("");
+  const editNameRef = useRef<HTMLInputElement>(null);
+
+  const defaultLabel = `${providerLabel} #${sessionId}`;
+
+  const startEditingName = () => {
+    if (!onRename) return;
+    setEditNameValue(sessionName || defaultLabel);
+    setIsEditingName(true);
+    setTimeout(() => editNameRef.current?.select(), 0);
+  };
+
+  const commitName = () => {
+    const trimmed = editNameValue.trim();
+    const newName = trimmed && trimmed !== defaultLabel ? trimmed : null;
+    onRename?.(sessionId, newName);
+    setIsEditingName(false);
+  };
+
+  const cancelEditName = () => {
+    setIsEditingName(false);
+  };
 
   const handleZoomPreset = useCallback(
     (level: number) => {
@@ -221,9 +248,28 @@ export const TerminalHeader = memo(function TerminalHeader({
         </button>
 
         {/* Session label */}
-        <span className={`shrink-0 font-medium text-maestro-text ${adaptive.sessionLabelSize}`}>
-          {providerLabel} #{sessionId}
-        </span>
+        {isEditingName ? (
+          <input
+            ref={editNameRef}
+            type="text"
+            value={editNameValue}
+            onChange={(e) => setEditNameValue(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitName();
+              if (e.key === "Escape") cancelEditName();
+            }}
+            className={`shrink-0 rounded border border-maestro-accent bg-maestro-card px-1 py-0 font-medium text-maestro-text outline-none ${adaptive.sessionLabelSize}`}
+            autoFocus
+          />
+        ) : (
+          <span
+            className={`shrink-0 cursor-text font-medium text-maestro-text ${adaptive.sessionLabelSize}`}
+            onClick={startEditingName}
+          >
+            {sessionName || defaultLabel}
+          </span>
+        )}
 
         {/* MCP badge */}
         {(adaptive.showAllElements || terminalCount <= 6) && (

@@ -38,6 +38,7 @@ pub enum SessionStatus {
 pub struct SessionConfig {
     pub id: u32,
     pub mode: AiMode,
+    pub name: Option<String>,
     pub branch: Option<String>,
     pub status: SessionStatus,
     pub worktree_path: Option<String>,
@@ -75,6 +76,7 @@ impl SessionManager {
         let config = SessionConfig {
             id,
             mode,
+            name: None,
             branch: None,
             status: SessionStatus::Idle,
             worktree_path: None,
@@ -102,6 +104,17 @@ impl SessionManager {
             true
         } else {
             false
+        }
+    }
+
+    /// Updates the session's display name. Pass `None` to reset to the default.
+    /// Returns the updated config, or `None` if the session does not exist.
+    pub fn rename_session(&self, id: u32, name: Option<String>) -> Option<SessionConfig> {
+        if let Some(mut session) = self.sessions.get_mut(&id) {
+            session.name = name;
+            Some(session.clone())
+        } else {
+            None
         }
     }
 

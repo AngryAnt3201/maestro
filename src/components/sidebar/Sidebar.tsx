@@ -594,13 +594,36 @@ function ProjectContextSection() {
 
 function SessionsSection() {
   const [expanded, setExpanded] = useState(true);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const editRef = useRef<HTMLInputElement>(null);
   const allSessions = useSessionStore((s) => s.sessions);
+  const renameSession = useSessionStore((s) => s.renameSession);
   const tabs = useWorkspaceStore((s) => s.tabs);
   const activeTab = tabs.find((t) => t.active);
   const activeProjectPath = activeTab?.projectPath ?? "";
 
   // Filter sessions to only show those belonging to the active project
   const sessions = allSessions.filter((s) => s.project_path === activeProjectPath);
+
+  const startEditing = (s: { id: number; name?: string | null }) => {
+    setEditingId(s.id);
+    setEditValue(s.name || `#${s.id}`);
+    // Focus after render
+    setTimeout(() => editRef.current?.select(), 0);
+  };
+
+  const commitRename = (sessionId: number) => {
+    const trimmed = editValue.trim();
+    // If empty or same as default, reset to null
+    const newName = trimmed && trimmed !== `#${sessionId}` ? trimmed : null;
+    renameSession(sessionId, newName);
+    setEditingId(null);
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+  };
 
   return (
     <div className={cardClass}>
@@ -636,7 +659,28 @@ function SessionsSection() {
               >
                 <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT_CLASS[s.status]}`} />
                 <Bot size={12} className="text-maestro-purple shrink-0" />
-                <span className="flex-1 font-medium">#{s.id}</span>
+                {editingId === s.id ? (
+                  <input
+                    ref={editRef}
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={() => commitRename(s.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitRename(s.id);
+                      if (e.key === "Escape") cancelEditing();
+                    }}
+                    className="flex-1 rounded border border-maestro-accent bg-maestro-card px-1 py-0 text-xs font-medium text-maestro-text outline-none"
+                    autoFocus
+                  />
+                ) : (
+                  <span
+                    className="flex-1 cursor-text truncate font-medium"
+                    onClick={() => startEditing(s)}
+                  >
+                    {s.name || `#${s.id}`}
+                  </span>
+                )}
                 <span className="text-[10px] text-maestro-muted">{STATUS_LABEL[s.status]}</span>
               </div>
             ))
