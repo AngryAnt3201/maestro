@@ -7,6 +7,8 @@ use std::sync::Arc;
 
 use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
 use tauri::{Emitter, Manager};
+use tauri_plugin_cli::CliExt;
+use std::path::PathBuf;
 
 use core::marketplace_manager::MarketplaceManager;
 use core::mcp_manager::McpManager;
@@ -33,6 +35,20 @@ pub fn run() {
     log::info!("Maestro starting up...");
 
     let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_cli::init())
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // A second instance was launched with these args — forward to existing window
+            if let Some(path) = args.get(1) {
+                let resolved = resolve_cli_path(path);
+                if let Some(p) = resolved {
+                    let _ = app.emit("cli-open-project", p.to_string_lossy().to_string());
+                }
+            }
+            // Focus the existing window
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -167,6 +183,24 @@ pub fn run() {
 
             app.manage(event_bus);
             app.manage(transcript_watcher);
+
+            // Handle CLI arguments on initial launch
+            if let Ok(matches) = app.cli().matches() {
+                if let Some(path_arg) = matches.args.get("path") {
+                    if let Some(path_str) = path_arg.value.as_str() {
+                        if !path_str.is_empty() {
+                            if let Some(resolved) = resolve_cli_path(path_str) {
+                                let handle = app.handle().clone();
+                                // Emit after a short delay so the frontend has time to mount
+                                tauri::async_runtime::spawn(async move {
+                                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                                    let _ = handle.emit("cli-open-project", resolved.to_string_lossy().to_string());
+                                });
+                            }
+                        }
+                    }
+                }
+            }
 
             Ok(())
         })
@@ -310,9 +344,26 @@ pub fn run() {
             // Hooks commands
             commands::hooks::write_session_hooks_config,
             commands::hooks::remove_session_hooks_config,
+            // CLI commands
+            commands::cli::install_cli,
+            commands::cli::uninstall_cli,
+            commands::cli::is_cli_installed,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Maestro");
+}
+
+/// Resolve a CLI path argument to an absolute path.
+/// Handles ".", "..", relative paths, and already-absolute paths.
+fn resolve_cli_path(path: &str) -> Option<PathBuf> {
+    let p = PathBuf::from(path);
+    let absolute = if p.is_absolute() {
+        p
+    } else {
+        std::env::current_dir().ok()?.join(p)
+    };
+    // Canonicalize to resolve ".." etc, but fall back to the joined path if it doesn't exist yet
+    Some(absolute.canonicalize().unwrap_or(absolute))
 }
 
 // Note: We intentionally don't check git availability at startup.

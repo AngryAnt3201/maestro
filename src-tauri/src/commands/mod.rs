@@ -1,3 +1,4 @@
+pub mod cli;
 pub mod claudemd;
 pub mod fonts;
 pub mod git;

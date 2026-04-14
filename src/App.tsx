@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { GitFork, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getDeduplicatedCurrentBranch } from "@/lib/git";
@@ -135,6 +137,21 @@ function App() {
     });
     return () => {
       stopActivityListener();
+    };
+  }, []);
+
+  // Listen for CLI-initiated project open events (from `maestro /path`)
+  useEffect(() => {
+    const openProject = useWorkspaceStore.getState().openProject;
+    const unlisten = listen<string>("cli-open-project", (event) => {
+      const path = event.payload;
+      if (path) {
+        openProject(path);
+        getCurrentWindow().setFocus();
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
     };
   }, []);
 
