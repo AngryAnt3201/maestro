@@ -55,36 +55,147 @@ fn cli_install_path() -> PathBuf {
 pub fn install_cli() -> Result<String, String> {
     let dest = cli_install_path();
 
-    // Ensure parent directory exists
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {e}"))?;
+    // Try direct write first
+    match try_install_cli_direct(&dest) {
+        Ok(()) => return Ok(dest.to_string_lossy().to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            // Fall through to elevated install
+        }
+        Err(e) => return Err(format!("Failed to install CLI: {e}")),
     }
 
-    std::fs::write(&dest, CLI_SCRIPT).map_err(|e| {
-        if e.kind() == std::io::ErrorKind::PermissionDenied {
-            "Permission denied. On macOS/Linux, you may need to run with sudo or ensure /usr/local/bin is writable.".to_string()
-        } else {
-            format!("Failed to write CLI script: {e}")
-        }
-    })?;
+    // Use elevated permissions (osascript on macOS, pkexec on Linux)
+    install_cli_elevated(&dest)?;
+    Ok(dest.to_string_lossy().to_string())
+}
 
-    // Make executable on Unix
+fn try_install_cli_direct(dest: &std::path::Path) -> std::io::Result<()> {
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(dest, CLI_SCRIPT)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| format!("Failed to set permissions: {e}"))?;
+        std::fs::set_permissions(dest, std::fs::Permissions::from_mode(0o755))?;
+    }
+    Ok(())
+}
+
+fn install_cli_elevated(dest: &std::path::Path) -> Result<(), String> {
+    // Write script to a temp file first, then move with elevated privileges
+    let tmp = std::env::temp_dir().join("maestro-cli-install.sh");
+    std::fs::write(&tmp, CLI_SCRIPT)
+        .map_err(|e| format!("Failed to write temp file: {e}"))?;
+
+    let dest_str = dest.to_string_lossy();
+
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!(
+            "do shell script \"install -m 755 '{}' '{}'\" with administrator privileges",
+            tmp.to_string_lossy(),
+            dest_str
+        );
+        let output = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .output()
+            .map_err(|e| format!("Failed to run osascript: {e}"))?;
+
+        let _ = std::fs::remove_file(&tmp);
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.contains("User canceled") || stderr.contains("-128") {
+                return Err("Installation cancelled by user.".to_string());
+            }
+            return Err(format!("Failed to install: {stderr}"));
+        }
     }
 
-    Ok(dest.to_string_lossy().to_string())
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("pkexec")
+            .arg("install")
+            .arg("-m")
+            .arg("755")
+            .arg(tmp.to_string_lossy().as_ref())
+            .arg(dest_str.as_ref())
+            .output()
+            .map_err(|e| format!("Failed to run pkexec: {e}"))?;
+
+        let _ = std::fs::remove_file(&tmp);
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Failed to install: {stderr}"));
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::fs::remove_file(&tmp);
+        // On Windows the direct write should work since we install to user-local dir
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
 pub fn uninstall_cli() -> Result<(), String> {
     let dest = cli_install_path();
-    if dest.exists() {
-        std::fs::remove_file(&dest).map_err(|e| format!("Failed to remove CLI: {e}"))?;
+    if !dest.exists() {
+        return Ok(());
     }
+
+    // Try direct removal first
+    match std::fs::remove_file(&dest) {
+        Ok(()) => return Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            // Fall through to elevated removal
+        }
+        Err(e) => return Err(format!("Failed to remove CLI: {e}")),
+    }
+
+    let dest_str = dest.to_string_lossy();
+
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!(
+            "do shell script \"rm -f '{}'\" with administrator privileges",
+            dest_str
+        );
+        let output = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .output()
+            .map_err(|e| format!("Failed to run osascript: {e}"))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.contains("User canceled") || stderr.contains("-128") {
+                return Err("Uninstall cancelled by user.".to_string());
+            }
+            return Err(format!("Failed to uninstall: {stderr}"));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("pkexec")
+            .arg("rm")
+            .arg("-f")
+            .arg(dest_str.as_ref())
+            .output()
+            .map_err(|e| format!("Failed to run pkexec: {e}"))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Failed to uninstall: {stderr}"));
+        }
+    }
+
     Ok(())
 }
 
