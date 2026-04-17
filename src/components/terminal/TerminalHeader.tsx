@@ -273,6 +273,7 @@ export const TerminalHeader = memo(function TerminalHeader({
           </span>
         )}
 
+
         {/* Blue checkmark (verified/ready) - hide in very compact mode */}
         {adaptive.showAllElements && (
           <CheckCircle size={terminalCount <= 4 ? 11 : 9} className="shrink-0 text-maestro-accent" />

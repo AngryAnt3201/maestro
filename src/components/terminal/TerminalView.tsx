@@ -130,6 +130,7 @@ export const TerminalView = memo(function TerminalView({
         mode: sess.mode,
         name: sess.name,
         projectPath: sess.project_path,
+        workingDirectory: sess.working_directory,
         worktreePath: sess.worktree_path,
         branch: sess.branch,
         statusMessage: sess.statusMessage,
@@ -140,7 +141,7 @@ export const TerminalView = memo(function TerminalView({
   const effectiveStatus = sessionData ? mapStatus(sessionData.status) : status;
   const effectiveProvider = sessionData ? mapAiMode(sessionData.mode) : "claude";
   const hasSessionWorktree = Boolean(sessionData?.worktreePath);
-  const projectPath = sessionData?.projectPath ?? "";
+  const projectPath = sessionData?.workingDirectory ?? sessionData?.projectPath ?? "";
 
   // Detect if the project path itself is a git worktree (not the main working tree).
   // This handles the case where the user opens a worktree directory as their project.
@@ -756,6 +757,7 @@ export const TerminalView = memo(function TerminalView({
       {showQuickActionsManager && (
         <QuickActionsManager onClose={() => setShowQuickActionsManager(false)} />
       )}
+
     </div>
   );
 });

@@ -209,6 +209,9 @@ pub fn run() {
             commands::git::is_git_repository,
             commands::git::is_git_worktree,
             commands::git::detect_repositories,
+            // Claude session history
+            commands::claude_sessions::list_claude_sessions,
+            commands::claude_sessions::delete_claude_session,
             // Session commands (new)
             commands::session::get_sessions,
             commands::session::create_session,
