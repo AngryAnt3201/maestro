@@ -3,12 +3,24 @@ mod core;
 mod git;
 mod github;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, State};
 use tauri_plugin_cli::CliExt;
-use std::path::PathBuf;
+
+/// Holds a CLI-argument project path captured at startup, before the frontend
+/// has mounted. The frontend drains this via [`take_pending_cli_path`] once it
+/// is ready to handle the event, which eliminates the old 500ms race.
+#[derive(Default)]
+struct PendingCliPath(Mutex<Option<String>>);
+
+/// Frontend-invoked on mount to claim any project path passed on the CLI.
+/// Subsequent invocations return `None`.
+#[tauri::command]
+fn take_pending_cli_path(state: State<'_, PendingCliPath>) -> Option<String> {
+    state.0.lock().ok().and_then(|mut g| g.take())
+}
 
 use core::marketplace_manager::MarketplaceManager;
 use core::mcp_manager::McpManager;
@@ -37,14 +49,17 @@ pub fn run() {
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_cli::init())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            // A second instance was launched with these args — forward to existing window
-            if let Some(path) = args.get(1) {
-                let resolved = resolve_cli_path(path);
-                if let Some(p) = resolved {
-                    let _ = app.emit("cli-open-project", p.to_string_lossy().to_string());
-                }
+            // A second instance was launched with these args — forward to the
+            // existing (already-mounted) window. We scan every arg past the
+            // executable for the first one that resolves to a real path, which
+            // tolerates the extra flags `open -b ... --args` may prepend.
+            let resolved = args
+                .iter()
+                .skip(1)
+                .find_map(|arg| commands::cli::resolve_cli_path(arg));
+            if let Some(p) = resolved {
+                let _ = app.emit("cli-open-project", p.to_string_lossy().to_string());
             }
-            // Focus the existing window
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_focus();
             }
@@ -184,23 +199,24 @@ pub fn run() {
             app.manage(event_bus);
             app.manage(transcript_watcher);
 
-            // Handle CLI arguments on initial launch
+            // Capture any CLI-supplied path into PendingCliPath state. The
+            // frontend drains this on mount via `take_pending_cli_path`, which
+            // avoids the fragile "wait N ms then emit" race.
+            let pending = PendingCliPath::default();
             if let Ok(matches) = app.cli().matches() {
                 if let Some(path_arg) = matches.args.get("path") {
                     if let Some(path_str) = path_arg.value.as_str() {
                         if !path_str.is_empty() {
-                            if let Some(resolved) = resolve_cli_path(path_str) {
-                                let handle = app.handle().clone();
-                                // Emit after a short delay so the frontend has time to mount
-                                tauri::async_runtime::spawn(async move {
-                                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                                    let _ = handle.emit("cli-open-project", resolved.to_string_lossy().to_string());
-                                });
+                            if let Some(resolved) = commands::cli::resolve_cli_path(path_str) {
+                                if let Ok(mut slot) = pending.0.lock() {
+                                    *slot = Some(resolved.to_string_lossy().into_owned());
+                                }
                             }
                         }
                     }
                 }
             }
+            app.manage(pending);
 
             Ok(())
         })
@@ -351,22 +367,10 @@ pub fn run() {
             commands::cli::install_cli,
             commands::cli::uninstall_cli,
             commands::cli::is_cli_installed,
+            take_pending_cli_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Maestro");
-}
-
-/// Resolve a CLI path argument to an absolute path.
-/// Handles ".", "..", relative paths, and already-absolute paths.
-fn resolve_cli_path(path: &str) -> Option<PathBuf> {
-    let p = PathBuf::from(path);
-    let absolute = if p.is_absolute() {
-        p
-    } else {
-        std::env::current_dir().ok()?.join(p)
-    };
-    // Canonicalize to resolve ".." etc, but fall back to the joined path if it doesn't exist yet
-    Some(absolute.canonicalize().unwrap_or(absolute))
 }
 
 // Note: We intentionally don't check git availability at startup.

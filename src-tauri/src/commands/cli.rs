@@ -1,78 +1,58 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-const CLI_SCRIPT: &str = r#"#!/bin/bash
-# Maestro CLI — launch Maestro from the terminal
-# Usage: maestro [path]
+/// The shell script installed as `maestro` on the user's PATH. Embedded at
+/// compile time so `cli/maestro.sh` is the single source of truth — editing
+/// one without the other previously caused silent drift.
+const CLI_SCRIPT: &str = include_str!("../../../cli/maestro.sh");
 
-resolve_path() {
-    if [ -d "$1" ]; then
-        (cd "$1" && pwd)
-    else
-        echo "$1"
-    fi
-}
-
-launch_macos() {
-    # Try bundle identifier first (most reliable)
-    if open -b com.maestro.app "$@" 2>/dev/null; then
-        return 0
-    fi
-    # Fall back to app name
-    if open -a Maestro "$@" 2>/dev/null; then
-        return 0
-    fi
-    echo "Error: Maestro.app not found. Is it installed?" >&2
-    return 1
-}
-
-case "$(uname -s)" in
-    Darwin)
-        if [ -n "$1" ]; then
-            PATH_ARG="$(resolve_path "$1")"
-            launch_macos --args "$PATH_ARG"
-        else
-            launch_macos
-        fi
-        ;;
-    Linux)
-        MAESTRO_BIN="${MAESTRO_BIN:-maestro-app}"
-        if [ -n "$1" ]; then
-            PATH_ARG="$(resolve_path "$1")"
-            "$MAESTRO_BIN" "$PATH_ARG" &
-        else
-            "$MAESTRO_BIN" &
-        fi
-        disown
-        ;;
-    MINGW*|MSYS*|CYGWIN*)
-        if [ -n "$1" ]; then
-            PATH_ARG="$(resolve_path "$1")"
-            start "" "Maestro.exe" "$PATH_ARG"
-        else
-            start "" "Maestro.exe"
-        fi
-        ;;
-    *)
-        echo "Unsupported platform: $(uname -s)" >&2
-        exit 1
-        ;;
-esac
-"#;
-
-fn cli_install_path() -> PathBuf {
-    if cfg!(target_os = "windows") {
-        // On Windows, install to the user's local bin
-        directories::BaseDirs::new()
-            .map(|d| d.data_local_dir().join("Maestro").join("maestro.cmd"))
-            .unwrap_or_else(|| PathBuf::from("C:\\Program Files\\Maestro\\maestro.cmd"))
+/// Resolves a CLI path argument to an absolute path.
+/// Handles ".", "..", relative paths, and already-absolute paths.
+/// Canonicalization is best-effort: a path that doesn't yet exist still
+/// returns the joined absolute form rather than `None`.
+pub fn resolve_cli_path(path: &str) -> Option<PathBuf> {
+    let p = PathBuf::from(path);
+    let absolute = if p.is_absolute() {
+        p
     } else {
-        PathBuf::from("/usr/local/bin/maestro")
+        std::env::current_dir().ok()?.join(p)
+    };
+    Some(absolute.canonicalize().unwrap_or(absolute))
+}
+
+/// Returns the on-disk install target for the `maestro` CLI, or `None` on
+/// platforms where we don't yet support installing.
+///
+/// Windows intentionally returns `None`: the embedded script is POSIX bash,
+/// and silently dropping it at `maestro.cmd` produced a file that couldn't run.
+fn cli_install_path() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        None
     }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Some(PathBuf::from("/usr/local/bin/maestro"))
+    }
+}
+
+/// Escapes a path for safe interpolation inside an AppleScript `do shell script
+/// "..."` single-quoted shell string.
+///
+/// `do shell script` wraps its argument in a literal shell invocation, so we
+/// must defend against both the AppleScript string (double quotes, backslashes)
+/// *and* the shell (single quotes). We only use single quotes in the shell, so
+/// the shell-level escape is the classic `'\''` trick.
+fn escape_for_applescript_single_quoted_shell(input: &str) -> String {
+    // 1. Escape AppleScript string: `\` -> `\\`, `"` -> `\"`.
+    let applescript_escaped = input.replace('\\', "\\\\").replace('"', "\\\"");
+    // 2. Escape single quotes for the shell-level single-quoted string.
+    applescript_escaped.replace('\'', "'\\''")
 }
 
 #[tauri::command]
 pub fn install_cli() -> Result<String, String> {
-    let dest = cli_install_path();
+    let dest = cli_install_path()
+        .ok_or_else(|| "CLI install is not yet supported on this platform.".to_string())?;
 
     // Try direct write first
     match try_install_cli_direct(&dest) {
@@ -88,7 +68,7 @@ pub fn install_cli() -> Result<String, String> {
     Ok(dest.to_string_lossy().to_string())
 }
 
-fn try_install_cli_direct(dest: &std::path::Path) -> std::io::Result<()> {
+fn try_install_cli_direct(dest: &Path) -> std::io::Result<()> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -101,20 +81,22 @@ fn try_install_cli_direct(dest: &std::path::Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn install_cli_elevated(dest: &std::path::Path) -> Result<(), String> {
+/// Sentinel string the frontend uses to distinguish user-cancel from a real
+/// install failure. Keep in sync with `MaestroSettingsModal.tsx`.
+const CANCEL_SENTINEL: &str = "CANCELLED_BY_USER";
+
+fn install_cli_elevated(dest: &Path) -> Result<(), String> {
     // Write script to a temp file first, then move with elevated privileges
     let tmp = std::env::temp_dir().join("maestro-cli-install.sh");
     std::fs::write(&tmp, CLI_SCRIPT)
         .map_err(|e| format!("Failed to write temp file: {e}"))?;
 
-    let dest_str = dest.to_string_lossy();
-
     #[cfg(target_os = "macos")]
     {
+        let tmp_escaped = escape_for_applescript_single_quoted_shell(&tmp.to_string_lossy());
+        let dest_escaped = escape_for_applescript_single_quoted_shell(&dest.to_string_lossy());
         let script = format!(
-            "do shell script \"install -m 755 '{}' '{}'\" with administrator privileges",
-            tmp.to_string_lossy(),
-            dest_str
+            "do shell script \"install -m 755 '{tmp_escaped}' '{dest_escaped}'\" with administrator privileges"
         );
         let output = std::process::Command::new("osascript")
             .arg("-e")
@@ -127,7 +109,7 @@ fn install_cli_elevated(dest: &std::path::Path) -> Result<(), String> {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if stderr.contains("User canceled") || stderr.contains("-128") {
-                return Err("Installation cancelled by user.".to_string());
+                return Err(CANCEL_SENTINEL.to_string());
             }
             return Err(format!("Failed to install: {stderr}"));
         }
@@ -140,7 +122,7 @@ fn install_cli_elevated(dest: &std::path::Path) -> Result<(), String> {
             .arg("-m")
             .arg("755")
             .arg(tmp.to_string_lossy().as_ref())
-            .arg(dest_str.as_ref())
+            .arg(dest.to_string_lossy().as_ref())
             .output()
             .map_err(|e| format!("Failed to run pkexec: {e}"))?;
 
@@ -148,14 +130,19 @@ fn install_cli_elevated(dest: &std::path::Path) -> Result<(), String> {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            // pkexec exits 126 when the user dismisses the auth dialog.
+            if output.status.code() == Some(126) {
+                return Err(CANCEL_SENTINEL.to_string());
+            }
             return Err(format!("Failed to install: {stderr}"));
         }
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = std::fs::remove_file(&tmp);
-        // On Windows the direct write should work since we install to user-local dir
+        let _ = dest; // avoid unused-variable warning
+        return Err("CLI install is not yet supported on this platform.".to_string());
     }
 
     Ok(())
@@ -163,7 +150,10 @@ fn install_cli_elevated(dest: &std::path::Path) -> Result<(), String> {
 
 #[tauri::command]
 pub fn uninstall_cli() -> Result<(), String> {
-    let dest = cli_install_path();
+    let dest = match cli_install_path() {
+        Some(p) => p,
+        None => return Ok(()), // nothing to uninstall on unsupported platforms
+    };
     if !dest.exists() {
         return Ok(());
     }
@@ -177,13 +167,11 @@ pub fn uninstall_cli() -> Result<(), String> {
         Err(e) => return Err(format!("Failed to remove CLI: {e}")),
     }
 
-    let dest_str = dest.to_string_lossy();
-
     #[cfg(target_os = "macos")]
     {
+        let dest_escaped = escape_for_applescript_single_quoted_shell(&dest.to_string_lossy());
         let script = format!(
-            "do shell script \"rm -f '{}'\" with administrator privileges",
-            dest_str
+            "do shell script \"rm -f '{dest_escaped}'\" with administrator privileges"
         );
         let output = std::process::Command::new("osascript")
             .arg("-e")
@@ -194,7 +182,7 @@ pub fn uninstall_cli() -> Result<(), String> {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if stderr.contains("User canceled") || stderr.contains("-128") {
-                return Err("Uninstall cancelled by user.".to_string());
+                return Err(CANCEL_SENTINEL.to_string());
             }
             return Err(format!("Failed to uninstall: {stderr}"));
         }
@@ -205,11 +193,14 @@ pub fn uninstall_cli() -> Result<(), String> {
         let output = std::process::Command::new("pkexec")
             .arg("rm")
             .arg("-f")
-            .arg(dest_str.as_ref())
+            .arg(dest.to_string_lossy().as_ref())
             .output()
             .map_err(|e| format!("Failed to run pkexec: {e}"))?;
 
         if !output.status.success() {
+            if output.status.code() == Some(126) {
+                return Err(CANCEL_SENTINEL.to_string());
+            }
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!("Failed to uninstall: {stderr}"));
         }
@@ -220,5 +211,92 @@ pub fn uninstall_cli() -> Result<(), String> {
 
 #[tauri::command]
 pub fn is_cli_installed() -> bool {
-    cli_install_path().exists()
+    cli_install_path().map(|p| p.exists()).unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_cli_path_accepts_absolute_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let canonical = tmp.path().canonicalize().unwrap();
+        let resolved = resolve_cli_path(canonical.to_str().unwrap()).unwrap();
+        assert_eq!(resolved, canonical);
+    }
+
+    #[test]
+    fn resolve_cli_path_resolves_dot_to_cwd() {
+        let cwd = std::env::current_dir().unwrap().canonicalize().unwrap();
+        let resolved = resolve_cli_path(".").unwrap();
+        assert_eq!(resolved, cwd);
+    }
+
+    #[test]
+    fn resolve_cli_path_handles_nonexistent_paths() {
+        // An absolute path that doesn't exist must still return Some, not None.
+        let candidate = if cfg!(target_os = "windows") {
+            "C:\\does-not-exist-12345\\subpath"
+        } else {
+            "/does-not-exist-12345/subpath"
+        };
+        let resolved = resolve_cli_path(candidate).expect("should resolve");
+        assert!(resolved.is_absolute());
+    }
+
+    #[test]
+    fn resolve_cli_path_joins_relative_against_cwd() {
+        let cwd = std::env::current_dir().unwrap().canonicalize().unwrap();
+        let resolved = resolve_cli_path("Cargo.toml").unwrap();
+        // Cargo.toml is in src-tauri/; canonicalize will resolve it if it exists.
+        assert!(resolved.starts_with(&cwd) || resolved.is_absolute());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn install_path_is_usr_local_bin_on_unix() {
+        assert_eq!(
+            cli_install_path().unwrap(),
+            PathBuf::from("/usr/local/bin/maestro")
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn install_path_is_none_on_windows() {
+        assert!(cli_install_path().is_none());
+    }
+
+    #[test]
+    fn applescript_escaping_leaves_plain_path_unchanged() {
+        assert_eq!(
+            escape_for_applescript_single_quoted_shell("/usr/local/bin/maestro"),
+            "/usr/local/bin/maestro"
+        );
+    }
+
+    #[test]
+    fn applescript_escaping_handles_single_quote() {
+        // o'brien -> o'\''brien under the shell single-quote escape.
+        assert_eq!(
+            escape_for_applescript_single_quoted_shell("/Users/o'brien/cli"),
+            "/Users/o'\\''brien/cli"
+        );
+    }
+
+    #[test]
+    fn applescript_escaping_handles_double_quote_and_backslash() {
+        // A path with a backslash and a double-quote must escape both for the
+        // AppleScript string literal before shell escaping runs.
+        let input = "a\\b\"c";
+        let out = escape_for_applescript_single_quoted_shell(input);
+        assert_eq!(out, "a\\\\b\\\"c");
+    }
+
+    #[test]
+    fn cli_script_embedded_and_nonempty() {
+        assert!(CLI_SCRIPT.starts_with("#!/bin/bash"));
+        assert!(CLI_SCRIPT.contains("com.maestro.app"));
+    }
 }

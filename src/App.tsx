@@ -140,15 +140,35 @@ function App() {
     };
   }, []);
 
-  // Listen for CLI-initiated project open events (from `maestro /path`)
+  // Listen for CLI-initiated project open events (from `maestro /path`).
+  //
+  // Two triggers:
+  //   1. A subsequent `maestro <path>` invocation fires the
+  //      `cli-open-project` event immediately via the single-instance plugin.
+  //   2. On first launch the path was captured in a backend slot; we drain it
+  //      here on mount via `take_pending_cli_path`. That replaces the older
+  //      500ms sleep + emit dance, which raced against slow frontend mounts.
   useEffect(() => {
-    const openProject = useWorkspaceStore.getState().openProject;
-    const unlisten = listen<string>("cli-open-project", (event) => {
-      const path = event.payload;
-      if (path) {
-        openProject(path);
-        getCurrentWindow().setFocus();
+    const openFromCli = async (path: string) => {
+      if (!path) return;
+      try {
+        await useWorkspaceStore.getState().openProject(path);
+      } catch (err) {
+        console.error("cli-open-project failed:", err);
+        return;
       }
+      getCurrentWindow().setFocus().catch(() => {});
+    };
+
+    // Drain any path captured before we mounted.
+    invoke<string | null>("take_pending_cli_path")
+      .then((path) => {
+        if (path) void openFromCli(path);
+      })
+      .catch(() => {});
+
+    const unlisten = listen<string>("cli-open-project", (event) => {
+      void openFromCli(event.payload);
     });
     return () => {
       unlisten.then((fn) => fn());

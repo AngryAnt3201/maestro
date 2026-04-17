@@ -16,6 +16,12 @@ interface MaestroSettingsModalProps {
   onClose: () => void;
 }
 
+/** Sentinel the backend returns when the user dismisses the admin auth prompt.
+ *  Must match `CANCEL_SENTINEL` in `src-tauri/src/commands/cli.rs`. */
+const CLI_CANCEL_SENTINEL = "CANCELLED_BY_USER";
+
+type CliStatus = { kind: "ok" | "error"; message: string };
+
 const INTERVAL_OPTIONS = [
   { label: "30 minutes", value: 30 },
   { label: "1 hour", value: 60 },
@@ -42,7 +48,7 @@ export function MaestroSettingsModal({ onClose }: MaestroSettingsModalProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [endpointInput, setEndpointInput] = useState("");
   const [cliInstalled, setCliInstalled] = useState<boolean | null>(null);
-  const [cliStatus, setCliStatus] = useState<string | null>(null);
+  const [cliStatus, setCliStatus] = useState<CliStatus | null>(null);
 
   const status = useUpdateStore((s) => s.status);
   const lastCheckedAt = useUpdateStore((s) => s.lastCheckedAt);
@@ -214,8 +220,8 @@ export function MaestroSettingsModal({ onClose }: MaestroSettingsModalProps) {
                 Install the <code className="rounded bg-maestro-border/40 px-1 py-0.5 text-maestro-text">maestro</code> command to open projects from your terminal.
               </p>
               {cliStatus && (
-                <div className={`text-[11px] ${cliStatus.startsWith("Error") ? "text-maestro-red" : "text-maestro-green"}`}>
-                  {cliStatus}
+                <div className={`text-[11px] ${cliStatus.kind === "error" ? "text-maestro-red" : "text-maestro-green"}`}>
+                  {cliStatus.message}
                 </div>
               )}
               <div className="flex items-center gap-2">
@@ -232,9 +238,16 @@ export function MaestroSettingsModal({ onClose }: MaestroSettingsModalProps) {
                         invoke("uninstall_cli")
                           .then(() => {
                             setCliInstalled(false);
-                            setCliStatus("CLI command removed");
+                            setCliStatus({ kind: "ok", message: "CLI command removed" });
                           })
-                          .catch((err) => setCliStatus(`Error: ${err}`));
+                          .catch((err) => {
+                            const msg = String(err);
+                            if (msg === CLI_CANCEL_SENTINEL) {
+                              setCliStatus(null);
+                              return;
+                            }
+                            setCliStatus({ kind: "error", message: `Error: ${msg}` });
+                          });
                       }}
                       className="rounded px-2 py-0.5 text-[11px] text-maestro-red hover:bg-maestro-border/40"
                     >
@@ -249,9 +262,16 @@ export function MaestroSettingsModal({ onClose }: MaestroSettingsModalProps) {
                       invoke<string>("install_cli")
                         .then((path) => {
                           setCliInstalled(true);
-                          setCliStatus(`Installed to ${path}`);
+                          setCliStatus({ kind: "ok", message: `Installed to ${path}` });
                         })
-                        .catch((err) => setCliStatus(`Error: ${err}`));
+                        .catch((err) => {
+                          const msg = String(err);
+                          if (msg === CLI_CANCEL_SENTINEL) {
+                            setCliStatus(null);
+                            return;
+                          }
+                          setCliStatus({ kind: "error", message: `Error: ${msg}` });
+                        });
                     }}
                     className="rounded border border-maestro-accent/50 bg-maestro-accent/10 px-3 py-1 text-[11px] font-medium text-maestro-accent hover:bg-maestro-accent/20"
                   >
