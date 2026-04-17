@@ -27,6 +27,16 @@
     }
   },
   "plugins": {
+    "cli": {
+      "args": [
+        {
+          "name": "path",
+          "index": 1,
+          "takesValue": true,
+          "required": false
+        }
+      ]
+    },
     "updater": {
       "endpoints": [
         "https://github.com/its-maestro-baby/maestro/releases/latest/download/latest.json"

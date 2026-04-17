@@ -12,6 +12,8 @@
     "store:default",
     "dialog:default",
     "opener:default",
-    "updater:default"
+    "updater:default",
+    "cli:default",
+    "core:window:allow-set-focus"
   ]
 }
