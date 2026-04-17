@@ -195,16 +195,26 @@ export function PreLaunchCard({
   // Resume session state
   const [claudeSessions, setClaudeSessions] = useState<ClaudeSessionInfo[]>([]);
 
-  // Fetch Claude sessions when mode is Claude
+  // Fetch Claude sessions when mode is Claude. Guard against races where
+  // selectedRepoPath changes mid-flight so a stale response can't clobber the
+  // newer one.
   useEffect(() => {
     if (slot.mode !== "Claude") {
       setClaudeSessions([]);
       return;
     }
+    let ignore = false;
     const sessionPath = selectedRepoPath || projectPath;
     listClaudeSessions(sessionPath)
-      .then(setClaudeSessions)
-      .catch(() => setClaudeSessions([]));
+      .then((sessions) => {
+        if (!ignore) setClaudeSessions(sessions);
+      })
+      .catch(() => {
+        if (!ignore) setClaudeSessions([]);
+      });
+    return () => {
+      ignore = true;
+    };
   }, [slot.mode, selectedRepoPath, projectPath]);
 
   const modeConfig = getModeConfig(slot.mode);
@@ -1524,10 +1534,20 @@ export function PreLaunchCard({
                       title="Delete session"
                       onClick={(e) => {
                         e.stopPropagation();
+                        const preview = session.first_prompt?.trim().slice(0, 80) ?? "this session";
+                        if (!window.confirm(`Delete \u201C${preview}\u201D? The transcript cannot be recovered.`)) {
+                          return;
+                        }
                         if (isSelected) onResumeSessionChange(null);
-                        deleteClaudeSession(selectedRepoPath || projectPath, session.session_id).then(() => {
-                          setClaudeSessions((prev) => prev.filter((s) => s.session_id !== session.session_id));
-                        });
+                        deleteClaudeSession(selectedRepoPath || projectPath, session.session_id)
+                          .then(() => {
+                            setClaudeSessions((prev) =>
+                              prev.filter((s) => s.session_id !== session.session_id),
+                            );
+                          })
+                          .catch((err) => {
+                            console.error("Failed to delete Claude session:", err);
+                          });
                       }}
                       className="absolute right-1.5 top-1.5 rounded p-0.5 text-maestro-muted opacity-0 transition-opacity hover:text-maestro-red [div:hover>&]:opacity-100"
                     >

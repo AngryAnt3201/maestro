@@ -41,7 +41,7 @@ export interface SessionConfig {
   worktree_path: string | null;
   project_path: string;
   /** The actual directory the shell was spawned in (may differ from project_path in multi-repo workspaces). */
-  working_directory?: string;
+  working_directory?: string | null;
   statusMessage?: string;
   needsInputPrompt?: string;
   /** Timestamp of the last MCP-driven status update (used by activity heuristic). */

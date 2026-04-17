@@ -757,7 +757,6 @@ export const TerminalView = memo(function TerminalView({
       {showQuickActionsManager && (
         <QuickActionsManager onClose={() => setShowQuickActionsManager(false)} />
       )}
-
     </div>
   );
 });

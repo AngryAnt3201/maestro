@@ -45,6 +45,11 @@ pub struct SessionConfig {
     /// The project directory this session belongs to.
     /// Canonicalized absolute path for reliable comparison.
     pub project_path: String,
+    /// The directory the shell was spawned in. For multi-repo workspaces this
+    /// is the selected repo, which may differ from `project_path` (the
+    /// workspace root). `None` means "same as project_path".
+    #[serde(default)]
+    pub working_directory: Option<String>,
 }
 
 /// Thread-safe session registry backed by `DashMap` for lock-free concurrent reads.
@@ -72,7 +77,13 @@ impl SessionManager {
 
     /// Inserts a new session with `Idle` status and no branch assigned.
     /// Returns `Err` with the existing config if a session with this ID already exists.
-    pub fn create_session(&self, id: u32, mode: AiMode, project_path: String) -> Result<SessionConfig, SessionConfig> {
+    pub fn create_session(
+        &self,
+        id: u32,
+        mode: AiMode,
+        project_path: String,
+        working_directory: Option<String>,
+    ) -> Result<SessionConfig, SessionConfig> {
         let config = SessionConfig {
             id,
             mode,
@@ -81,6 +92,7 @@ impl SessionManager {
             status: SessionStatus::Idle,
             worktree_path: None,
             project_path,
+            working_directory,
         };
         match self.sessions.entry(id) {
             Entry::Occupied(e) => Err(e.get().clone()),

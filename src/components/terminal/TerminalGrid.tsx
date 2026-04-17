@@ -564,14 +564,18 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
 
       // Register the session in SessionManager (required before assigning branch)
       if (projectPath) {
-        const sessionConfig = await createSession(sessionId, slot.mode, projectPath);
+        const sessionConfig = await createSession(
+          sessionId,
+          slot.mode,
+          projectPath,
+          workingDirectory,
+        );
         // Add project to MCP status monitor for polling status updates
         await invoke("add_mcp_project", { projectPath });
         // Add session to store directly (don't refetch all sessions to avoid status reset)
         useSessionStore.getState().addSession({
           ...sessionConfig,
           status: sessionConfig.status as import("@/stores/useSessionStore").BackendSessionStatus,
-          working_directory: workingDirectory,
         });
       }
 
@@ -715,8 +719,6 @@ export const TerminalGrid = forwardRef<TerminalGridHandle, TerminalGridProps>(fu
             // we no longer have race conditions on .mcp.json, so we only need
             // a minimal delay for general CLI startup.
             await new Promise((resolve) => setTimeout(resolve, 500));
-
-
           } else {
             console.warn(
               `CLI '${cliConfig.command}' not found. Install with: ${cliConfig.installHint}`

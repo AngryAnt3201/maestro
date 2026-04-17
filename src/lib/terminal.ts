@@ -130,15 +130,23 @@ export interface SessionConfig {
   status: string;
   worktree_path: string | null;
   project_path: string;
+  /** Shell spawn directory — may differ from project_path in multi-repo workspaces. */
+  working_directory?: string | null;
 }
 
 /** Creates a session in the SessionManager (separate from PTY spawning). */
 export async function createSession(
   id: number,
   mode: AiMode,
-  projectPath: string
+  projectPath: string,
+  workingDirectory?: string
 ): Promise<SessionConfig> {
-  return invoke<SessionConfig>("create_session", { id, mode, projectPath });
+  return invoke<SessionConfig>("create_session", {
+    id,
+    mode,
+    projectPath,
+    workingDirectory: workingDirectory ?? null,
+  });
 }
 
 /** Assigns a branch and optional worktree path to a session. */

@@ -26,6 +26,7 @@ pub async fn create_session(
     id: u32,
     mode: AiMode,
     project_path: String,
+    working_directory: Option<String>,
 ) -> Result<SessionConfig, String> {
     // Canonicalize path for consistent storage
     let canonical = std::fs::canonicalize(&project_path)
@@ -33,7 +34,21 @@ pub async fn create_session(
         .to_string_lossy()
         .into_owned();
 
-    state.create_session(id, mode, canonical)
+    // Canonicalize working_directory too when provided — it may point at a
+    // worktree or a sub-repo that differs from the workspace root.
+    let canonical_wd = match working_directory {
+        Some(wd) => {
+            let c = std::fs::canonicalize(&wd)
+                .map_err(|e| format!("Invalid working directory '{}': {}", wd, e))?
+                .to_string_lossy()
+                .into_owned();
+            Some(c)
+        }
+        None => None,
+    };
+
+    state
+        .create_session(id, mode, canonical, canonical_wd)
         .map_err(|existing| format!("Session {} already exists", existing.id))
 }
 
