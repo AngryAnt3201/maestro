@@ -302,41 +302,12 @@ pub async fn kill_all_sessions(
 pub async fn check_cli_available(command: String) -> Result<bool, String> {
     #[cfg(unix)]
     {
-        // Search for command in PATH and common installation directories
-        // We avoid spawning a shell because shell plugins (oh-my-zsh, powerlevel10k)
-        // can hang or abort when run without a TTY
-        let mut paths: Vec<String> = Vec::new();
+        // Search the augmented PATH (env PATH + common install dirs missed by
+        // GUI launchers). We avoid spawning a shell because shell plugins
+        // (oh-my-zsh, powerlevel10k) can hang or abort when run without a TTY.
+        use crate::core::cli_path::augmented_path;
 
-        // Start with current environment PATH
-        if let Ok(env_path) = std::env::var("PATH") {
-            paths.extend(env_path.split(':').map(String::from));
-        }
-
-        // Add common user installation directories that GUI launchers often miss
-        if let Ok(home) = std::env::var("HOME") {
-            // Homebrew on Apple Silicon
-            paths.push("/opt/homebrew/bin".to_string());
-            paths.push("/opt/homebrew/sbin".to_string());
-            // Homebrew on Intel Mac
-            paths.push("/usr/local/bin".to_string());
-            paths.push("/usr/local/sbin".to_string());
-            // npm global installations
-            paths.push(format!("{}/.npm-global/bin", home));
-            paths.push(format!("{}/node_modules/.bin", home));
-            // Cargo/Rust
-            paths.push(format!("{}/.cargo/bin", home));
-            // Go
-            paths.push(format!("{}/go/bin", home));
-            // Python user installs
-            paths.push(format!("{}/.local/bin", home));
-            // pyenv
-            paths.push(format!("{}/.pyenv/shims", home));
-            // rbenv
-            paths.push(format!("{}/.rbenv/shims", home));
-        }
-
-        // Search for command in all PATH directories
-        for dir in &paths {
+        for dir in augmented_path().split(':').filter(|s| !s.is_empty()) {
             let cmd_path = format!("{}/{}", dir, command);
             if std::path::Path::new(&cmd_path).exists() {
                 log::debug!("Found {} at {}", command, cmd_path);

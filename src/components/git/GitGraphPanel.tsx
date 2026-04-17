@@ -197,9 +197,10 @@ export function GitGraphPanel({
   const openPRCount = pullRequests.filter((pr) => pr.state === "OPEN").length;
   const openIssueCount = issues.filter((i) => i.state === "OPEN").length;
 
-  // Check for gh CLI not installed. The auth check itself surfaces this via
-  // `authError` (since `prsError` is never populated while unauthenticated).
-  const ghMissingPattern = /gh\b|github cli|not found/i;
+  // Check for gh CLI not installed. Matches the canonical `GhNotFound` Display
+  // string from the backend; avoids matching unrelated "not found" errors like
+  // `PullRequestNotFound` / `IssueNotFound` that also flow through as strings.
+  const ghMissingPattern = /github cli \(gh\) not found/i;
   const hasGhError =
     (authError != null && ghMissingPattern.test(authError)) ||
     (prsError != null && ghMissingPattern.test(prsError));
