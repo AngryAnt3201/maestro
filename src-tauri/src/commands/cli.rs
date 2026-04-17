@@ -19,6 +19,30 @@ pub fn resolve_cli_path(path: &str) -> Option<PathBuf> {
     Some(absolute.canonicalize().unwrap_or(absolute))
 }
 
+/// Resolves a raw argv entry to an existing absolute path, or `None`.
+///
+/// Used by the single-instance handler to scan `args[1..]` for the user's
+/// project path. Differs from [`resolve_cli_path`] in two ways:
+///
+/// 1. Args that look like flags (`-x`, `--foo`) are rejected outright. Without
+///    this, a prepended flag from `open -b … --args` would be joined to cwd
+///    and treated as the project path.
+/// 2. The resolved path must actually exist. `resolve_cli_path` tolerates
+///    non-existent paths for the startup-slot case (frontend validates), but
+///    for argv scanning we want a real filesystem check so a stray unknown
+///    token doesn't short-circuit the search.
+pub fn resolve_existing_path_arg(arg: &str) -> Option<PathBuf> {
+    if arg.starts_with('-') {
+        return None;
+    }
+    let resolved = resolve_cli_path(arg)?;
+    if resolved.exists() {
+        Some(resolved)
+    } else {
+        None
+    }
+}
+
 /// Returns the on-disk install target for the `maestro` CLI, or `None` on
 /// platforms where we don't yet support installing.
 ///
@@ -251,6 +275,51 @@ mod tests {
         let resolved = resolve_cli_path("Cargo.toml").unwrap();
         // Cargo.toml is in src-tauri/; canonicalize will resolve it if it exists.
         assert!(resolved.starts_with(&cwd) || resolved.is_absolute());
+    }
+
+    // ---- resolve_existing_path_arg ---------------------------------------
+
+    #[test]
+    fn existing_path_arg_rejects_short_flag() {
+        assert!(resolve_existing_path_arg("-n").is_none());
+    }
+
+    #[test]
+    fn existing_path_arg_rejects_long_flag() {
+        assert!(resolve_existing_path_arg("--psn_0_12345").is_none());
+    }
+
+    #[test]
+    fn existing_path_arg_rejects_nonexistent_path() {
+        let candidate = if cfg!(target_os = "windows") {
+            "C:\\does-not-exist-maestro-12345\\subpath"
+        } else {
+            "/does-not-exist-maestro-12345/subpath"
+        };
+        assert!(resolve_existing_path_arg(candidate).is_none());
+    }
+
+    #[test]
+    fn existing_path_arg_accepts_real_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let canonical = tmp.path().canonicalize().unwrap();
+        let resolved = resolve_existing_path_arg(canonical.to_str().unwrap())
+            .expect("real path should resolve");
+        assert_eq!(resolved, canonical);
+    }
+
+    #[test]
+    fn existing_path_arg_skips_flag_then_accepts_path() {
+        // Simulates scanning `["--some-flag", "<real-tmp-path>"]` argv-style.
+        let tmp = tempfile::tempdir().unwrap();
+        let canonical = tmp.path().canonicalize().unwrap();
+        let canonical_str = canonical.to_str().unwrap().to_string();
+        let args = ["--some-flag".to_string(), canonical_str];
+        let resolved = args
+            .iter()
+            .find_map(|a| resolve_existing_path_arg(a))
+            .expect("should find path after skipping flag");
+        assert_eq!(resolved, canonical);
     }
 
     #[cfg(not(target_os = "windows"))]

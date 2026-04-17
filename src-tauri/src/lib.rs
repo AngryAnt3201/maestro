@@ -51,12 +51,14 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // A second instance was launched with these args — forward to the
             // existing (already-mounted) window. We scan every arg past the
-            // executable for the first one that resolves to a real path, which
-            // tolerates the extra flags `open -b ... --args` may prepend.
+            // executable for the first one that points at an existing path,
+            // skipping flags. This tolerates the extra flags `open -b ...
+            // --args` may prepend without letting a flag masquerade as the
+            // project path.
             let resolved = args
                 .iter()
                 .skip(1)
-                .find_map(|arg| commands::cli::resolve_cli_path(arg));
+                .find_map(|arg| commands::cli::resolve_existing_path_arg(arg));
             if let Some(p) = resolved {
                 let _ = app.emit("cli-open-project", p.to_string_lossy().to_string());
             }
