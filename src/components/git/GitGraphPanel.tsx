@@ -1,4 +1,4 @@
-import { GitFork, AlertCircle, Terminal } from "lucide-react";
+import { GitFork, AlertCircle, Loader2, Terminal } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { GraphNode } from "../../lib/graphLayout";
 import { useGitStore } from "../../stores/useGitStore";
@@ -40,6 +40,8 @@ export function GitGraphPanel({
   const { checkoutBranch, createBranch } = useGitStore();
   const {
     authStatus,
+    authError,
+    isCheckingAuth,
     pullRequests,
     issues,
     prsError,
@@ -195,8 +197,13 @@ export function GitGraphPanel({
   const openPRCount = pullRequests.filter((pr) => pr.state === "OPEN").length;
   const openIssueCount = issues.filter((i) => i.state === "OPEN").length;
 
-  // Check for gh CLI not installed or not authenticated
-  const isGhError = prsError?.includes("gh") || prsError?.includes("GitHub CLI");
+  // Check for gh CLI not installed. The auth check itself surfaces this via
+  // `authError` (since `prsError` is never populated while unauthenticated).
+  const ghMissingPattern = /gh\b|github cli|not found/i;
+  const hasGhError =
+    (authError != null && ghMissingPattern.test(authError)) ||
+    (prsError != null && ghMissingPattern.test(prsError));
+  const isGhError = activeTab !== "commits" && hasGhError;
   const showAuthPrompt =
     activeTab !== "commits" && authStatus && !authStatus.logged_in;
 
@@ -307,9 +314,13 @@ export function GitGraphPanel({
                   <button
                     type="button"
                     onClick={() => repoPath && checkAuth(repoPath)}
-                    className="mt-1 rounded bg-maestro-card px-3 py-1 text-xs text-maestro-muted/60 transition-colors hover:bg-maestro-border hover:text-maestro-text"
+                    disabled={isCheckingAuth}
+                    className="mt-1 flex items-center gap-1.5 rounded bg-maestro-card px-3 py-1 text-xs text-maestro-muted/60 transition-colors hover:bg-maestro-border hover:text-maestro-text disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Retry
+                    {isCheckingAuth && (
+                      <Loader2 size={12} className="animate-spin" />
+                    )}
+                    {isCheckingAuth ? "Checking..." : "Retry"}
                   </button>
                 </div>
               </div>

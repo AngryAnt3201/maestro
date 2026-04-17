@@ -132,6 +132,8 @@ interface GitHubState {
   // Authentication
   authStatus: AuthStatus | null;
   isCheckingAuth: boolean;
+  /** Error from the most recent auth check (e.g., `gh` binary missing). */
+  authError: string | null;
 
   // Pull requests
   pullRequests: PullRequestInfo[];
@@ -207,6 +209,7 @@ export const useGitHubStore = create<GitHubState>()((set, get) => ({
   // Initial state
   authStatus: null,
   isCheckingAuth: false,
+  authError: null,
   pullRequests: [],
   prFilter: "open",
   isPRsLoading: false,
@@ -227,17 +230,18 @@ export const useGitHubStore = create<GitHubState>()((set, get) => ({
   isLoadingDiscussionDetail: false,
 
   checkAuth: async (repoPath: string) => {
-    set({ isCheckingAuth: true });
+    set({ isCheckingAuth: true, authError: null });
     try {
       const authStatus = await invoke<AuthStatus>("github_auth_status", {
         repoPath,
       });
-      set({ authStatus, isCheckingAuth: false });
+      set({ authStatus, isCheckingAuth: false, authError: null });
     } catch (err) {
       console.error("Failed to check GitHub auth:", err);
       set({
         authStatus: { logged_in: false, username: null, scopes: [] },
         isCheckingAuth: false,
+        authError: String(err),
       });
     }
   },
@@ -448,6 +452,7 @@ export const useGitHubStore = create<GitHubState>()((set, get) => ({
     set({
       authStatus: null,
       isCheckingAuth: false,
+      authError: null,
       pullRequests: [],
       prFilter: "open",
       isPRsLoading: false,

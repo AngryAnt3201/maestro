@@ -3,6 +3,8 @@ use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 
 use super::error::GitHubError;
+#[cfg(unix)]
+use crate::core::cli_path::augmented_path;
 use crate::core::windows_process::TokioCommandExt;
 
 /// Captured stdout/stderr from a completed gh subprocess.
@@ -62,6 +64,12 @@ impl GitHub {
             .env("NO_COLOR", "1")
             .kill_on_drop(true)
             .hide_console_window();
+
+        // macOS/Linux GUI launchers start the app with a minimal PATH that
+        // excludes Homebrew and user installs, so `gh` often isn't resolvable
+        // even when installed. Inject the augmented PATH here.
+        #[cfg(unix)]
+        cmd.env("PATH", augmented_path());
 
         let command_str = format!("gh {}", args.join(" "));
 

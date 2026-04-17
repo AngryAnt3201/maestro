@@ -4,6 +4,8 @@ use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 
 use super::error::GitError;
+#[cfg(unix)]
+use crate::core::cli_path::augmented_path;
 use crate::core::windows_process::TokioCommandExt;
 
 /// Resolves the `SSH_AUTH_SOCK` path for SSH-based git operations.
@@ -171,6 +173,13 @@ impl Git {
             .env("LC_ALL", "C")
             .kill_on_drop(true)
             .hide_console_window();
+
+        // macOS/Linux GUI launchers start the app with a minimal PATH that
+        // excludes Homebrew and user installs. Xcode CLT's `/usr/bin/git`
+        // usually works, but Homebrew-git (or git configured helpers that
+        // shell out) can be missing — augment PATH for consistency.
+        #[cfg(unix)]
+        cmd.env("PATH", augmented_path());
 
         // Ensure the SSH agent socket is reachable so that SSH-based remotes
         // (git@github.com:…) can authenticate without interactive prompts.
