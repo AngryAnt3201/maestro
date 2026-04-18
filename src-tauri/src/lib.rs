@@ -330,6 +330,8 @@ pub fn run() {
             commands::ops::ops_read_log_tail,
             commands::ops::ops_project_hash,
             commands::ops::ops_driver_capabilities,
+            commands::ops::ops_read_hooks,
+            commands::ops::ops_toggle_hook,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Maestro");

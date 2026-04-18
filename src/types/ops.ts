@@ -112,3 +112,19 @@ export interface DispatchFinishedEvent {
   exitCode?: number;
   tokens?: number;
 }
+
+export type HookEvent = "PreToolUse" | "PostToolUse" | "Stop" | "SubagentStop" | "SessionStart" | "SessionEnd" | "UserPromptSubmit" | "PreCompact" | "Notification";
+
+export interface HookEntry {
+  id: string;                 // synthesized: `${scope}:${event}:${index}`
+  scope: "global" | "project";
+  event: HookEvent;
+  matcher?: string;           // tool name pattern
+  command: string;            // shell command
+  enabled: boolean;
+}
+
+export interface HooksSnapshot {
+  global: HookEntry[];
+  project: HookEntry[];
+}

@@ -7,6 +7,7 @@ import type {
   DispatchStartedEvent,
   DriverCapsResponse,
   ExternalJob,
+  HooksSnapshot,
   Job,
   Scope,
   Tool,
@@ -95,4 +96,12 @@ export async function subscribeOpsEvents(h: OpsEventHandlers): Promise<UnlistenF
   if (h.onJobsUpdated)
     unlisteners.push(await listen("ops://jobs-updated", () => h.onJobsUpdated?.()));
   return () => { for (const u of unlisteners) u(); };
+}
+
+export async function readHooks(projectPath?: string): Promise<HooksSnapshot> {
+  return invoke("ops_read_hooks", { projectPath });
+}
+
+export async function toggleHook(projectPath: string | undefined, id: string, enable: boolean): Promise<void> {
+  return invoke("ops_toggle_hook", { projectPath, id, enable });
 }

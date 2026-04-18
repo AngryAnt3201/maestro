@@ -343,3 +343,17 @@ pub async fn ops_driver_capabilities() -> DriverCapsResponse {
         claude_trigger: c.capabilities(),
     }
 }
+
+#[tauri::command]
+pub async fn ops_read_hooks(project_path: Option<String>) -> Result<crate::core::ops::hooks_reader::HooksSnapshot, String> {
+    let path = project_path.map(std::path::PathBuf::from);
+    crate::core::ops::hooks_reader::snapshot(path.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn ops_toggle_hook(project_path: Option<String>, id: String, enable: bool) -> Result<(), String> {
+    let path = project_path.map(std::path::PathBuf::from);
+    crate::core::ops::hooks_reader::toggle(path.as_deref(), &id, enable)
+        .map_err(|e| e.to_string())
+}

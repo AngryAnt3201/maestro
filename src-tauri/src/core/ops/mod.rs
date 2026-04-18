@@ -4,6 +4,7 @@
 
 pub mod dispatch_log;
 pub mod drivers;
+pub mod hooks_reader;
 pub mod keychain;
 pub mod model;
 pub mod scheduler;
