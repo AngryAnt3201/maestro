@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 interface OpsSectionProps {
   title: string;
@@ -9,7 +9,13 @@ interface OpsSectionProps {
   children: ReactNode;
 }
 
-export function OpsSection({ title, count, defaultOpen = true, action, children }: OpsSectionProps) {
+export function OpsSection({
+  title,
+  count,
+  defaultOpen = true,
+  action,
+  children,
+}: OpsSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
   const Icon = open ? ChevronDown : ChevronRight;
   return (

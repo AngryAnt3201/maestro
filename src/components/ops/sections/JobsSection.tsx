@@ -2,9 +2,9 @@ import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useOpsStore } from "@/stores/useOpsStore";
 import type { Job } from "@/types/ops";
-import { OpsSection } from "../OpsSection";
 import { JobRow } from "../JobRow";
 import { NewJobWizard } from "../NewJobWizard";
+import { OpsSection } from "../OpsSection";
 
 interface Props {
   projectHash?: string;
@@ -19,7 +19,7 @@ export function JobsSection({ projectHash }: Props) {
   const [wizardOpen, setWizardOpen] = useState(false);
 
   const jobs = useMemo<Job[]>(() => {
-    const g = jobsByScope["global"] ?? [];
+    const g = jobsByScope.global ?? [];
     const p = projectHash ? (jobsByScope[`project:${projectHash}`] ?? []) : [];
     if (scopeFilter === "global") return g;
     if (scopeFilter === "project") return p;
@@ -34,7 +34,10 @@ export function JobsSection({ projectHash }: Props) {
         action={
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); setWizardOpen(true); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setWizardOpen(true);
+            }}
             aria-label="New job"
             className="rounded p-0.5 text-maestro-accent hover:bg-maestro-accent/10"
           >
@@ -48,15 +51,29 @@ export function JobsSection({ projectHash }: Props) {
             No jobs yet. Click + to create one.
           </div>
         ) : (
-          <ul>{jobs.map((j) => <JobRow key={j.id} job={j} />)}</ul>
+          <ul>
+            {jobs.map((j) => (
+              <JobRow key={j.id} job={j} />
+            ))}
+          </ul>
         )}
       </OpsSection>
-      <NewJobWizard open={wizardOpen} onClose={() => setWizardOpen(false)} projectHash={projectHash} />
+      <NewJobWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        projectHash={projectHash}
+      />
     </>
   );
 }
 
-function ScopeTabs({ value, onChange }: { value: ScopeFilter; onChange: (v: ScopeFilter) => void }) {
+function ScopeTabs({
+  value,
+  onChange,
+}: {
+  value: ScopeFilter;
+  onChange: (v: ScopeFilter) => void;
+}) {
   const items: Array<{ v: ScopeFilter; label: string }> = [
     { v: "all", label: "All" },
     { v: "project", label: "Project" },

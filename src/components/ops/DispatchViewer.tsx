@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
+import { X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { readLogTail } from "@/lib/ops";
-import type { DispatchOutputEvent, DispatchFinishedEvent, Job } from "@/types/ops";
+import type { DispatchFinishedEvent, DispatchOutputEvent, Job } from "@/types/ops";
 
 interface Props {
   job: Job;
@@ -22,12 +22,17 @@ export function DispatchViewer({ job, dispatchId, onClose }: Props) {
       if (!dispatchId) return;
       try {
         const tail = await readLogTail(job.scope, dispatchId, job.projectHash, 64 * 1024);
-        if (!cancelled) { setLines(tail); prev.current = tail; }
+        if (!cancelled) {
+          setLines(tail);
+          prev.current = tail;
+        }
       } catch (_e) {
         // file might not exist yet
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [dispatchId, job.scope, job.projectHash]);
 
   useEffect(() => {
@@ -45,16 +50,34 @@ export function DispatchViewer({ job, dispatchId, onClose }: Props) {
         if (e.payload.dispatchId === dispatchId) setLive(false);
       });
     })();
-    return () => { unlistenOut?.(); unlistenFin?.(); };
+    return () => {
+      unlistenOut?.();
+      unlistenFin?.();
+    };
   }, [dispatchId]);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-stretch justify-end bg-black/40" onClick={onClose}>
-      <div className="flex w-[560px] flex-col border-l border-maestro-border bg-maestro-surface" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-40 flex items-stretch justify-end bg-black/40"
+      onClick={onClose}
+    >
+      <div
+        className="flex w-[560px] flex-col border-l border-maestro-border bg-maestro-surface"
+        onClick={(e) => e.stopPropagation()}
+      >
         <header className="flex items-center gap-2 border-b border-maestro-border px-4 py-2">
           <h2 className="text-[12px] font-semibold text-maestro-text">{job.name}</h2>
-          {live && <span className="rounded bg-maestro-green/15 px-1.5 py-[1px] text-[9.5px] uppercase tracking-wider text-maestro-green">Live</span>}
-          <button type="button" onClick={onClose} aria-label="Close" className="ml-auto text-maestro-muted hover:text-maestro-text">
+          {live && (
+            <span className="rounded bg-maestro-green/15 px-1.5 py-[1px] text-[9.5px] uppercase tracking-wider text-maestro-green">
+              Live
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="ml-auto text-maestro-muted hover:text-maestro-text"
+          >
             <X size={14} />
           </button>
         </header>
@@ -64,9 +87,15 @@ export function DispatchViewer({ job, dispatchId, onClose }: Props) {
         {job.driver === "claude-trigger" && (
           <div className="border-t border-maestro-border px-4 py-2 text-[10.5px] text-maestro-muted">
             Full trigger logs live on{" "}
-            <a href="https://claude.ai/code/scheduled" target="_blank" rel="noreferrer" className="text-maestro-accent underline">
+            <a
+              href="https://claude.ai/code/scheduled"
+              target="_blank"
+              rel="noreferrer"
+              className="text-maestro-accent underline"
+            >
               claude.ai/code/scheduled
-            </a>.
+            </a>
+            .
           </div>
         )}
       </div>

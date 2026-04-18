@@ -36,15 +36,22 @@ export function LiveSection() {
     <OpsSection title="Live" count={`${entries.length} running`}>
       <ul>
         {entries.map((r) => (
-          <li key={r.dispatchId} className="flex items-center gap-2 px-3 py-1.5 hover:bg-maestro-card/40">
+          <li
+            key={r.dispatchId}
+            className="flex items-center gap-2 px-3 py-1.5 hover:bg-maestro-card/40"
+          >
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-maestro-green" />
-            <span className="flex-1 truncate text-[12px] text-maestro-text">{jobName(r.jobId)}</span>
+            <span className="flex-1 truncate text-[12px] text-maestro-text">
+              {jobName(r.jobId)}
+            </span>
             {r.lastLine && (
               <span className="truncate font-mono text-[10.5px] text-maestro-muted/70 max-w-[240px]">
                 {r.lastLine}
               </span>
             )}
-            <span className="text-[10.5px] tabular-nums text-maestro-muted/80">{formatElapsed(r.startedAt)}</span>
+            <span className="text-[10.5px] tabular-nums text-maestro-muted/80">
+              {formatElapsed(r.startedAt)}
+            </span>
           </li>
         ))}
       </ul>

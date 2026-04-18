@@ -78,9 +78,21 @@ export type OpsEventHandlers = {
 
 export async function subscribeOpsEvents(h: OpsEventHandlers): Promise<UnlistenFn> {
   const unlisteners: UnlistenFn[] = [];
-  if (h.onStarted) unlisteners.push(await listen<DispatchStartedEvent>("ops://dispatch-started", (e) => h.onStarted!(e.payload)));
-  if (h.onOutput) unlisteners.push(await listen<DispatchOutputEvent>("ops://dispatch-output", (e) => h.onOutput!(e.payload)));
-  if (h.onFinished) unlisteners.push(await listen<DispatchFinishedEvent>("ops://dispatch-finished", (e) => h.onFinished!(e.payload)));
-  if (h.onJobsUpdated) unlisteners.push(await listen("ops://jobs-updated", () => h.onJobsUpdated!()));
-  return () => unlisteners.forEach((u) => u());
+  if (h.onStarted)
+    unlisteners.push(
+      await listen<DispatchStartedEvent>("ops://dispatch-started", (e) => h.onStarted?.(e.payload)),
+    );
+  if (h.onOutput)
+    unlisteners.push(
+      await listen<DispatchOutputEvent>("ops://dispatch-output", (e) => h.onOutput?.(e.payload)),
+    );
+  if (h.onFinished)
+    unlisteners.push(
+      await listen<DispatchFinishedEvent>("ops://dispatch-finished", (e) =>
+        h.onFinished?.(e.payload),
+      ),
+    );
+  if (h.onJobsUpdated)
+    unlisteners.push(await listen("ops://jobs-updated", () => h.onJobsUpdated?.()));
+  return () => { for (const u of unlisteners) u(); };
 }

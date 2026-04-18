@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useOpsStore } from "@/stores/useOpsStore";
-import { JobRow } from "../JobRow";
 import type { Job } from "@/types/ops";
+import { JobRow } from "../JobRow";
 
 const baseJob: Job = {
   id: "j1",
@@ -22,7 +22,12 @@ const baseJob: Job = {
 describe("JobRow", () => {
   beforeEach(() => {
     useOpsStore.setState({
-      jobsByScope: {}, dispatchesByScope: {}, tools: [], live: {}, caps: undefined, scopeFilter: "all",
+      jobsByScope: {},
+      dispatchesByScope: {},
+      tools: [],
+      live: {},
+      caps: undefined,
+      scopeFilter: "all",
     });
   });
 
@@ -40,7 +45,7 @@ describe("JobRow", () => {
 
   it("invokes runNow when play is clicked", async () => {
     const runNow = vi.fn(async () => {});
-    useOpsStore.setState({ runNow } as any);
+    useOpsStore.setState({ runNow } as unknown as Parameters<typeof useOpsStore.setState>[0]);
     render(<JobRow job={baseJob} />);
     fireEvent.click(screen.getByLabelText("Run now"));
     expect(runNow).toHaveBeenCalledWith("project", "j1", "abc123");

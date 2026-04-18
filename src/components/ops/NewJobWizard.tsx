@@ -1,9 +1,9 @@
-import { useState } from "react";
 import { X } from "lucide-react";
-import type { Job, JobDriver, Scope } from "@/types/ops";
+import { useState } from "react";
 import { useOpsStore } from "@/stores/useOpsStore";
-import { MaestroJobForm } from "./wizard/MaestroJobForm";
+import type { Job, JobDriver, Scope } from "@/types/ops";
 import { ClaudeTriggerForm } from "./wizard/ClaudeTriggerForm";
+import { MaestroJobForm } from "./wizard/MaestroJobForm";
 
 interface Props {
   open: boolean;
@@ -21,8 +21,15 @@ export function NewJobWizard({ open, onClose, projectHash }: Props) {
 
   if (!open) return null;
 
-  const reset = () => { setStep("driver"); setDriver("maestro"); setScope("project"); };
-  const close = () => { reset(); onClose(); };
+  const reset = () => {
+    setStep("driver");
+    setDriver("maestro");
+    setScope("project");
+  };
+  const close = () => {
+    reset();
+    onClose();
+  };
 
   const submit = async (partial: Partial<Job>) => {
     const job: Job = {
@@ -50,22 +57,32 @@ export function NewJobWizard({ open, onClose, projectHash }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={close}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={close}
+    >
       <div
         className="w-[520px] max-h-[80vh] overflow-y-auto rounded border border-maestro-border bg-maestro-surface p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="mb-4 flex items-center">
           <h2 className="text-[13px] font-semibold text-maestro-text">New job</h2>
-          <button type="button" onClick={close} aria-label="Close" className="ml-auto text-maestro-muted hover:text-maestro-text">
+          <button
+            type="button"
+            onClick={close}
+            aria-label="Close"
+            className="ml-auto text-maestro-muted hover:text-maestro-text"
+          >
             <X size={14} />
           </button>
         </header>
 
         {step === "driver" ? (
           <DriverPicker
-            driver={driver} onDriver={setDriver}
-            scope={scope} onScope={setScope}
+            driver={driver}
+            onDriver={setDriver}
+            scope={scope}
+            onScope={setScope}
             canProject={!!projectHash}
             onNext={() => setStep("form")}
           />
@@ -80,7 +97,12 @@ export function NewJobWizard({ open, onClose, projectHash }: Props) {
 }
 
 function DriverPicker({
-  driver, onDriver, scope, onScope, canProject, onNext,
+  driver,
+  onDriver,
+  scope,
+  onScope,
+  canProject,
+  onNext,
 }: {
   driver: JobDriver;
   onDriver: (d: JobDriver) => void;
@@ -127,9 +149,7 @@ function DriverPicker({
             type="button"
             onClick={() => onScope("global")}
             className={`rounded px-3 py-1 text-[11px] ${
-              scope === "global"
-                ? "bg-maestro-accent/15 text-maestro-accent"
-                : "text-maestro-muted"
+              scope === "global" ? "bg-maestro-accent/15 text-maestro-accent" : "text-maestro-muted"
             }`}
           >
             Global
@@ -147,13 +167,25 @@ function DriverPicker({
   );
 }
 
-function DriverCard({ selected, onSelect, title, desc }: { selected: boolean; onSelect: () => void; title: string; desc: string }) {
+function DriverCard({
+  selected,
+  onSelect,
+  title,
+  desc,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  title: string;
+  desc: string;
+}) {
   return (
     <button
       type="button"
       onClick={onSelect}
       className={`rounded border px-3 py-2 text-left ${
-        selected ? "border-maestro-accent bg-maestro-accent/5" : "border-maestro-border hover:border-maestro-accent/40"
+        selected
+          ? "border-maestro-accent bg-maestro-accent/5"
+          : "border-maestro-border hover:border-maestro-accent/40"
       }`}
     >
       <div className="text-[12px] text-maestro-text">{title}</div>

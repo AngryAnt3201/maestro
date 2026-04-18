@@ -45,7 +45,7 @@ export function ClaudeTriggerForm({ onCancel, onSubmit }: Props) {
   }, [intervalSec]);
 
   const toggleConnector = (c: string) => {
-    setConnectors((prev) => prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]);
+    setConnectors((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
   };
 
   const submit = async () => {
@@ -69,38 +69,52 @@ export function ClaudeTriggerForm({ onCancel, onSubmit }: Props) {
   return (
     <div className="space-y-3">
       <div>
-        <label className="mb-1 block text-[10.5px] uppercase tracking-wider text-maestro-muted">Name</label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. pr-triage"
-          className="w-full rounded border border-maestro-border bg-maestro-card px-2 py-1 text-[11.5px] text-maestro-text"
-        />
+        <label className="block">
+          <span className="mb-1 block text-[10.5px] uppercase tracking-wider text-maestro-muted">
+            Name
+          </span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. pr-triage"
+            className="w-full rounded border border-maestro-border bg-maestro-card px-2 py-1 text-[11.5px] text-maestro-text"
+          />
+        </label>
       </div>
       <div>
-        <label className="mb-1 block text-[10.5px] uppercase tracking-wider text-maestro-muted">Prompt</label>
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Describe what Claude should do on each run. Remember: remote execution, no local files."
-          rows={4}
-          className="w-full rounded border border-maestro-border bg-maestro-card px-2 py-1 text-[11px] text-maestro-text"
-        />
+        <label className="block">
+          <span className="mb-1 block text-[10.5px] uppercase tracking-wider text-maestro-muted">
+            Prompt
+          </span>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Describe what Claude should do on each run. Remember: remote execution, no local files."
+            rows={4}
+            className="w-full rounded border border-maestro-border bg-maestro-card px-2 py-1 text-[11px] text-maestro-text"
+          />
+        </label>
       </div>
       <div>
-        <label className="mb-1 block text-[10.5px] uppercase tracking-wider text-maestro-muted">Schedule (cron)</label>
-        <input
-          value={schedule}
-          onChange={(e) => setSchedule(e.target.value)}
-          className="w-full rounded border border-maestro-border bg-maestro-card px-2 py-1 font-mono text-[11px] text-maestro-text"
-        />
+        <label className="block">
+          <span className="mb-1 block text-[10.5px] uppercase tracking-wider text-maestro-muted">
+            Schedule (cron)
+          </span>
+          <input
+            value={schedule}
+            onChange={(e) => setSchedule(e.target.value)}
+            className="w-full rounded border border-maestro-border bg-maestro-card px-2 py-1 font-mono text-[11px] text-maestro-text"
+          />
+        </label>
         {cronError && <p className="mt-1 text-[10.5px] text-maestro-red">{cronError}</p>}
         {!cronError && intervalError && (
           <p className="mt-1 text-[10.5px] text-maestro-red">{intervalError}</p>
         )}
       </div>
-      <div>
-        <label className="mb-1 block text-[10.5px] uppercase tracking-wider text-maestro-muted">MCP Connectors (optional)</label>
+      <fieldset>
+        <legend className="mb-1 block text-[10.5px] uppercase tracking-wider text-maestro-muted">
+          MCP Connectors (optional)
+        </legend>
         <div className="flex flex-wrap gap-1.5">
           {KNOWN_CONNECTORS.map((c) => (
             <button
@@ -119,16 +133,24 @@ export function ClaudeTriggerForm({ onCancel, onSubmit }: Props) {
         </div>
         <p className="mt-1 text-[10.5px] text-maestro-muted/60">
           Additional connectors must be enabled at{" "}
-          <a href="https://claude.ai/settings/connectors" target="_blank" rel="noreferrer" className="text-maestro-accent underline">
+          <a
+            href="https://claude.ai/settings/connectors"
+            target="_blank"
+            rel="noreferrer"
+            className="text-maestro-accent underline"
+          >
             claude.ai/settings/connectors
-          </a>.
+          </a>
+          .
         </p>
-      </div>
+      </fieldset>
 
       {error && <p className="text-[11px] text-maestro-red">{error}</p>}
 
       <div className="flex gap-2 pt-2">
-        <button type="button" onClick={onCancel} className="text-[11px] text-maestro-muted">← Back</button>
+        <button type="button" onClick={onCancel} className="text-[11px] text-maestro-muted">
+          ← Back
+        </button>
         <button
           type="button"
           onClick={submit}

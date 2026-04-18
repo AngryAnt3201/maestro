@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import type { Dispatch, DriverCapsResponse, Job, Scope, Tool } from "@/types/ops";
 import * as api from "@/lib/ops";
+import type { Dispatch, DriverCapsResponse, Job, Scope, Tool } from "@/types/ops";
 
 interface LiveRun {
   dispatchId: string;
@@ -55,15 +55,31 @@ export const useOpsStore = create<OpsState>((set, get) => ({
 
   loadDispatches: async (scope, projectHash) => {
     const d = await api.recentDispatches(scope, projectHash, 100);
-    set((s) => ({ dispatchesByScope: { ...s.dispatchesByScope, [keyFor(scope, projectHash)]: d } }));
+    set((s) => ({
+      dispatchesByScope: { ...s.dispatchesByScope, [keyFor(scope, projectHash)]: d },
+    }));
   },
 
   loadTools: async () => {
     const tools = await api.loadTools();
     if (tools.length === 0) {
       const seeds: Tool[] = [
-        { id: "", name: "Claude Code", binary: "claude", icon: "sparkles", defaults: { args: [], env: {} }, createdAt: 0 },
-        { id: "", name: "Bash", binary: "bash", icon: "terminal", defaults: { args: ["-lc"], env: {} }, createdAt: 0 },
+        {
+          id: "",
+          name: "Claude Code",
+          binary: "claude",
+          icon: "sparkles",
+          defaults: { args: [], env: {} },
+          createdAt: 0,
+        },
+        {
+          id: "",
+          name: "Bash",
+          binary: "bash",
+          icon: "terminal",
+          defaults: { args: ["-lc"], env: {} },
+          createdAt: 0,
+        },
       ];
       for (const s of seeds) await api.saveTool(s);
       set({ tools: await api.loadTools() });
@@ -129,7 +145,8 @@ export async function initOpsEventSubscriptions(): Promise<() => void> {
       Object.keys(jobsByScope).forEach((k) => {
         const parts = k.split(":");
         if (parts[0] === "global") useOpsStore.getState().loadJobs("global");
-        else if (parts[0] === "project" && parts[1]) useOpsStore.getState().loadJobs("project", parts[1]);
+        else if (parts[0] === "project" && parts[1])
+          useOpsStore.getState().loadJobs("project", parts[1]);
       });
     },
   });

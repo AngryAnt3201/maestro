@@ -1,10 +1,12 @@
-import { Plus, Package } from "lucide-react";
+import { Package, Plus } from "lucide-react";
 import { useState } from "react";
 import { useOpsStore } from "@/stores/useOpsStore";
-import { OpsSection } from "../OpsSection";
 import type { Tool } from "@/types/ops";
+import { OpsSection } from "../OpsSection";
 
-interface Props { projectHash?: string }
+interface Props {
+  projectHash?: string;
+}
 
 export function ToolsSection(_: Props) {
   const tools = useOpsStore((s) => s.tools);
@@ -24,7 +26,9 @@ export function ToolsSection(_: Props) {
       createdAt: 0,
     };
     await saveTool(t);
-    setName(""); setBinary(""); setAdding(false);
+    setName("");
+    setBinary("");
+    setAdding(false);
   };
 
   return (
@@ -35,7 +39,10 @@ export function ToolsSection(_: Props) {
       action={
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); setAdding(true); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setAdding(true);
+          }}
           aria-label="New tool"
           className="rounded p-0.5 text-maestro-accent hover:bg-maestro-accent/10"
         >
@@ -57,10 +64,18 @@ export function ToolsSection(_: Props) {
             placeholder="binary"
             className="w-24 rounded border border-maestro-border bg-maestro-card px-2 py-1 text-[11px] text-maestro-text"
           />
-          <button type="button" onClick={onAdd} className="rounded bg-maestro-accent/15 px-2 py-1 text-[10.5px] text-maestro-accent">
+          <button
+            type="button"
+            onClick={onAdd}
+            className="rounded bg-maestro-accent/15 px-2 py-1 text-[10.5px] text-maestro-accent"
+          >
             Add
           </button>
-          <button type="button" onClick={() => setAdding(false)} className="text-[10.5px] text-maestro-muted">
+          <button
+            type="button"
+            onClick={() => setAdding(false)}
+            className="text-[10.5px] text-maestro-muted"
+          >
             Cancel
           </button>
         </div>
@@ -72,7 +87,10 @@ export function ToolsSection(_: Props) {
       ) : (
         <ul>
           {tools.map((t) => (
-            <li key={t.id} className="flex items-center gap-2 border-t border-maestro-border/20 px-3 py-1.5">
+            <li
+              key={t.id}
+              className="flex items-center gap-2 border-t border-maestro-border/20 px-3 py-1.5"
+            >
               <Package size={12} className="text-maestro-muted" />
               <span className="flex-1 truncate text-[12px] text-maestro-text">{t.name}</span>
               <span className="font-mono text-[10.5px] text-maestro-muted/70">{t.binary}</span>

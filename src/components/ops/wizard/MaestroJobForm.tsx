@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import type { Job } from "@/types/ops";
 import { useOpsStore } from "@/stores/useOpsStore";
+import type { Job } from "@/types/ops";
 
 interface Props {
   onCancel: () => void;
@@ -13,7 +13,13 @@ export function validateCron(expr: string): string | null {
   if (trimmed.length === 0) return null;
   const parts = trimmed.split(/\s+/);
   if (parts.length !== 5) return "Cron must have 5 fields (min hour day month dow)";
-  const ranges: Array<[number, number]> = [[0, 59], [0, 23], [1, 31], [1, 12], [0, 6]];
+  const ranges: Array<[number, number]> = [
+    [0, 59],
+    [0, 23],
+    [1, 31],
+    [1, 12],
+    [0, 6],
+  ];
   for (let i = 0; i < 5; i++) {
     const f = parts[i];
     if (f === "*") continue;
@@ -28,7 +34,8 @@ export function validateCron(expr: string): string | null {
       if (!Number.isFinite(lo)) return `Field ${i + 1}: not a number`;
       if (hi !== undefined && !Number.isFinite(hi)) return `Field ${i + 1}: not a number`;
       if (lo < ranges[i][0] || lo > ranges[i][1]) return `Field ${i + 1}: out of range`;
-      if (hi !== undefined && (hi < ranges[i][0] || hi > ranges[i][1])) return `Field ${i + 1}: out of range`;
+      if (hi !== undefined && (hi < ranges[i][0] || hi > ranges[i][1]))
+        return `Field ${i + 1}: out of range`;
     }
   }
   return null;
@@ -95,7 +102,11 @@ export function MaestroJobForm({ onCancel, onSubmit }: Props) {
           className="w-full rounded border border-maestro-border bg-maestro-card px-2 py-1 text-[11.5px] text-maestro-text"
         >
           <option value="">— none —</option>
-          {tools.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.binary})</option>)}
+          {tools.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name} ({t.binary})
+            </option>
+          ))}
         </select>
       </Field>
       <Field label="Command">
@@ -136,7 +147,9 @@ export function MaestroJobForm({ onCancel, onSubmit }: Props) {
       {error && <p className="text-[11px] text-maestro-red">{error}</p>}
 
       <div className="flex gap-2 pt-2">
-        <button type="button" onClick={onCancel} className="text-[11px] text-maestro-muted">← Back</button>
+        <button type="button" onClick={onCancel} className="text-[11px] text-maestro-muted">
+          ← Back
+        </button>
         <button
           type="button"
           onClick={submit}
@@ -153,8 +166,13 @@ export function MaestroJobForm({ onCancel, onSubmit }: Props) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="mb-1 block text-[10.5px] uppercase tracking-wider text-maestro-muted">{label}</label>
-      {children}
+      {/* biome-ignore lint/a11y/noLabelWithoutControl: children always contains a form control */}
+      <label className="block">
+        <span className="mb-1 block text-[10.5px] uppercase tracking-wider text-maestro-muted">
+          {label}
+        </span>
+        {children}
+      </label>
     </div>
   );
 }
