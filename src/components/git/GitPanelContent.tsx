@@ -4,6 +4,7 @@ import type { GitPanelTab } from "./GitPanelTabs";
 import { PullRequestList } from "./pulls/PullRequestList";
 import { IssueList } from "./issues/IssueList";
 import { DiscussionList } from "./discussions/DiscussionList";
+import { OpsPanel } from "../ops/OpsPanel";
 
 interface GitPanelContentProps {
   activeTab: GitPanelTab;
@@ -66,6 +67,8 @@ export function GitPanelContent({
           selectedDiscussionNumber={selectedDiscussionNumber}
         />
       );
+    case "ops":
+      return <OpsPanel repoPath={repoPath} />;
     default:
       return null;
   }

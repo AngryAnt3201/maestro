@@ -1,6 +1,6 @@
-import { GitBranch, GitPullRequest, CircleDot, MessageCircle } from "lucide-react";
+import { GitBranch, GitPullRequest, CircleDot, MessageCircle, Cpu } from "lucide-react";
 
-export type GitPanelTab = "commits" | "prs" | "issues" | "discussions";
+export type GitPanelTab = "commits" | "prs" | "issues" | "discussions" | "ops";
 
 interface GitPanelTabsProps {
   activeTab: GitPanelTab;
@@ -18,6 +18,7 @@ const TABS: Array<{
   { id: "prs", label: "PRs", icon: GitPullRequest },
   { id: "issues", label: "Issues", icon: CircleDot },
   { id: "discussions", label: "Discussions", icon: MessageCircle },
+  { id: "ops", label: "Ops", icon: Cpu },
 ];
 
 export function GitPanelTabs({

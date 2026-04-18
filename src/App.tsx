@@ -7,6 +7,7 @@ import { useOpenProject } from "@/lib/useOpenProject";
 import { useFDAStore } from "@/stores/useFDAStore";
 import { useSessionStore } from "@/stores/useSessionStore";
 import { useWorkspaceStore, type RepositoryInfo } from "@/stores/useWorkspaceStore";
+import { initOpsEventSubscriptions, useOpsStore } from "@/stores/useOpsStore";
 import { useGitStore } from "./stores/useGitStore";
 import { useTerminalSettingsStore } from "./stores/useTerminalSettingsStore";
 import { useAppKeyboard } from "./hooks/useAppKeyboard";
@@ -140,6 +141,17 @@ function App() {
     return () => {
       stopActivityListener();
     };
+  }, []);
+
+  // Initialize ops event subscriptions and load capabilities + tools
+  useEffect(() => {
+    let unsub: (() => void) | null = null;
+    (async () => {
+      unsub = await initOpsEventSubscriptions();
+      await useOpsStore.getState().loadCapabilities();
+      await useOpsStore.getState().loadTools();
+    })();
+    return () => { if (unsub) unsub(); };
   }, []);
 
   useEffect(() => {
