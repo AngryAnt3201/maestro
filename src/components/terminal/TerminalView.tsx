@@ -323,7 +323,12 @@ export const TerminalView = memo(function TerminalView({
       const data = writeBuffer.join('');
       writeBuffer = [];  // Clear BEFORE write to prevent duplicates on error
       try {
-        term.write(data);
+        term.write(data, () => {
+          // Auto-scroll to bottom after writing data
+          if (term) {
+            term.scrollToBottom();
+          }
+        });
       } catch (e) {
         console.error('[TerminalView] write error:', e);
       }
