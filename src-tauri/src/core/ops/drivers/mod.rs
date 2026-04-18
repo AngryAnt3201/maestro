@@ -38,6 +38,7 @@ pub struct DispatchContext {
 
 /// Capability flags — the frontend reads these to gate UI affordances.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DriverCapabilities {
     pub supports_delete: bool,
     pub supports_raw_env: bool,
@@ -54,6 +55,7 @@ pub struct DriverMeta {
 
 /// A job discovered on the external system (claude-trigger driver only).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExternalJob {
     pub external_id: String,
     pub name: String,

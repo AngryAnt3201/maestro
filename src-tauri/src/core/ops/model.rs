@@ -36,6 +36,7 @@ pub enum TriggeredBy {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct MaestroJobPayload {
     pub command: String,
     #[serde(default)]
@@ -49,6 +50,7 @@ pub struct MaestroJobPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ClaudeTriggerPayload {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trigger_id: Option<String>,
@@ -60,6 +62,7 @@ pub struct ClaudeTriggerPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LastDispatch {
     pub id: String,
     pub started_at: i64,
@@ -67,6 +70,7 @@ pub struct LastDispatch {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Job {
     pub id: String,
     pub name: String,
@@ -94,6 +98,7 @@ pub struct Job {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Dispatch {
     pub id: String,
     pub job_id: String,
@@ -118,6 +123,7 @@ pub struct Dispatch {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ToolDefaults {
     #[serde(default)]
     pub args: Vec<String>,
@@ -128,6 +134,7 @@ pub struct ToolDefaults {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Tool {
     pub id: String,
     pub name: String,

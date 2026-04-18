@@ -327,6 +327,7 @@ pub async fn ops_project_hash(project_path: String) -> Result<String, String> {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DriverCapsResponse {
     pub maestro: crate::core::ops::drivers::DriverCapabilities,
     pub claude_trigger: crate::core::ops::drivers::DriverCapabilities,
