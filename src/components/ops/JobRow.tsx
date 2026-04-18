@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Play, Pause, ChevronDown, ChevronRight, Trash2, Pencil, ScrollText } from "lucide-react";
 import type { Job, DispatchStatus } from "@/types/ops";
 import { useOpsStore } from "@/stores/useOpsStore";
+import { JobDetailPanel } from "./JobDetailPanel";
 
 function driverBadge(j: Job) {
   if (j.driver === "claude-trigger") {
@@ -31,6 +32,7 @@ function nextFireLabel(j: Job): string {
 
 export function JobRow({ job }: { job: Job }) {
   const [open, setOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const { runNow, deleteJob } = useOpsStore();
 
   const onRun = async (e: React.MouseEvent) => {
@@ -104,7 +106,7 @@ export function JobRow({ job }: { job: Job }) {
             <button type="button" className="rounded border border-maestro-border px-2 py-0.5 text-[10.5px] text-maestro-muted" aria-label="Pause (Stage 2)">
               <Pause size={11} className="inline mr-1" /> {job.enabled ? "Pause" : "Resume"}
             </button>
-            <button type="button" className="rounded border border-maestro-border px-2 py-0.5 text-[10.5px] text-maestro-muted">
+            <button type="button" onClick={(e) => { e.stopPropagation(); setDetailOpen(true); }} className="rounded border border-maestro-border px-2 py-0.5 text-[10.5px] text-maestro-muted">
               <Pencil size={11} className="inline mr-1" /> Edit
             </button>
             <button type="button" className="rounded border border-maestro-border px-2 py-0.5 text-[10.5px] text-maestro-muted">
@@ -113,6 +115,13 @@ export function JobRow({ job }: { job: Job }) {
             <button type="button" onClick={onDelete} aria-label="Delete job" className="ml-auto rounded border border-maestro-red/50 bg-maestro-red/10 px-2 py-0.5 text-[10.5px] text-maestro-red">
               <Trash2 size={11} className="inline mr-1" /> Delete
             </button>
+          </div>
+        </div>
+      )}
+      {detailOpen && (
+        <div className="fixed inset-0 z-40 flex items-stretch justify-end bg-black/40" onClick={() => setDetailOpen(false)}>
+          <div className="w-[420px] bg-maestro-surface border-l border-maestro-border" onClick={(e) => e.stopPropagation()}>
+            <JobDetailPanel job={job} onClose={() => setDetailOpen(false)} />
           </div>
         </div>
       )}
