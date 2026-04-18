@@ -12,11 +12,19 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::{mpsc, Mutex};
 
+#[derive(Debug, Clone)]
+pub struct DispatchTarget {
+    pub scope: Scope,
+    pub project_hash: Option<String>,
+    pub job_id: String,
+}
+
 /// App-wide Ops state held in Tauri's managed state.
 pub struct OpsState {
     pub maestro_scheduler: Arc<Scheduler>,
     pub claude_driver: Arc<ClaudeTriggerDriver>,
     pub jobs_by_scope: Mutex<HashMap<String, Vec<Job>>>,
+    pub dispatches: Mutex<HashMap<String, DispatchTarget>>,
     pub app: AppHandle,
 }
 
@@ -39,6 +47,7 @@ impl OpsState {
             maestro_scheduler: scheduler,
             claude_driver,
             jobs_by_scope: Mutex::new(HashMap::new()),
+            dispatches: Mutex::new(HashMap::new()),
             app: app.clone(),
         });
 
@@ -90,14 +99,23 @@ impl OpsState {
                     let _ = store::append_dispatch(scope, project_hash.as_deref(), &rec);
                     self.update_last_dispatch(scope, project_hash.as_deref(), &job_id, &rec).await;
                     let _ = dispatch_log::rotate(scope, project_hash.as_deref(), chrono::Utc::now().timestamp());
+                    self.forget_dispatch(dispatch_id).await;
                 }
             }
         }
     }
 
-    async fn lookup_dispatch_scope(&self, _dispatch_id: &str) -> Option<(Scope, Option<String>, String)> {
-        // Task 11 wires up the in-memory registry. Stub: None => events still emit, persistence no-ops.
-        None
+    async fn lookup_dispatch_scope(&self, dispatch_id: &str) -> Option<(Scope, Option<String>, String)> {
+        let map = self.dispatches.lock().await;
+        map.get(dispatch_id).map(|t| (t.scope, t.project_hash.clone(), t.job_id.clone()))
+    }
+
+    pub async fn register_dispatch(&self, dispatch_id: &str, target: DispatchTarget) {
+        self.dispatches.lock().await.insert(dispatch_id.to_string(), target);
+    }
+
+    pub async fn forget_dispatch(&self, dispatch_id: &str) {
+        self.dispatches.lock().await.remove(dispatch_id);
     }
 
     async fn update_last_dispatch(
@@ -236,6 +254,12 @@ pub async fn ops_run_now(
             id
         }
     };
+
+    state.register_dispatch(&dispatch_id, DispatchTarget {
+        scope,
+        project_hash: project_hash.clone(),
+        job_id: job_id.clone(),
+    }).await;
 
     let _ = state.app.emit("ops://dispatch-started", serde_json::json!({
         "dispatchId": dispatch_id,
