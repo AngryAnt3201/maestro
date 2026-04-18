@@ -1,6 +1,9 @@
 import { ChevronDown, ChevronRight, RotateCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMcpStore } from "@/stores/useMcpStore";
+import type { McpServerConfig } from "@/lib/mcp";
+
+const EMPTY_SERVERS: McpServerConfig[] = [];
 
 interface Props {
   projectPath?: string;
@@ -10,7 +13,9 @@ export function McpSubSection({ projectPath }: Props) {
   const [open, setOpen] = useState(false);
   const fetchServers = useMcpStore((s) => s.fetchProjectServers);
   const refresh = useMcpStore((s) => s.refreshProjectServers);
-  const servers = useMcpStore((s) => (projectPath ? (s.projectServers[projectPath] ?? []) : []));
+  const servers = useMcpStore((s) =>
+    projectPath ? (s.projectServers[projectPath] ?? EMPTY_SERVERS) : EMPTY_SERVERS,
+  );
   const loading = useMcpStore((s) => (projectPath ? (s.isLoading[projectPath] ?? false) : false));
 
   useEffect(() => {

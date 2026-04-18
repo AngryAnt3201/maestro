@@ -12,6 +12,7 @@
     "store:default",
     "dialog:default",
     "opener:default",
-    "updater:default"
+    "updater:default",
+    "notification:default"
   ]
 }
