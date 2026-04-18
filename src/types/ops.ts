@@ -128,3 +128,11 @@ export interface HooksSnapshot {
   global: HookEntry[];
   project: HookEntry[];
 }
+
+export interface SecretEntry {
+  id: string;
+  key: string;
+  scope: Scope;
+  projectHash?: string;
+  createdAt: number;
+}

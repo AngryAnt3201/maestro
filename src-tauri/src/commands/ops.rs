@@ -357,3 +357,23 @@ pub async fn ops_toggle_hook(project_path: Option<String>, id: String, enable: b
     crate::core::ops::hooks_reader::toggle(path.as_deref(), &id, enable)
         .map_err(|e| e.to_string())
 }
+
+use crate::core::ops::secrets::{self, SecretEntry};
+
+#[tauri::command]
+pub async fn ops_list_secrets() -> Result<Vec<SecretEntry>, String> {
+    secrets::list().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn ops_put_secret(entry: SecretEntry, value: String) -> Result<SecretEntry, String> {
+    let mut e = entry;
+    if e.id.is_empty() { e.id = uuid::Uuid::new_v4().to_string(); }
+    if e.created_at == 0 { e.created_at = chrono::Utc::now().timestamp(); }
+    secrets::put(e, &value)
+}
+
+#[tauri::command]
+pub async fn ops_delete_secret(id: String) -> Result<(), String> {
+    secrets::delete(&id)
+}

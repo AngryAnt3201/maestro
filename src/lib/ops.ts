@@ -10,6 +10,7 @@ import type {
   HooksSnapshot,
   Job,
   Scope,
+  SecretEntry,
   Tool,
 } from "@/types/ops";
 
@@ -104,4 +105,16 @@ export async function readHooks(projectPath?: string): Promise<HooksSnapshot> {
 
 export async function toggleHook(projectPath: string | undefined, id: string, enable: boolean): Promise<void> {
   return invoke("ops_toggle_hook", { projectPath, id, enable });
+}
+
+export async function listSecrets(): Promise<SecretEntry[]> {
+  return invoke("ops_list_secrets");
+}
+
+export async function putSecret(entry: SecretEntry, value: string): Promise<SecretEntry> {
+  return invoke("ops_put_secret", { entry, value });
+}
+
+export async function deleteSecret(id: string): Promise<void> {
+  return invoke("ops_delete_secret", { id });
 }

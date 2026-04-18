@@ -8,6 +8,7 @@ pub mod hooks_reader;
 pub mod keychain;
 pub mod model;
 pub mod scheduler;
+pub mod secrets;
 pub mod store;
 
 pub use drivers::Driver;
