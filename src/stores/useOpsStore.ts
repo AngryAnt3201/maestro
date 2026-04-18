@@ -58,7 +58,19 @@ export const useOpsStore = create<OpsState>((set, get) => ({
     set((s) => ({ dispatchesByScope: { ...s.dispatchesByScope, [keyFor(scope, projectHash)]: d } }));
   },
 
-  loadTools: async () => set({ tools: await api.loadTools() }),
+  loadTools: async () => {
+    const tools = await api.loadTools();
+    if (tools.length === 0) {
+      const seeds: Tool[] = [
+        { id: "", name: "Claude Code", binary: "claude", icon: "sparkles", defaults: { args: [], env: {} }, createdAt: 0 },
+        { id: "", name: "Bash", binary: "bash", icon: "terminal", defaults: { args: ["-lc"], env: {} }, createdAt: 0 },
+      ];
+      for (const s of seeds) await api.saveTool(s);
+      set({ tools: await api.loadTools() });
+    } else {
+      set({ tools });
+    }
+  },
   loadCapabilities: async () => set({ caps: await api.driverCapabilities() }),
 
   saveJob: async (scope, job, projectHash) => {
