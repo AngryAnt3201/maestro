@@ -22,6 +22,7 @@ export interface LastDispatch {
   id: string;
   startedAt: number;
   status: DispatchStatus;
+  tokens?: number;
 }
 
 export interface Job {

@@ -127,6 +127,12 @@ export function JobRow({ job }: { job: Job }) {
                 </dd>
               </>
             )}
+            {job.lastDispatch?.tokens != null && (
+              <>
+                <dt className="text-maestro-muted/70 uppercase text-[9.5px]">Tokens</dt>
+                <dd>{job.lastDispatch.tokens.toLocaleString()}</dd>
+              </>
+            )}
           </dl>
           <div className="mt-2 flex gap-1.5">
             <button

@@ -67,6 +67,8 @@ pub struct LastDispatch {
     pub id: String,
     pub started_at: i64,
     pub status: DispatchStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tokens: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

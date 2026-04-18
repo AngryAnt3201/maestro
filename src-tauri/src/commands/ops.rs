@@ -133,6 +133,7 @@ impl OpsState {
                     id: rec.id.clone(),
                     started_at: rec.started_at,
                     status: rec.status,
+                    tokens: rec.tokens,
                 });
                 let _ = store::save_jobs(scope, project_hash, list);
             }
