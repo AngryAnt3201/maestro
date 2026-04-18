@@ -53,7 +53,7 @@ impl OpsState {
         });
 
         let state_fwd = state.clone();
-        tokio::spawn(async move {
+        tauri::async_runtime::spawn(async move {
             let mut rx = events_rx;
             while let Some(evt) = rx.recv().await {
                 state_fwd.handle_dispatch_event(evt).await;

@@ -60,10 +60,10 @@ impl Scheduler {
         let _ = self.pending_tx.send(Tick::Rescan);
     }
 
-    pub fn spawn(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
-        tokio::spawn(async move {
+    pub fn spawn(self: Arc<Self>) {
+        tauri::async_runtime::spawn(async move {
             self.run().await;
-        })
+        });
     }
 
     async fn run(self: Arc<Self>) {
