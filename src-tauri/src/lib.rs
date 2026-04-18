@@ -168,6 +168,10 @@ pub fn run() {
             app.manage(event_bus);
             app.manage(transcript_watcher);
 
+            let handle = app.handle().clone();
+            let ops = crate::commands::ops::OpsState::new(handle.clone());
+            app.manage(ops);
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -313,6 +317,19 @@ pub fn run() {
             // Hooks commands
             commands::hooks::write_session_hooks_config,
             commands::hooks::remove_session_hooks_config,
+            // Ops commands
+            commands::ops::ops_load_jobs,
+            commands::ops::ops_save_job,
+            commands::ops::ops_delete_job,
+            commands::ops::ops_run_now,
+            commands::ops::ops_recent_dispatches,
+            commands::ops::ops_load_tools,
+            commands::ops::ops_save_tool,
+            commands::ops::ops_delete_tool,
+            commands::ops::ops_list_external_triggers,
+            commands::ops::ops_read_log_tail,
+            commands::ops::ops_project_hash,
+            commands::ops::ops_driver_capabilities,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Maestro");
