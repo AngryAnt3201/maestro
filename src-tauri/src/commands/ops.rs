@@ -1,6 +1,7 @@
 //! Tauri command handlers for Ops.
 
 use crate::core::ops::drivers::{claude_trigger::ClaudeTriggerDriver, Driver, DispatchEvent, ExternalJob};
+use tauri_plugin_notification::NotificationExt;
 use crate::core::ops::drivers::maestro::MaestroDriver;
 use crate::core::ops::model::{Dispatch, DispatchStatus, Job, JobDriver, LastDispatch, Scope, Tool, TriggeredBy};
 use crate::core::ops::scheduler::{Scheduler, DEFAULT_CONCURRENCY_CAP};
@@ -99,6 +100,21 @@ impl OpsState {
                     let _ = store::append_dispatch(scope, project_hash.as_deref(), &rec);
                     self.update_last_dispatch(scope, project_hash.as_deref(), &job_id, &rec).await;
                     let _ = dispatch_log::rotate(scope, project_hash.as_deref(), chrono::Utc::now().timestamp());
+                    if matches!(*status, DispatchStatus::Failed) {
+                        let map = self.jobs_by_scope.lock().await;
+                        let key = scope_key(scope, project_hash.as_deref());
+                        if let Some(list) = map.get(&key) {
+                            if let Some(job) = list.iter().find(|j| j.id == job_id) {
+                                if job.notify_on_failure {
+                                    let _ = self.app.notification()
+                                        .builder()
+                                        .title("Ops job failed")
+                                        .body(&format!("{} failed", job.name))
+                                        .show();
+                                }
+                            }
+                        }
+                    }
                     self.forget_dispatch(dispatch_id).await;
                 }
             }

@@ -102,6 +102,22 @@ export function JobRow({ job }: { job: Job }) {
             </dd>
             <dt className="text-maestro-muted/70 uppercase text-[9.5px]">Schedule</dt>
             <dd>{job.schedule ?? "—"}</dd>
+            <dt className="text-maestro-muted/70 uppercase text-[9.5px]">Notify</dt>
+            <dd>
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const updated = { ...job, notifyOnFailure: !job.notifyOnFailure };
+                  try {
+                    await useOpsStore.getState().saveJob(job.scope, updated, job.projectHash);
+                  } catch (err) { window.alert(String(err)); }
+                }}
+                className={job.notifyOnFailure ? "text-maestro-accent" : "text-maestro-muted"}
+              >
+                {job.notifyOnFailure ? "✓ on failure" : "off"}
+              </button>
+            </dd>
             {job.driver === "maestro" && job.maestro && (
               <>
                 <dt className="text-maestro-muted/70 uppercase text-[9.5px]">Command</dt>
