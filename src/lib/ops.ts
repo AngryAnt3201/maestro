@@ -96,14 +96,20 @@ export async function subscribeOpsEvents(h: OpsEventHandlers): Promise<UnlistenF
     );
   if (h.onJobsUpdated)
     unlisteners.push(await listen("ops://jobs-updated", () => h.onJobsUpdated?.()));
-  return () => { for (const u of unlisteners) u(); };
+  return () => {
+    for (const u of unlisteners) u();
+  };
 }
 
 export async function readHooks(projectPath?: string): Promise<HooksSnapshot> {
   return invoke("ops_read_hooks", { projectPath });
 }
 
-export async function toggleHook(projectPath: string | undefined, id: string, enable: boolean): Promise<void> {
+export async function toggleHook(
+  projectPath: string | undefined,
+  id: string,
+  enable: boolean,
+): Promise<void> {
   return invoke("ops_toggle_hook", { projectPath, id, enable });
 }
 
@@ -123,6 +129,10 @@ export async function exportJobsYaml(scope: Scope, projectHash?: string): Promis
   return invoke("ops_export_jobs_yaml", { scope, projectHash });
 }
 
-export async function importJobsYaml(scope: Scope, body: string, projectHash?: string): Promise<number> {
+export async function importJobsYaml(
+  scope: Scope,
+  body: string,
+  projectHash?: string,
+): Promise<number> {
   return invoke("ops_import_jobs_yaml", { scope, projectHash, body });
 }

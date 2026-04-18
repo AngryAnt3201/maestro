@@ -114,14 +114,23 @@ export interface DispatchFinishedEvent {
   tokens?: number;
 }
 
-export type HookEvent = "PreToolUse" | "PostToolUse" | "Stop" | "SubagentStop" | "SessionStart" | "SessionEnd" | "UserPromptSubmit" | "PreCompact" | "Notification";
+export type HookEvent =
+  | "PreToolUse"
+  | "PostToolUse"
+  | "Stop"
+  | "SubagentStop"
+  | "SessionStart"
+  | "SessionEnd"
+  | "UserPromptSubmit"
+  | "PreCompact"
+  | "Notification";
 
 export interface HookEntry {
-  id: string;                 // synthesized: `${scope}:${event}:${index}`
+  id: string; // synthesized: `${scope}:${event}:${index}`
   scope: "global" | "project";
   event: HookEvent;
-  matcher?: string;           // tool name pattern
-  command: string;            // shell command
+  matcher?: string; // tool name pattern
+  command: string; // shell command
   enabled: boolean;
 }
 

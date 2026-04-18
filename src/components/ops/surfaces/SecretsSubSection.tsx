@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { deleteSecret, listSecrets, putSecret } from "@/lib/ops";
 import type { SecretEntry } from "@/types/ops";
-import { listSecrets, putSecret, deleteSecret } from "@/lib/ops";
 
-interface Props { projectHash?: string }
+interface Props {
+  projectHash?: string;
+}
 
 export function SecretsSubSection({ projectHash }: Props) {
   const [open, setOpen] = useState(false);
@@ -14,26 +16,38 @@ export function SecretsSubSection({ projectHash }: Props) {
   const [scope, setScope] = useState<"global" | "project">("global");
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setEntries(await listSecrets());
-    } catch (e) { setError(String(e)); }
-  };
-  useEffect(() => { if (open) load(); }, [open]);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
+  useEffect(() => {
+    if (open) load();
+  }, [open, load]);
 
   const onAdd = async () => {
     if (!key.trim() || !value) return;
     try {
-      await putSecret({
-        id: "",
-        key: key.trim(),
-        scope,
-        projectHash: scope === "project" ? projectHash : undefined,
-        createdAt: 0,
-      }, value);
-      setKey(""); setValue(""); setAdding(false); setError(null);
+      await putSecret(
+        {
+          id: "",
+          key: key.trim(),
+          scope,
+          projectHash: scope === "project" ? projectHash : undefined,
+          createdAt: 0,
+        },
+        value,
+      );
+      setKey("");
+      setValue("");
+      setAdding(false);
+      setError(null);
       await load();
-    } catch (e) { setError(String(e)); }
+    } catch (e) {
+      setError(String(e));
+    }
   };
 
   return (
@@ -73,7 +87,9 @@ export function SecretsSubSection({ projectHash }: Props) {
                   className="rounded border border-maestro-border bg-maestro-card px-2 py-1 text-[11px] text-maestro-text"
                 >
                   <option value="global">global</option>
-                  <option value="project" disabled={!projectHash}>project</option>
+                  <option value="project" disabled={!projectHash}>
+                    project
+                  </option>
                 </select>
               </div>
               <div className="flex gap-2">
@@ -100,14 +116,26 @@ export function SecretsSubSection({ projectHash }: Props) {
           ) : (
             <ul>
               {entries.map((s) => (
-                <li key={s.id} className="flex items-center gap-2 border-t border-maestro-border/10 px-4 py-1">
-                  <span className="w-16 text-[9.5px] uppercase tracking-wider text-maestro-muted">{s.scope}</span>
-                  <span className="flex-1 truncate font-mono text-[11px] text-maestro-text">{s.key}</span>
+                <li
+                  key={s.id}
+                  className="flex items-center gap-2 border-t border-maestro-border/10 px-4 py-1"
+                >
+                  <span className="w-16 text-[9.5px] uppercase tracking-wider text-maestro-muted">
+                    {s.scope}
+                  </span>
+                  <span className="flex-1 truncate font-mono text-[11px] text-maestro-text">
+                    {s.key}
+                  </span>
                   <button
                     type="button"
                     onClick={async () => {
                       if (!window.confirm(`Delete secret ${s.key}?`)) return;
-                      try { await deleteSecret(s.id); await load(); } catch (e) { window.alert(String(e)); }
+                      try {
+                        await deleteSecret(s.id);
+                        await load();
+                      } catch (e) {
+                        window.alert(String(e));
+                      }
                     }}
                     aria-label="Delete secret"
                     className="text-maestro-muted hover:text-maestro-red"

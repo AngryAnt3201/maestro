@@ -1,8 +1,8 @@
-import { useState } from "react";
 import { Download, Upload } from "lucide-react";
+import { useState } from "react";
 import { exportJobsYaml, importJobsYaml } from "@/lib/ops";
-import type { Scope } from "@/types/ops";
 import { useOpsStore } from "@/stores/useOpsStore";
+import type { Scope } from "@/types/ops";
 
 interface Props {
   scope: Scope;
@@ -24,7 +24,9 @@ export function ImportExportMenu({ scope, projectHash }: Props) {
       a.download = `ops-${scope}${projectHash ? `-${projectHash.slice(0, 8)}` : ""}.yaml`;
       a.click();
       URL.revokeObjectURL(url);
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   };
 
   const onImport = async (e: React.MouseEvent) => {
@@ -43,17 +45,31 @@ export function ImportExportMenu({ scope, projectHash }: Props) {
         await useOpsStore.getState().loadJobs(scope, projectHash);
       };
       input.click();
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <>
-      <button type="button" onClick={onExport} disabled={busy} aria-label="Export YAML"
+      <button
+        type="button"
+        onClick={onExport}
+        disabled={busy}
+        aria-label="Export YAML"
         className="rounded p-0.5 text-maestro-muted hover:text-maestro-accent"
-      ><Download size={11} /></button>
-      <button type="button" onClick={onImport} disabled={busy} aria-label="Import YAML"
+      >
+        <Download size={11} />
+      </button>
+      <button
+        type="button"
+        onClick={onImport}
+        disabled={busy}
+        aria-label="Import YAML"
         className="rounded p-0.5 text-maestro-muted hover:text-maestro-accent"
-      ><Upload size={11} /></button>
+      >
+        <Upload size={11} />
+      </button>
     </>
   );
 }

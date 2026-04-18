@@ -1,5 +1,5 @@
-import { useState } from "react";
 import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
+import { useState } from "react";
 
 export function WebhooksSubSection() {
   const [open, setOpen] = useState(false);
@@ -17,8 +17,8 @@ export function WebhooksSubSection() {
       {open && (
         <div className="px-4 py-3 text-[10.5px] text-maestro-muted/70">
           <p className="mb-2">
-            Claude Code remote triggers and webhooks are managed at claude.ai. Local listing is not exposed
-            by the `claude` CLI yet — manage them directly in the dashboard.
+            Claude Code remote triggers and webhooks are managed at claude.ai. Local listing is not
+            exposed by the `claude` CLI yet — manage them directly in the dashboard.
           </p>
           <a
             href="https://claude.ai/code/scheduled"

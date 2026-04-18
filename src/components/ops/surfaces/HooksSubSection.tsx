@@ -1,9 +1,11 @@
-import { useEffect, useState, useCallback } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import type { HookEntry, HooksSnapshot } from "@/types/ops";
+import { useCallback, useEffect, useState } from "react";
 import { readHooks, toggleHook } from "@/lib/ops";
+import type { HookEntry, HooksSnapshot } from "@/types/ops";
 
-interface Props { projectPath?: string }
+interface Props {
+  projectPath?: string;
+}
 
 export function HooksSubSection({ projectPath }: Props) {
   const [open, setOpen] = useState(false);
@@ -44,16 +46,29 @@ export function HooksSubSection({ projectPath }: Props) {
           )}
           <ul>
             {all.map((h) => (
-              <li key={h.id} className="flex items-center gap-2 border-t border-maestro-border/10 px-4 py-1">
-                <span className={`h-1.5 w-1.5 rounded-full ${h.enabled ? "bg-maestro-green" : "bg-maestro-muted/40"}`} />
-                <span className="w-16 text-[9.5px] uppercase tracking-wider text-maestro-muted">{h.scope}</span>
+              <li
+                key={h.id}
+                className="flex items-center gap-2 border-t border-maestro-border/10 px-4 py-1"
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${h.enabled ? "bg-maestro-green" : "bg-maestro-muted/40"}`}
+                />
+                <span className="w-16 text-[9.5px] uppercase tracking-wider text-maestro-muted">
+                  {h.scope}
+                </span>
                 <span className="w-28 text-[10.5px] text-maestro-text">{h.event}</span>
-                <span className="flex-1 truncate font-mono text-[10.5px] text-maestro-muted/80">{h.command}</span>
+                <span className="flex-1 truncate font-mono text-[10.5px] text-maestro-muted/80">
+                  {h.command}
+                </span>
                 <button
                   type="button"
                   onClick={async () => {
                     try {
-                      await toggleHook(h.scope === "project" ? projectPath : undefined, h.id, !h.enabled);
+                      await toggleHook(
+                        h.scope === "project" ? projectPath : undefined,
+                        h.id,
+                        !h.enabled,
+                      );
                       await load();
                     } catch (e) {
                       window.alert(String(e));

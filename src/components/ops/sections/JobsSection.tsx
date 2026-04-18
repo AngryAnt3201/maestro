@@ -40,7 +40,10 @@ export function JobsSection({ projectHash }: Props) {
             />
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); setWizardOpen(true); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setWizardOpen(true);
+              }}
               aria-label="New job"
               className="rounded p-0.5 text-maestro-accent hover:bg-maestro-accent/10"
             >

@@ -111,7 +111,9 @@ export function JobRow({ job }: { job: Job }) {
                   const updated = { ...job, notifyOnFailure: !job.notifyOnFailure };
                   try {
                     await useOpsStore.getState().saveJob(job.scope, updated, job.projectHash);
-                  } catch (err) { window.alert(String(err)); }
+                  } catch (err) {
+                    window.alert(String(err));
+                  }
                 }}
                 className={job.notifyOnFailure ? "text-maestro-accent" : "text-maestro-muted"}
               >

@@ -1,8 +1,8 @@
 import { OpsSection } from "../OpsSection";
 import { HooksSubSection } from "../surfaces/HooksSubSection";
 import { McpSubSection } from "../surfaces/McpSubSection";
-import { WebhooksSubSection } from "../surfaces/WebhooksSubSection";
 import { SecretsSubSection } from "../surfaces/SecretsSubSection";
+import { WebhooksSubSection } from "../surfaces/WebhooksSubSection";
 
 interface Props {
   projectPath?: string;
@@ -11,7 +11,11 @@ interface Props {
 
 export function SurfacesSection({ projectPath, projectHash }: Props) {
   return (
-    <OpsSection title="Claude Surfaces" count="Hooks · MCP · Webhooks · Secrets" defaultOpen={false}>
+    <OpsSection
+      title="Claude Surfaces"
+      count="Hooks · MCP · Webhooks · Secrets"
+      defaultOpen={false}
+    >
       <div className="divide-y divide-maestro-border/20">
         <HooksSubSection projectPath={projectPath} />
         <McpSubSection projectPath={projectPath} />
