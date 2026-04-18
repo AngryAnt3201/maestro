@@ -114,6 +114,15 @@ A cross-platform desktop application that lets you run 1-6 Claude Code (or other
 - Automatic symlink management for commands and skills
 - Extend Maestro's capabilities with community plugins
 
+### Ops Panel
+- New tab in the Git panel for scheduled jobs, one-off dispatches, and Claude Code surfaces
+- Register any CLI as a Tool template, turn it into a scheduled Job or manual dispatch
+- Two drivers: Maestro-local (spawn + stream output) and Claude Trigger (proxies via `claude -p /schedule`)
+- Global and per-project scope, with YAML import/export
+- Live output streaming, on-disk log tail per dispatch, history of recent runs
+- Claude Surfaces sub-panel: toggle Hooks, view MCP servers, manage secrets via the OS keychain
+- System notification on failure (opt-in per job)
+
 ---
 
 ## Keyboard Shortcuts
