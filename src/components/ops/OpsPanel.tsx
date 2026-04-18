@@ -4,7 +4,7 @@ import { useOpsStore } from "@/stores/useOpsStore";
 import { HistorySection } from "./sections/HistorySection";
 import { JobsSection } from "./sections/JobsSection";
 import { LiveSection } from "./sections/LiveSection";
-import { SurfacesPlaceholder } from "./sections/SurfacesPlaceholder";
+import { SurfacesSection } from "./sections/SurfacesSection";
 import { ToolsSection } from "./sections/ToolsSection";
 
 interface OpsPanelProps {
@@ -36,7 +36,7 @@ export function OpsPanel({ repoPath }: OpsPanelProps) {
       <LiveSection />
       <JobsSection projectHash={projHash} />
       <ToolsSection projectHash={projHash} />
-      <SurfacesPlaceholder />
+      <SurfacesSection projectPath={repoPath} projectHash={projHash} />
       <HistorySection projectHash={projHash} />
     </div>
   );
