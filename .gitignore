@@ -71,3 +71,6 @@ website/.jekyll-metadata
 
 # Langfuse telemetry
 .langfuse/
+
+# Superpowers brainstorm mockups (visual companion artefacts)
+.superpowers/
