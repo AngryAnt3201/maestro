@@ -336,6 +336,8 @@ pub fn run() {
             commands::ops::ops_list_secrets,
             commands::ops::ops_put_secret,
             commands::ops::ops_delete_secret,
+            commands::ops::ops_export_jobs_yaml,
+            commands::ops::ops_import_jobs_yaml,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Maestro");

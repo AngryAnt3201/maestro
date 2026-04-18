@@ -2,6 +2,7 @@ import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useOpsStore } from "@/stores/useOpsStore";
 import type { Job } from "@/types/ops";
+import { ImportExportMenu } from "../ImportExportMenu";
 import { JobRow } from "../JobRow";
 import { NewJobWizard } from "../NewJobWizard";
 import { OpsSection } from "../OpsSection";
@@ -32,17 +33,20 @@ export function JobsSection({ projectHash }: Props) {
         title="Jobs"
         count={jobs.length}
         action={
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setWizardOpen(true);
-            }}
-            aria-label="New job"
-            className="rounded p-0.5 text-maestro-accent hover:bg-maestro-accent/10"
-          >
-            <Plus size={12} />
-          </button>
+          <div className="flex items-center gap-1">
+            <ImportExportMenu
+              scope={scopeFilter === "global" ? "global" : "project"}
+              projectHash={scopeFilter === "global" ? undefined : projectHash}
+            />
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setWizardOpen(true); }}
+              aria-label="New job"
+              className="rounded p-0.5 text-maestro-accent hover:bg-maestro-accent/10"
+            >
+              <Plus size={12} />
+            </button>
+          </div>
         }
       >
         <ScopeTabs value={scopeFilter} onChange={setScopeFilter} />

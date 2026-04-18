@@ -63,6 +63,8 @@ anyhow = "1"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 # Filesystem watching for transcript tailing
 notify = { version = "7", features = ["macos_fsevent"] }
+# YAML serialization for job import/export
+serde_yaml = "0.9"
 
 # macOS permissions (Full Disk Access check)
 [target.'cfg(target_os = "macos")'.dependencies]

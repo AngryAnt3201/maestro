@@ -394,3 +394,24 @@ pub async fn ops_put_secret(entry: SecretEntry, value: String) -> Result<SecretE
 pub async fn ops_delete_secret(id: String) -> Result<(), String> {
     secrets::delete(&id)
 }
+
+#[tauri::command]
+pub async fn ops_export_jobs_yaml(scope: Scope, project_hash: Option<String>) -> Result<String, String> {
+    crate::core::ops::yaml_io::export_yaml(scope, project_hash.as_deref())
+}
+
+#[tauri::command]
+pub async fn ops_import_jobs_yaml(
+    state: State<'_, Arc<OpsState>>,
+    scope: Scope,
+    project_hash: Option<String>,
+    body: String,
+) -> Result<usize, String> {
+    let n = crate::core::ops::yaml_io::import_yaml(scope, project_hash.as_deref(), &body)?;
+    // Re-sync scheduler
+    let jobs = store::load_jobs(scope, project_hash.as_deref()).map_err(|e| e.to_string())?;
+    state.jobs_by_scope.lock().await.insert(scope_key(scope, project_hash.as_deref()), jobs.clone());
+    state.maestro_scheduler.set_jobs(jobs).await;
+    let _ = state.app.emit("ops://jobs-updated", serde_json::json!({ "scope": scope, "projectHash": project_hash }));
+    Ok(n)
+}

@@ -10,6 +10,7 @@ pub mod model;
 pub mod scheduler;
 pub mod secrets;
 pub mod store;
+pub mod yaml_io;
 
 pub use drivers::Driver;
 pub use model::{Dispatch, Job, Tool};

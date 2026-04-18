@@ -118,3 +118,11 @@ export async function putSecret(entry: SecretEntry, value: string): Promise<Secr
 export async function deleteSecret(id: string): Promise<void> {
   return invoke("ops_delete_secret", { id });
 }
+
+export async function exportJobsYaml(scope: Scope, projectHash?: string): Promise<string> {
+  return invoke("ops_export_jobs_yaml", { scope, projectHash });
+}
+
+export async function importJobsYaml(scope: Scope, body: string, projectHash?: string): Promise<number> {
+  return invoke("ops_import_jobs_yaml", { scope, projectHash, body });
+}
