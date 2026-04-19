@@ -87,7 +87,7 @@ pub fn get_backend_info() -> BackendInfo {
 #[tauri::command]
 pub async fn spawn_shell(
     app_handle: AppHandle,
-    state: State<'_, ProcessManager>,
+    state: State<'_, Arc<ProcessManager>>,
     cwd: Option<String>,
     env: Option<HashMap<String, String>>,
 ) -> Result<u32, PtyError> {
@@ -127,7 +127,7 @@ pub async fn spawn_shell(
 /// Sends raw text (including control sequences like `\r`) to the PTY.
 #[tauri::command]
 pub async fn write_stdin(
-    state: State<'_, ProcessManager>,
+    state: State<'_, Arc<ProcessManager>>,
     session_id: u32,
     data: String,
 ) -> Result<(), PtyError> {
@@ -139,7 +139,7 @@ pub async fn write_stdin(
 /// Rejects dimensions that are zero or exceed 500 to prevent misuse.
 #[tauri::command]
 pub async fn resize_pty(
-    state: State<'_, ProcessManager>,
+    state: State<'_, Arc<ProcessManager>>,
     session_id: u32,
     rows: u16,
     cols: u16,
@@ -156,8 +156,8 @@ pub async fn resize_pty(
 /// Also unregisters the session from the status server.
 #[tauri::command]
 pub async fn kill_session(
-    state: State<'_, ProcessManager>,
-    session_mgr: State<'_, SessionManager>,
+    state: State<'_, Arc<ProcessManager>>,
+    session_mgr: State<'_, Arc<SessionManager>>,
     status_server: State<'_, Arc<StatusServer>>,
     session_id: u32,
 ) -> Result<(), PtyError> {
@@ -184,7 +184,7 @@ pub async fn kill_session(
 /// Returns None if the session doesn't exist or its root process has exited.
 #[tauri::command]
 pub async fn get_session_process_tree(
-    state: State<'_, ProcessManager>,
+    state: State<'_, Arc<ProcessManager>>,
     session_id: u32,
 ) -> Result<Option<SessionProcessTree>, String> {
     let pm = state.inner().clone();
@@ -202,7 +202,7 @@ pub async fn get_session_process_tree(
 /// since it only refreshes the process list once.
 #[tauri::command]
 pub async fn get_all_process_trees(
-    state: State<'_, ProcessManager>,
+    state: State<'_, Arc<ProcessManager>>,
 ) -> Result<Vec<SessionProcessTree>, String> {
     let pm = state.inner().clone();
     let sessions = pm.get_all_session_pids();
@@ -215,7 +215,7 @@ pub async fn get_all_process_trees(
 /// Will refuse to kill root session processes (use kill_session for that).
 #[tauri::command]
 pub async fn kill_process(
-    state: State<'_, ProcessManager>,
+    state: State<'_, Arc<ProcessManager>>,
     pid: u32,
 ) -> Result<(), String> {
     let pm = state.inner().clone();
@@ -276,8 +276,8 @@ pub async fn save_pasted_image(data: Vec<u8>, media_type: String) -> Result<Stri
 /// Returns the number of PTY sessions that were killed.
 #[tauri::command]
 pub async fn kill_all_sessions(
-    state: State<'_, ProcessManager>,
-    session_state: State<'_, SessionManager>,
+    state: State<'_, Arc<ProcessManager>>,
+    session_state: State<'_, Arc<SessionManager>>,
 ) -> Result<u32, PtyError> {
     let pm = state.inner().clone();
     let killed = pm.kill_all_sessions().await?;

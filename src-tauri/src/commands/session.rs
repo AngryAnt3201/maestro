@@ -10,10 +10,13 @@ use crate::core::process_manager::ProcessManager;
 use crate::core::session_manager::{AiMode, SessionConfig, SessionManager, SessionStatus};
 use crate::core::status_server::StatusServer;
 
+// SessionManager and ProcessManager are managed as Arc<T> so they can be
+// shared with OpsState. The Arc<T> deref coercion handles all method calls.
+
 /// Exposes `SessionManager::all_sessions` to the frontend.
 /// Returns a snapshot of all active sessions in arbitrary order.
 #[tauri::command]
-pub async fn get_sessions(state: State<'_, SessionManager>) -> Result<Vec<SessionConfig>, String> {
+pub async fn get_sessions(state: State<'_, Arc<SessionManager>>) -> Result<Vec<SessionConfig>, String> {
     Ok(state.all_sessions())
 }
 
@@ -22,7 +25,7 @@ pub async fn get_sessions(state: State<'_, SessionManager>) -> Result<Vec<Sessio
 /// session ID already exists.
 #[tauri::command]
 pub async fn create_session(
-    state: State<'_, SessionManager>,
+    state: State<'_, Arc<SessionManager>>,
     id: u32,
     mode: AiMode,
     project_path: String,
@@ -41,7 +44,7 @@ pub async fn create_session(
 /// Returns `false` if the session does not exist (no error raised).
 #[tauri::command]
 pub async fn update_session_status(
-    state: State<'_, SessionManager>,
+    state: State<'_, Arc<SessionManager>>,
     session_id: u32,
     status: SessionStatus,
 ) -> Result<bool, String> {
@@ -53,7 +56,7 @@ pub async fn update_session_status(
 /// string if the session does not exist.
 #[tauri::command]
 pub async fn assign_session_branch(
-    state: State<'_, SessionManager>,
+    state: State<'_, Arc<SessionManager>>,
     session_id: u32,
     branch: String,
     worktree_path: Option<String>,
@@ -67,7 +70,7 @@ pub async fn assign_session_branch(
 /// which resets the display name to the default `{provider} #{id}` format.
 #[tauri::command]
 pub async fn rename_session(
-    state: State<'_, SessionManager>,
+    state: State<'_, Arc<SessionManager>>,
     session_id: u32,
     name: Option<String>,
 ) -> Result<SessionConfig, String> {
@@ -83,7 +86,7 @@ pub async fn rename_session(
 /// Returns the removed session config, or `None` if it was not found.
 #[tauri::command]
 pub async fn remove_session(
-    state: State<'_, SessionManager>,
+    state: State<'_, Arc<SessionManager>>,
     session_id: u32,
 ) -> Result<Option<SessionConfig>, String> {
     Ok(state.remove_session(session_id))
@@ -92,7 +95,7 @@ pub async fn remove_session(
 /// Gets all sessions for a specific project.
 #[tauri::command]
 pub async fn get_sessions_for_project(
-    state: State<'_, SessionManager>,
+    state: State<'_, Arc<SessionManager>>,
     project_path: String,
 ) -> Result<Vec<SessionConfig>, String> {
     let canonical = std::fs::canonicalize(&project_path)
@@ -107,8 +110,8 @@ pub async fn get_sessions_for_project(
 /// Also kills the associated PTY sessions and cleans up MCP/plugin state.
 #[tauri::command]
 pub async fn remove_sessions_for_project(
-    state: State<'_, SessionManager>,
-    process_manager: State<'_, ProcessManager>,
+    state: State<'_, Arc<SessionManager>>,
+    process_manager: State<'_, Arc<ProcessManager>>,
     mcp_manager: State<'_, McpManager>,
     status_server: State<'_, Arc<StatusServer>>,
     plugin_manager: State<'_, PluginManager>,

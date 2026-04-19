@@ -1,6 +1,10 @@
 //! Tauri command handlers for Ops.
 
 use crate::core::ops::drivers::{claude_trigger::ClaudeTriggerDriver, Driver, DispatchEvent, ExternalJob};
+use crate::core::ops::drivers::loop_driver::LoopDriver;
+use crate::core::ops::session_injector::SessionInjector;
+use crate::core::session_manager::SessionManager;
+use crate::core::process_manager::ProcessManager;
 use tauri_plugin_notification::NotificationExt;
 use crate::core::ops::drivers::maestro::MaestroDriver;
 use crate::core::ops::model::{Dispatch, DispatchStatus, Job, JobDriver, LastDispatch, Scope, Tool, TriggeredBy};
@@ -10,6 +14,7 @@ use crate::core::ops::dispatch_log;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::{mpsc, Mutex};
 
@@ -24,6 +29,7 @@ pub struct DispatchTarget {
 pub struct OpsState {
     pub maestro_scheduler: Arc<Scheduler>,
     pub claude_driver: Arc<ClaudeTriggerDriver>,
+    pub loop_driver: Arc<LoopDriver>,
     pub jobs_by_scope: Mutex<HashMap<String, Vec<Job>>>,
     pub dispatches: Mutex<HashMap<String, DispatchTarget>>,
     pub app: AppHandle,
@@ -37,16 +43,24 @@ fn scope_key(scope: Scope, project_hash: Option<&str>) -> String {
 }
 
 impl OpsState {
-    pub fn new(app: AppHandle) -> Arc<Self> {
+    pub fn new(
+        app: AppHandle,
+        sessions: Arc<SessionManager>,
+        processes: Arc<ProcessManager>,
+    ) -> Arc<Self> {
         let maestro: Arc<dyn Driver> = Arc::new(MaestroDriver::new());
         let (events_tx, events_rx) = mpsc::unbounded_channel::<DispatchEvent>();
         let scheduler = Arc::new(Scheduler::new(maestro, events_tx, DEFAULT_CONCURRENCY_CAP));
         scheduler.clone().spawn();
 
+        let injector = Arc::new(SessionInjector::new(app.clone(), sessions, processes));
+        let loop_driver = Arc::new(LoopDriver::new(injector));
+
         let claude_driver = Arc::new(ClaudeTriggerDriver::new());
         let state = Arc::new(Self {
             maestro_scheduler: scheduler,
             claude_driver,
+            loop_driver,
             jobs_by_scope: Mutex::new(HashMap::new()),
             dispatches: Mutex::new(HashMap::new()),
             app: app.clone(),
@@ -59,7 +73,50 @@ impl OpsState {
                 state_fwd.handle_dispatch_event(evt).await;
             }
         });
+
+        // Best-effort autostart of enabled Loop jobs after a short warmup.
+        let state_auto = state.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            state_auto.autostart_loops().await;
+        });
+
         state
+    }
+
+    pub async fn autostart_loops(self: &Arc<Self>) {
+        // Only global-scope loops autostart at boot — project-scoped loops respawn
+        // when the user opens the relevant project.
+        let global = match store::load_jobs(Scope::Global, None) {
+            Ok(j) => j,
+            Err(e) => {
+                log::warn!("[ops] autostart: failed to load global jobs: {e}");
+                return;
+            }
+        };
+        for mut job in global {
+            if job.driver != JobDriver::Loop { continue; }
+            if !job.enabled { continue; }
+            let Some(lp) = job.loop_.as_ref() else { continue; };
+            if !lp.autostart { continue; }
+            log::info!("[ops] autostarting loop job {}", job.id);
+            match self.loop_driver.create(&job).await {
+                Ok(meta) => {
+                    if let Some(lp) = job.loop_.as_mut() {
+                        lp.session_id = meta.trigger_id.as_deref().and_then(|s| s.parse::<u32>().ok());
+                    }
+                    // Persist updated session_id back to the on-disk job list.
+                    if let Ok(mut list) = store::load_jobs(Scope::Global, None) {
+                        list.retain(|j| j.id != job.id);
+                        list.push(job.clone());
+                        if let Err(e) = store::save_jobs(Scope::Global, None, &list) {
+                            log::warn!("[ops] autostart: failed to persist updated session_id for {}: {e}", job.id);
+                        }
+                    }
+                }
+                Err(e) => log::error!("[ops] autostart: loop {} failed: {}", job.id, e),
+            }
+        }
     }
 
     async fn handle_dispatch_event(self: &Arc<Self>, evt: DispatchEvent) {
@@ -199,7 +256,17 @@ pub async fn ops_save_job(
                 Err(e) => return Err(e.to_string()),
             }
         }
-        JobDriver::Maestro | JobDriver::Loop => {}
+        JobDriver::Loop => {
+            match state.loop_driver.create(&job).await {
+                Ok(meta) => {
+                    if let Some(lp) = job.loop_.as_mut() {
+                        lp.session_id = meta.trigger_id.as_deref().and_then(|s| s.parse::<u32>().ok());
+                    }
+                }
+                Err(e) => return Err(format!("create loop: {e}")),
+            }
+        }
+        JobDriver::Maestro => {}
     }
 
     let mut existing = store::load_jobs(scope, project_hash.as_deref()).map_err(|e| e.to_string())?;
@@ -225,6 +292,10 @@ pub async fn ops_delete_job(
 ) -> Result<(), String> {
     let mut jobs = store::load_jobs(scope, project_hash.as_deref()).map_err(|e| e.to_string())?;
     if let Some(job) = jobs.iter().find(|j| j.id == job_id).cloned() {
+        if job.driver == JobDriver::Loop {
+            // Best-effort kill — proceed to delete from store regardless.
+            let _ = state.loop_driver.delete(&job).await;
+        }
         if job.driver == JobDriver::ClaudeTrigger {
             return Err("claude-trigger delete is not supported; open https://claude.ai/code/scheduled".into());
         }
@@ -250,7 +321,26 @@ pub async fn ops_run_now(
 
     let dispatch_id = match job.driver {
         JobDriver::Maestro => state.maestro_scheduler.dispatch_now(&job, TriggeredBy::Manual).await,
-        JobDriver::Loop => return Err("loop driver: run_now not yet implemented (wired in Task 56)".to_string()),
+        JobDriver::Loop => {
+            let id = uuid::Uuid::new_v4().to_string();
+            let ctx = crate::core::ops::drivers::DispatchContext {
+                dispatch_id: id.clone(),
+                triggered_by: TriggeredBy::Manual,
+            };
+            let (tx, mut rx) = mpsc::unbounded_channel::<DispatchEvent>();
+            let driver = state.loop_driver.clone();
+            let job_clone = job.clone();
+            tokio::spawn(async move {
+                let _ = driver.run_now(&job_clone, ctx, tx).await;
+            });
+            let app = state.app.clone();
+            tokio::spawn(async move {
+                while let Some(evt) = rx.recv().await {
+                    let _ = app.emit("ops://dispatch-output-loop", serde_json::json!(evt));
+                }
+            });
+            id
+        }
         JobDriver::ClaudeTrigger => {
             let id = uuid::Uuid::new_v4().to_string();
             let ctx = crate::core::ops::drivers::DispatchContext {

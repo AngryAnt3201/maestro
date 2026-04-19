@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_updater::UpdaterExt;
 use url::Url;
@@ -66,7 +67,7 @@ pub async fn check_for_updates(
 #[tauri::command]
 pub async fn download_and_install_update(
     app: AppHandle,
-    process_manager: tauri::State<'_, ProcessManager>,
+    process_manager: tauri::State<'_, Arc<ProcessManager>>,
     custom_endpoint: Option<String>,
 ) -> Result<(), String> {
     let update = if let Some(endpoint) = custom_endpoint {

@@ -109,8 +109,8 @@ pub fn run() {
         .manage(MarketplaceManager::new())
         .manage(McpManager::new())
         .manage(PluginManager::new())
-        .manage(ProcessManager::new())
-        .manage(SessionManager::new())
+        .manage(Arc::new(ProcessManager::new()))
+        .manage(Arc::new(SessionManager::new()))
         .manage(WorktreeManager::new())
         .setup(|app| {
             // Generate a unique instance ID for this Maestro run
@@ -170,7 +170,9 @@ pub fn run() {
             app.manage(transcript_watcher);
 
             let handle = app.handle().clone();
-            let ops = crate::commands::ops::OpsState::new(handle.clone());
+            let sessions = app.state::<Arc<SessionManager>>().inner().clone();
+            let processes = app.state::<Arc<ProcessManager>>().inner().clone();
+            let ops = crate::commands::ops::OpsState::new(handle.clone(), sessions, processes);
             app.manage(ops);
 
             Ok(())
