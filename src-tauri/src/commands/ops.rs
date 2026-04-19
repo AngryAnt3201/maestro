@@ -249,7 +249,8 @@ pub async fn ops_run_now(
         .ok_or_else(|| "job not found".to_string())?;
 
     let dispatch_id = match job.driver {
-        JobDriver::Maestro | JobDriver::Loop => state.maestro_scheduler.dispatch_now(&job, TriggeredBy::Manual).await,
+        JobDriver::Maestro => state.maestro_scheduler.dispatch_now(&job, TriggeredBy::Manual).await,
+        JobDriver::Loop => return Err("loop driver: run_now not yet implemented (wired in Task 56)".to_string()),
         JobDriver::ClaudeTrigger => {
             let id = uuid::Uuid::new_v4().to_string();
             let ctx = crate::core::ops::drivers::DispatchContext {
