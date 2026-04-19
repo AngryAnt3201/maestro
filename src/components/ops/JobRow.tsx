@@ -7,17 +7,12 @@ import { JobDetailPanel } from "./JobDetailPanel";
 
 function driverBadge(j: Job) {
   if (j.driver === "claude-trigger") {
-    return (
-      <span className="rounded bg-[#2b1a35] px-1 py-[1px] text-[9.5px] uppercase tracking-wider text-[#c587e8]">
-        Claude
-      </span>
-    );
+    return <span className="rounded bg-[#2b1a35] px-1 py-[1px] text-[9.5px] uppercase tracking-wider text-[#c587e8]">Claude</span>;
   }
-  return (
-    <span className="rounded bg-[#1a2b3a] px-1 py-[1px] text-[9.5px] uppercase tracking-wider text-maestro-accent">
-      Job
-    </span>
-  );
+  if (j.driver === "loop") {
+    return <span className="rounded bg-[#1a2e22] px-1 py-[1px] text-[9.5px] uppercase tracking-wider text-[#7ec988]">Loop</span>;
+  }
+  return <span className="rounded bg-[#1a2b3a] px-1 py-[1px] text-[9.5px] uppercase tracking-wider text-maestro-accent">Job</span>;
 }
 
 function statusDot(status?: DispatchStatus, enabled?: boolean) {
@@ -40,6 +35,7 @@ function statusDot(status?: DispatchStatus, enabled?: boolean) {
 
 function nextFireLabel(j: Job): string {
   if (!j.enabled) return "paused";
+  if (j.driver === "loop" && j.loop) return `every ${j.loop.interval}`;
   if (!j.schedule) return "manual";
   return `cron: ${j.schedule}`;
 }
@@ -81,14 +77,13 @@ export function JobRow({ job }: { job: Job }) {
         <span className="flex-1 truncate text-[12px] text-maestro-text">{job.name}</span>
         {driverBadge(job)}
         <span className="text-[10.5px] text-maestro-muted/70">{nextFireLabel(job)}</span>
-        <button
-          type="button"
-          onClick={onRun}
-          aria-label="Run now"
-          className="rounded p-0.5 text-maestro-accent hover:bg-maestro-accent/10"
-        >
-          <Play size={11} />
-        </button>
+        {job.driver === "loop" ? (
+          <span className={`h-1.5 w-1.5 rounded-full ${job.loop?.sessionId ? "bg-maestro-green animate-pulse" : "bg-maestro-muted/40"}`} />
+        ) : (
+          <button type="button" onClick={onRun} aria-label="Run now" className="rounded p-0.5 text-maestro-accent hover:bg-maestro-accent/10">
+            <Play size={11} />
+          </button>
+        )}
       </div>
       {open && (
         <div className="border-t border-maestro-border/20 bg-maestro-card/20 px-6 py-2 text-[11px] text-maestro-text">
@@ -134,6 +129,20 @@ export function JobRow({ job }: { job: Job }) {
                 <dd className="whitespace-pre-wrap text-[10.5px] text-[#c587e8]">
                   {job.claudeTrigger.prompt}
                 </dd>
+              </>
+            )}
+            {job.driver === "loop" && job.loop && (
+              <>
+                <dt className="text-maestro-muted/70 uppercase text-[9.5px]">Prompt</dt>
+                <dd className="whitespace-pre-wrap text-[10.5px] text-[#7ec988]">{job.loop.prompt}</dd>
+                <dt className="text-maestro-muted/70 uppercase text-[9.5px]">Interval</dt>
+                <dd className="font-mono">{job.loop.interval}</dd>
+                <dt className="text-maestro-muted/70 uppercase text-[9.5px]">Worktree</dt>
+                <dd>{job.loop.worktree.mode === "dedicated" ? "dedicated (auto)" : job.loop.worktree.path}</dd>
+                <dt className="text-maestro-muted/70 uppercase text-[9.5px]">Session</dt>
+                <dd className="font-mono">{job.loop.sessionId ?? "not running"}</dd>
+                <dt className="text-maestro-muted/70 uppercase text-[9.5px]">Autostart</dt>
+                <dd>{job.loop.autostart ? "on" : "off"}</dd>
               </>
             )}
             {job.lastDispatch && (
