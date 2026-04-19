@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import * as api from "@/lib/ops";
-import type { Dispatch, DriverCapsResponse, Job, Scope, Tool } from "@/types/ops";
+import type { Dispatch, DriverCapsResponse, ExternalJob, Job, Scope, Tool } from "@/types/ops";
 
 interface LiveRun {
   dispatchId: string;
@@ -21,6 +21,9 @@ interface OpsState {
   live: Record<string, LiveRun>;
   caps?: DriverCapsResponse;
   scopeFilter: "all" | "project" | "global";
+  externalTriggers: ExternalJob[];
+  externalTriggersLoadedAt?: number;
+  loadExternalTriggers: () => Promise<void>;
 
   loadJobs: (scope: Scope, projectHash?: string) => Promise<void>;
   loadDispatches: (scope: Scope, projectHash?: string) => Promise<void>;
@@ -47,6 +50,18 @@ export const useOpsStore = create<OpsState>((set, get) => ({
   live: {},
   caps: undefined,
   scopeFilter: "all",
+  externalTriggers: [],
+  externalTriggersLoadedAt: undefined,
+
+  loadExternalTriggers: async () => {
+    try {
+      const triggers = await api.listExternalTriggers();
+      set({ externalTriggers: triggers, externalTriggersLoadedAt: Date.now() });
+    } catch (_e) {
+      // tolerate — CLI might be missing or unauth; list stays empty
+      set({ externalTriggersLoadedAt: Date.now() });
+    }
+  },
 
   loadJobs: async (scope, projectHash) => {
     const jobs = await api.loadJobs(scope, projectHash);

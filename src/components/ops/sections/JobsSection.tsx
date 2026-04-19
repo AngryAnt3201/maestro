@@ -6,6 +6,7 @@ import { ImportExportMenu } from "../ImportExportMenu";
 import { JobRow } from "../JobRow";
 import { NewJobWizard } from "../NewJobWizard";
 import { OpsSection } from "../OpsSection";
+import { LiveTriggersList } from "../LiveTriggersList";
 
 interface Props {
   projectHash?: string;
@@ -53,6 +54,7 @@ export function JobsSection({ projectHash }: Props) {
         }
       >
         <ScopeTabs value={scopeFilter} onChange={setScopeFilter} />
+        <LiveTriggersList />
         {jobs.length === 0 ? (
           <div className="px-4 py-4 text-center text-[11px] text-maestro-muted/60">
             No jobs yet. Click + to create one.
