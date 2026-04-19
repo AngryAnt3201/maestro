@@ -39,7 +39,11 @@ export function LoopForm({ onCancel, onSubmit }: Props) {
     const worktree: WorktreeSpec =
       worktreeMode === "dedicated"
         ? { mode: "dedicated" }
-        : { mode: "existing", path: worktreePath.trim(), branch: worktreeBranch.trim() || undefined };
+        : {
+            mode: "existing",
+            path: worktreePath.trim(),
+            branch: worktreeBranch.trim() || undefined,
+          };
 
     setSubmitting(true);
     await onSubmit({

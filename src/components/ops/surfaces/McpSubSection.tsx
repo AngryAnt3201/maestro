@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, RotateCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useMcpStore } from "@/stores/useMcpStore";
 import type { McpServerConfig } from "@/lib/mcp";
+import { useMcpStore } from "@/stores/useMcpStore";
 
 const EMPTY_SERVERS: McpServerConfig[] = [];
 

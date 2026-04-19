@@ -1,4 +1,4 @@
-import { GitBranch, Cpu } from "lucide-react";
+import { Cpu, GitBranch } from "lucide-react";
 
 export type RightPanelDomain = "git" | "ops";
 

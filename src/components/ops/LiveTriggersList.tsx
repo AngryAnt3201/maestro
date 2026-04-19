@@ -1,5 +1,5 @@
-import { useEffect } from "react";
 import { RefreshCw } from "lucide-react";
+import { useEffect } from "react";
 import { useOpsStore } from "@/stores/useOpsStore";
 
 function timeAgo(ms: number): string {
@@ -65,7 +65,8 @@ export function LiveTriggersList() {
           ))}
           {locallyKnown.size > 0 && (
             <li className="px-3 py-1 text-[10.5px] text-maestro-muted/50">
-              {locallyKnown.size} trigger{locallyKnown.size === 1 ? "" : "s"} shown above as managed jobs
+              {locallyKnown.size} trigger{locallyKnown.size === 1 ? "" : "s"} shown above as managed
+              jobs
             </li>
           )}
         </ul>

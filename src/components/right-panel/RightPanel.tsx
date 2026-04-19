@@ -1,9 +1,9 @@
 import { useState } from "react";
-import type { RightPanelDomain } from "./RightPanelHeader";
-import { RightPanelHeader } from "./RightPanelHeader";
+import type { RepositoryInfo, WorkspaceType } from "@/stores/useWorkspaceStore";
 import { GitGraphPanel } from "../git/GitGraphPanel";
 import { OpsPanel } from "../ops/OpsPanel";
-import type { RepositoryInfo, WorkspaceType } from "@/stores/useWorkspaceStore";
+import type { RightPanelDomain } from "./RightPanelHeader";
+import { RightPanelHeader } from "./RightPanelHeader";
 
 interface Props {
   open: boolean;

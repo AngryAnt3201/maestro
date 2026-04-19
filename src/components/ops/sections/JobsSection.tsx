@@ -4,9 +4,9 @@ import { useOpsStore } from "@/stores/useOpsStore";
 import type { Job } from "@/types/ops";
 import { ImportExportMenu } from "../ImportExportMenu";
 import { JobRow } from "../JobRow";
+import { LiveTriggersList } from "../LiveTriggersList";
 import { NewJobWizard } from "../NewJobWizard";
 import { OpsSection } from "../OpsSection";
-import { LiveTriggersList } from "../LiveTriggersList";
 
 interface Props {
   projectHash?: string;
