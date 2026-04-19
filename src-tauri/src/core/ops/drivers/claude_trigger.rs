@@ -7,10 +7,12 @@
 
 use super::{DispatchContext, DispatchEvent, DispatchTx, Driver, DriverCapabilities, DriverMeta, ExternalJob};
 use crate::core::ops::model::{DispatchStatus, Job};
+use crate::core::ops::session_injector::SessionInjector;
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::process::Stdio;
+use std::sync::Arc;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 
@@ -19,12 +21,16 @@ pub const MIN_INTERVAL_SEC: u64 = 3600;
 
 pub struct ClaudeTriggerDriver {
     claude_bin: String,
+    injector: Option<Arc<SessionInjector>>,
 }
 
 impl ClaudeTriggerDriver {
-    pub fn new() -> Self { Self { claude_bin: "claude".to_string() } }
+    pub fn new() -> Self { Self { claude_bin: "claude".to_string(), injector: None } }
+    pub fn with_injector(injector: Arc<SessionInjector>) -> Self {
+        Self { claude_bin: "claude".to_string(), injector: Some(injector) }
+    }
     #[allow(dead_code)]
-    pub fn with_binary(claude_bin: impl Into<String>) -> Self { Self { claude_bin: claude_bin.into() } }
+    pub fn with_binary(claude_bin: impl Into<String>) -> Self { Self { claude_bin: claude_bin.into(), injector: None } }
 
     async fn invoke_schedule(&self, subprompt: &str) -> Result<String> {
         let mut cmd = Command::new(&self.claude_bin);
@@ -53,22 +59,7 @@ impl ClaudeTriggerDriver {
         Ok(stdout)
     }
 
-    /// Extracts the "result" field from the JSON output format.
-    fn extract_result(raw: &str) -> Result<String> {
-        let v: Value = serde_json::from_str(raw)
-            .with_context(|| format!("invalid JSON from claude -p: {}", raw.chars().take(200).collect::<String>()))?;
-        v.get("result")
-            .and_then(|r| r.as_str())
-            .map(|s| s.to_string())
-            .ok_or_else(|| anyhow!("missing `result` field in claude -p output"))
-    }
-}
-
-#[async_trait]
-impl Driver for ClaudeTriggerDriver {
-    async fn create(&self, job: &Job) -> Result<DriverMeta> {
-        let p = job.claude_trigger.as_ref()
-            .ok_or_else(|| anyhow!("claude_trigger payload missing"))?;
+    async fn create_headless(&self, job: &Job, p: &crate::core::ops::model::ClaudeTriggerPayload) -> Result<DriverMeta> {
         let schedule = job.schedule.as_deref().unwrap_or("");
         let connectors = if p.mcp_connectors.is_empty() {
             String::new()
@@ -89,6 +80,60 @@ impl Driver for ClaudeTriggerDriver {
             .find(|w| w.len() >= 24 && w.chars().all(|c| c.is_ascii_hexdigit() || c == '-'))
             .map(|s| s.to_string());
         Ok(DriverMeta { trigger_id })
+    }
+
+    async fn create_interactive(&self, job: &Job, p: &crate::core::ops::model::ClaudeTriggerPayload) -> Result<DriverMeta> {
+        let injector = self.injector.as_ref()
+            .ok_or_else(|| anyhow!("interactive /schedule requires SessionInjector; not configured"))?;
+        let cwd = injector.resolve_worktree(
+            &format!("schedule-{}", &job.id[..8.min(job.id.len())]),
+            &crate::core::ops::model::WorktreeSpec::Dedicated,
+        ).await?;
+        let session_id = injector.spawn_and_wait_ready(&cwd, std::time::Duration::from_secs(10)).await?;
+
+        let connectors = if p.mcp_connectors.is_empty() {
+            String::new()
+        } else {
+            format!(" Attach connectors: {}.", p.mcp_connectors.join(", "))
+        };
+        let schedule = job.schedule.as_deref().unwrap_or("");
+        let command = format!(
+            "/schedule create a trigger named \"{}\" on cron \"{}\" with prompt: {}.{}",
+            job.name.replace('"', "'"),
+            schedule,
+            p.prompt,
+            connectors
+        );
+        injector.inject_line(session_id, &command).await?;
+
+        Ok(DriverMeta { trigger_id: None })
+    }
+
+    /// Extracts the "result" field from the JSON output format.
+    fn extract_result(raw: &str) -> Result<String> {
+        let v: Value = serde_json::from_str(raw)
+            .with_context(|| format!("invalid JSON from claude -p: {}", raw.chars().take(200).collect::<String>()))?;
+        v.get("result")
+            .and_then(|r| r.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| anyhow!("missing `result` field in claude -p output"))
+    }
+}
+
+#[async_trait]
+impl Driver for ClaudeTriggerDriver {
+    async fn create(&self, job: &Job) -> Result<DriverMeta> {
+        let p = job.claude_trigger.as_ref()
+            .ok_or_else(|| anyhow!("claude_trigger payload missing"))?;
+
+        match p.mode {
+            crate::core::ops::model::ScheduleMode::Headless => {
+                self.create_headless(job, p).await
+            }
+            crate::core::ops::model::ScheduleMode::Interactive => {
+                self.create_interactive(job, p).await
+            }
+        }
     }
 
     async fn update(&self, job: &Job) -> Result<()> {

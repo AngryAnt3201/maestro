@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { Job } from "@/types/ops";
+import type { Job, ScheduleMode } from "@/types/ops";
 import { validateCron } from "./MaestroJobForm";
 
 interface Props {
@@ -33,6 +33,7 @@ export function ClaudeTriggerForm({ onCancel, onSubmit }: Props) {
   const [prompt, setPrompt] = useState("");
   const [schedule, setSchedule] = useState("0 9 * * *");
   const [connectors, setConnectors] = useState<string[]>([]);
+  const [mode, setMode] = useState<ScheduleMode>("headless");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +62,7 @@ export function ClaudeTriggerForm({ onCancel, onSubmit }: Props) {
       claudeTrigger: {
         prompt: prompt.trim(),
         mcpConnectors: connectors,
-        mode: "headless",
+        mode,
       },
     });
     setSubmitting(false);
@@ -145,6 +146,39 @@ export function ClaudeTriggerForm({ onCancel, onSubmit }: Props) {
           .
         </p>
       </fieldset>
+
+      <div>
+        <label className="mb-1 block text-[10.5px] uppercase tracking-wider text-maestro-muted">
+          Creation mode
+        </label>
+        <div className="flex gap-1">
+          <button
+            type="button"
+            onClick={() => setMode("headless")}
+            className={`rounded px-3 py-1 text-[10.5px] ${
+              mode === "headless"
+                ? "bg-maestro-accent/15 text-maestro-accent"
+                : "text-maestro-muted"
+            }`}
+          >
+            Headless (default)
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("interactive")}
+            className={`rounded px-3 py-1 text-[10.5px] ${
+              mode === "interactive"
+                ? "bg-maestro-accent/15 text-maestro-accent"
+                : "text-maestro-muted"
+            }`}
+          >
+            Interactive (visible session)
+          </button>
+        </div>
+        <p className="mt-1 text-[10.5px] text-maestro-muted/60">
+          Interactive opens a Claude session pane so you can confirm the trigger yourself.
+        </p>
+      </div>
 
       {error && <p className="text-[11px] text-maestro-red">{error}</p>}
 

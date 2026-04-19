@@ -54,9 +54,8 @@ impl OpsState {
         scheduler.clone().spawn();
 
         let injector = Arc::new(SessionInjector::new(app.clone(), sessions, processes));
-        let loop_driver = Arc::new(LoopDriver::new(injector));
-
-        let claude_driver = Arc::new(ClaudeTriggerDriver::new());
+        let loop_driver = Arc::new(LoopDriver::new(injector.clone()));
+        let claude_driver = Arc::new(ClaudeTriggerDriver::with_injector(injector));
         let state = Arc::new(Self {
             maestro_scheduler: scheduler,
             claude_driver,
