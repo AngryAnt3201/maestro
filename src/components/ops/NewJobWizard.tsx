@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useOpsStore } from "@/stores/useOpsStore";
 import type { Job, JobDriver, Scope } from "@/types/ops";
 import { ClaudeTriggerForm } from "./wizard/ClaudeTriggerForm";
+import { LoopForm } from "./wizard/LoopForm";
 import { MaestroJobForm } from "./wizard/MaestroJobForm";
 
 interface Props {
@@ -43,6 +44,7 @@ export function NewJobWizard({ open, onClose, projectHash }: Props) {
       schedule: partial.schedule,
       maestro: partial.maestro,
       claudeTrigger: partial.claudeTrigger,
+      loop: partial.loop,
       toolId: partial.toolId,
       notifyOnFailure: partial.notifyOnFailure ?? false,
       createdAt: 0,
@@ -88,8 +90,10 @@ export function NewJobWizard({ open, onClose, projectHash }: Props) {
           />
         ) : driver === "maestro" ? (
           <MaestroJobForm onCancel={() => setStep("driver")} onSubmit={submit} />
-        ) : (
+        ) : driver === "claude-trigger" ? (
           <ClaudeTriggerForm onCancel={() => setStep("driver")} onSubmit={submit} />
+        ) : (
+          <LoopForm onCancel={() => setStep("driver")} onSubmit={submit} />
         )}
       </div>
     </div>
@@ -115,7 +119,7 @@ function DriverPicker({
     <>
       <div className="mb-4">
         <p className="mb-2 text-[10.5px] uppercase tracking-wider text-maestro-muted">Driver</p>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <DriverCard
             selected={driver === "maestro"}
             onSelect={() => onDriver("maestro")}
@@ -127,6 +131,12 @@ function DriverPicker({
             onSelect={() => onDriver("claude-trigger")}
             title="Claude Trigger"
             desc="Remote Claude agent via /schedule. Runs even when Maestro is closed."
+          />
+          <DriverCard
+            selected={driver === "loop"}
+            onSelect={() => onDriver("loop")}
+            title="Loop"
+            desc="/loop inside a Maestro-managed Claude session. Local, continuous."
           />
         </div>
       </div>
