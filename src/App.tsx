@@ -16,7 +16,7 @@ import { useUpdateStore } from "./stores/useUpdateStore";
 import { initActivityListener, stopActivityListener } from "./stores/useActivityStore";
 import { initClaudeSessionUuidListener } from "./stores/useSessionStore";
 import { UpdateNotification } from "./components/update/UpdateNotification";
-import { GitGraphPanel } from "./components/git/GitGraphPanel";
+import { RightPanel } from "./components/right-panel/RightPanel";
 import { BottomBar } from "./components/shared/BottomBar";
 import { FDADialog } from "./components/shared/FDADialog";
 import { MultiProjectView, type MultiProjectViewHandle } from "./components/shared/MultiProjectView";
@@ -395,8 +395,8 @@ function App() {
               />
             </main>
 
-            {/* Git graph panel (optional right side) */}
-            <GitGraphPanel
+            {/* Right panel — Git and Ops top-level domains */}
+            <RightPanel
               open={gitPanelOpen}
               onClose={() => setGitPanelOpen(false)}
               repoPath={activeRepoPath ?? null}

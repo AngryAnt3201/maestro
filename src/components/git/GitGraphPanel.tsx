@@ -20,6 +20,7 @@ interface GitGraphPanelProps {
   repositories: RepositoryInfo[];
   workspaceType: WorkspaceType;
   onRepoChange: (repoPath: string) => void;
+  embedded?: boolean;
 }
 
 export function GitGraphPanel({
@@ -30,6 +31,7 @@ export function GitGraphPanel({
   repositories,
   workspaceType,
   onRepoChange,
+  embedded,
 }: GitGraphPanelProps) {
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [selectedPRNumber, setSelectedPRNumber] = useState<number | null>(null);
@@ -207,15 +209,8 @@ export function GitGraphPanel({
   // Show Discussion detail panel full width when a discussion is selected
   const showDiscussionDetail = selectedDiscussionNumber && repoPath && activeTab === "discussions";
 
-  return (
-    <aside
-      aria-hidden={!open}
-      tabIndex={open ? undefined : -1}
-      {...(!open ? ({ inert: "" } as { inert: "" }) : {})}
-      className={`relative z-30 flex flex-row border-l border-maestro-border bg-maestro-surface transition-all duration-200 overflow-hidden ${
-        open ? "w-[560px]" : "w-0 border-l-0"
-      }`}
-    >
+  const content = (
+    <>
       {/* PR Detail panel - full width when shown */}
       {showPRDetail ? (
         <div className="flex min-w-[320px] flex-1 flex-col">
@@ -354,6 +349,23 @@ export function GitGraphPanel({
           onSelectRepo={onRepoChange}
         />
       )}
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex flex-1 overflow-hidden">{content}</div>;
+  }
+
+  return (
+    <aside
+      aria-hidden={!open}
+      tabIndex={open ? undefined : -1}
+      {...(!open ? ({ inert: "" } as { inert: "" }) : {})}
+      className={`relative z-30 flex flex-row border-l border-maestro-border bg-maestro-surface transition-all duration-200 overflow-hidden ${
+        open ? "w-[560px]" : "w-0 border-l-0"
+      }`}
+    >
+      {content}
     </aside>
   );
 }
