@@ -48,6 +48,8 @@ impl SessionInjector {
                     .map_err(|e| anyhow!("create scratch dir {}: {e}", dir.display()))?;
                 Ok(dir)
             }
+            // TODO(stage-3-followup): honour `branch` by checking out the requested
+            // branch in the existing path before returning. Skipped for now.
             WorktreeSpec::Existing { path, branch: _ } => {
                 let p = PathBuf::from(path);
                 if !p.exists() {
@@ -83,8 +85,8 @@ impl SessionInjector {
         self.processes.write_stdin(session_id, "claude\r")
             .map_err(|e| anyhow!("write_stdin (claude): {e}"))?;
 
-        // Crude readiness wait. Replace with a transcript-event-based signal
-        // when one becomes available (see TODO at top of file).
+        // TODO(stage-3-followup): replace fixed sleep with a real readiness signal
+        // (e.g. first transcript event from the Claude session).
         tokio::time::sleep(ready_timeout).await;
 
         Ok(session_id)
