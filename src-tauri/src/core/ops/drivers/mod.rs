@@ -2,6 +2,7 @@
 //! its external world (or no-op for local-only) and how to run it now.
 
 pub mod fake;
+pub mod loop_driver;
 pub mod maestro;
 pub mod claude_trigger;
 
