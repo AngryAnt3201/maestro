@@ -1,5 +1,5 @@
 export type Scope = "global" | "project";
-export type JobDriver = "maestro" | "claude-trigger";
+export type JobDriver = "maestro" | "claude-trigger" | "loop";
 export type DispatchStatus = "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
 export type TriggeredBy = "schedule" | "manual" | "webhook";
 
@@ -11,11 +11,26 @@ export interface MaestroJobPayload {
   timeoutSec?: number;
 }
 
+export type ScheduleMode = "headless" | "interactive";
+
 export interface ClaudeTriggerPayload {
   triggerId?: string;
   prompt: string;
   mcpConnectors: string[];
   defaultRepo?: string;
+  mode: ScheduleMode;
+}
+
+export type WorktreeSpec =
+  | { mode: "dedicated" }
+  | { mode: "existing"; path: string; branch?: string };
+
+export interface LoopPayload {
+  prompt: string;
+  interval: string;
+  autostart: boolean;
+  worktree: WorktreeSpec;
+  sessionId?: number;
 }
 
 export interface LastDispatch {
@@ -36,6 +51,7 @@ export interface Job {
   schedule?: string;
   maestro?: MaestroJobPayload;
   claudeTrigger?: ClaudeTriggerPayload;
+  loop?: LoopPayload;
   toolId?: string;
   notifyOnFailure: boolean;
   lastDispatch?: LastDispatch;

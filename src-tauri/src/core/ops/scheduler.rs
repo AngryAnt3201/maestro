@@ -190,6 +190,7 @@ mod tests {
                 timeout_sec: Some(5),
             }),
             claude_trigger: None,
+            loop_: None,
             tool_id: None,
             notify_on_failure: false,
             last_dispatch: None,

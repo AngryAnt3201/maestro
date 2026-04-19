@@ -61,6 +61,7 @@ export function ClaudeTriggerForm({ onCancel, onSubmit }: Props) {
       claudeTrigger: {
         prompt: prompt.trim(),
         mcpConnectors: connectors,
+        mode: "headless",
       },
     });
     setSubmitting(false);

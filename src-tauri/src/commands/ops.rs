@@ -199,7 +199,7 @@ pub async fn ops_save_job(
                 Err(e) => return Err(e.to_string()),
             }
         }
-        JobDriver::Maestro => {}
+        JobDriver::Maestro | JobDriver::Loop => {}
     }
 
     let mut existing = store::load_jobs(scope, project_hash.as_deref()).map_err(|e| e.to_string())?;
@@ -249,7 +249,7 @@ pub async fn ops_run_now(
         .ok_or_else(|| "job not found".to_string())?;
 
     let dispatch_id = match job.driver {
-        JobDriver::Maestro => state.maestro_scheduler.dispatch_now(&job, TriggeredBy::Manual).await,
+        JobDriver::Maestro | JobDriver::Loop => state.maestro_scheduler.dispatch_now(&job, TriggeredBy::Manual).await,
         JobDriver::ClaudeTrigger => {
             let id = uuid::Uuid::new_v4().to_string();
             let ctx = crate::core::ops::drivers::DispatchContext {
