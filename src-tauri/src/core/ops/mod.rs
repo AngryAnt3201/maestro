@@ -9,6 +9,7 @@ pub mod keychain;
 pub mod model;
 pub mod scheduler;
 pub mod secrets;
+pub mod session_injector;
 pub mod store;
 pub mod yaml_io;
 
