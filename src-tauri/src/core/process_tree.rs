@@ -4,8 +4,8 @@
 //! a tree of all processes spawned by agent sessions.
 
 use serde::Serialize;
-use sysinfo::{Pid, Process, System};
 use std::collections::HashMap;
+use sysinfo::{Pid, Process, System};
 use thiserror::Error;
 
 /// Errors that can occur during process operations.
@@ -101,7 +101,11 @@ fn process_to_info(pid: Pid, process: &Process) -> ProcessInfo {
     ProcessInfo {
         pid: pid.as_u32(),
         name: process.name().to_string_lossy().to_string(),
-        command: process.cmd().iter().map(|s| s.to_string_lossy().to_string()).collect(),
+        command: process
+            .cmd()
+            .iter()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect(),
         parent_pid: process.parent().map(|p| p.as_u32()),
         cpu_usage: process.cpu_usage(),
         memory_bytes: process.memory(),
@@ -230,8 +234,8 @@ pub async fn kill_process(pid: u32, session_root_pids: &[i32]) -> Result<(), Pro
 
     #[cfg(windows)]
     {
-        use std::process::Command;
         use super::windows_process::StdCommandExt;
+        use std::process::Command;
 
         let result = Command::new("taskkill")
             .args(["/PID", &pid.to_string(), "/F"])

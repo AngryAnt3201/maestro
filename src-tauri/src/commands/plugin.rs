@@ -16,6 +16,7 @@ pub struct BranchConfig {
     pub enabled_mcp_servers: Vec<String>,
 }
 
+use crate::core::path_security::has_claude_subdir_ancestor;
 use crate::core::plugin_config_writer;
 use crate::core::plugin_manager::{PluginManager, ProjectPlugins};
 
@@ -312,8 +313,8 @@ pub async fn delete_skill(skill_path: String) -> Result<(), String> {
         .map_err(|e| format!("Invalid skill path '{}': {}", skill_path.display(), e))?;
 
     // Get the user's home directory
-    let base_dirs = BaseDirs::new()
-        .ok_or_else(|| "Could not determine home directory".to_string())?;
+    let base_dirs =
+        BaseDirs::new().ok_or_else(|| "Could not determine home directory".to_string())?;
     let home_dir = base_dirs.home_dir();
 
     // Build allowed paths
@@ -321,10 +322,7 @@ pub async fn delete_skill(skill_path: String) -> Result<(), String> {
 
     // Check if the path is within allowed directories
     let is_personal_skill = canonical_path.starts_with(&personal_skills_dir);
-
-    // Check if it's a project skill (path contains .claude/skills/)
-    let path_str = canonical_path.to_string_lossy();
-    let is_project_skill = path_str.contains("/.claude/skills/") || path_str.contains("\\.claude\\skills\\");
+    let is_project_skill = has_claude_subdir_ancestor(&canonical_path, "skills");
 
     if !is_personal_skill && !is_project_skill {
         return Err(format!(
@@ -369,8 +367,8 @@ pub async fn delete_plugin(plugin_path: String) -> Result<(), String> {
         .map_err(|e| format!("Invalid plugin path '{}': {}", plugin_path.display(), e))?;
 
     // Get the user's home directory
-    let base_dirs = BaseDirs::new()
-        .ok_or_else(|| "Could not determine home directory".to_string())?;
+    let base_dirs =
+        BaseDirs::new().ok_or_else(|| "Could not determine home directory".to_string())?;
     let home_dir = base_dirs.home_dir();
 
     // Build allowed paths
@@ -378,10 +376,7 @@ pub async fn delete_plugin(plugin_path: String) -> Result<(), String> {
 
     // Check if the path is within allowed directories
     let is_personal_plugin = canonical_path.starts_with(&personal_plugins_dir);
-
-    // Check if it's a project plugin (path contains .claude/plugins/)
-    let path_str = canonical_path.to_string_lossy();
-    let is_project_plugin = path_str.contains("/.claude/plugins/") || path_str.contains("\\.claude\\plugins\\");
+    let is_project_plugin = has_claude_subdir_ancestor(&canonical_path, "plugins");
 
     if !is_personal_plugin && !is_project_plugin {
         return Err(format!(

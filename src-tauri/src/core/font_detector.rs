@@ -79,9 +79,7 @@ fn is_likely_monospace(family: &str) -> bool {
         || lower.contains("nerd font")
         || lower.contains(" nf")
         || lower.ends_with("nf")
-        || PREFERRED_FONTS
-            .iter()
-            .any(|pf| pf.to_lowercase() == lower)
+        || PREFERRED_FONTS.iter().any(|pf| pf.to_lowercase() == lower)
 }
 
 /// Detect available fonts on the system.

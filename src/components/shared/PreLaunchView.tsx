@@ -1,4 +1,4 @@
-import { FolderOpen } from "lucide-react";
+import FolderOpen from "lucide-react/dist/esm/icons/folder-open";
 
 interface PreLaunchViewProps {
   onSelectProject: () => void;

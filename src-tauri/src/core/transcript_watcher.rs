@@ -64,21 +64,22 @@ impl TranscriptWatcher {
         let watcher = {
             let tx = tx.clone();
             let watched_path = transcript_path.clone();
-            let mut watcher = notify::recommended_watcher(move |res: Result<NotifyEvent, notify::Error>| {
-                match res {
-                    Ok(event) => {
-                        // Only care about events that touch our transcript file.
-                        let dominated = event.paths.iter().any(|p| p == &watched_path);
-                        if dominated {
-                            let _ = tx.blocking_send(());
+            let mut watcher =
+                notify::recommended_watcher(move |res: Result<NotifyEvent, notify::Error>| {
+                    match res {
+                        Ok(event) => {
+                            // Only care about events that touch our transcript file.
+                            let dominated = event.paths.iter().any(|p| p == &watched_path);
+                            if dominated {
+                                let _ = tx.blocking_send(());
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("TranscriptWatcher: notify error: {e}");
                         }
                     }
-                    Err(e) => {
-                        log::error!("TranscriptWatcher: notify error: {e}");
-                    }
-                }
-            })
-            .expect("failed to create filesystem watcher");
+                })
+                .expect("failed to create filesystem watcher");
 
             // Watch the parent directory so we catch file creation as well.
             let watch_dir = transcript_path
@@ -122,6 +123,7 @@ impl TranscriptWatcher {
     }
 
     /// Stop watching a session's transcript file and clean up resources.
+    #[allow(dead_code)]
     pub fn stop_watching(&self, session_id: u32) {
         if let Some((_, state)) = self.watchers.remove(&session_id) {
             state.task_handle.abort();
@@ -130,6 +132,7 @@ impl TranscriptWatcher {
     }
 
     /// Return the list of session IDs currently being watched.
+    #[allow(dead_code)]
     pub fn watched_sessions(&self) -> Vec<u32> {
         self.watchers.iter().map(|entry| *entry.key()).collect()
     }
@@ -181,10 +184,7 @@ fn read_new_lines(session_id: u32, path: &PathBuf, byte_offset: u64, event_bus: 
         Ok(f) => f,
         Err(e) => {
             if e.kind() != std::io::ErrorKind::NotFound {
-                log::error!(
-                    "TranscriptWatcher: failed to open {}: {e}",
-                    path.display()
-                );
+                log::error!("TranscriptWatcher: failed to open {}: {e}", path.display());
             }
             return byte_offset;
         }
@@ -275,7 +275,10 @@ mod tests {
 
         let new_offset = read_new_lines(1, &path, 0, &bus);
 
-        assert!(new_offset > 0, "offset should advance past the written line");
+        assert!(
+            new_offset > 0,
+            "offset should advance past the written line"
+        );
 
         let events = collected.lock().unwrap();
         assert_eq!(events.len(), 1, "one JSONL line should produce one event");
@@ -350,10 +353,7 @@ mod tests {
 
         let new_offset = read_new_lines(1, &path, 0, &bus);
 
-        assert_eq!(
-            new_offset, 0,
-            "nonexistent file should return offset 0"
-        );
+        assert_eq!(new_offset, 0, "nonexistent file should return offset 0");
         assert!(
             collected.lock().unwrap().is_empty(),
             "nonexistent file should produce no events"
@@ -426,18 +426,17 @@ mod tests {
         loop {
             tokio::time::sleep(Duration::from_millis(250)).await;
             let events = captured.lock().unwrap();
-            let has_file_edited = events.iter().any(|e| matches!(
-                e,
-                ClaudeEvent::FileEdited { file_path, .. } if file_path == "/src/main.rs"
-            ));
+            let has_file_edited = events.iter().any(|e| {
+                matches!(
+                    e,
+                    ClaudeEvent::FileEdited { file_path, .. } if file_path == "/src/main.rs"
+                )
+            });
             if has_file_edited {
                 break;
             }
             if tokio::time::Instant::now() >= deadline {
-                panic!(
-                    "Timed out waiting for FileEdited event. Got {:?}",
-                    *events
-                );
+                panic!("Timed out waiting for FileEdited event. Got {:?}", *events);
             }
         }
 

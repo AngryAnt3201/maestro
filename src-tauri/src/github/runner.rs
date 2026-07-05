@@ -18,6 +18,7 @@ pub struct GitHubOutput {
 
 impl GitHubOutput {
     /// Splits stdout into non-empty lines, filtering out blank lines.
+    #[allow(dead_code)]
     pub fn lines(&self) -> Vec<&str> {
         self.stdout.lines().filter(|l| !l.is_empty()).collect()
     }
@@ -47,6 +48,7 @@ impl GitHub {
     }
 
     /// Returns the repository path.
+    #[allow(dead_code)]
     pub fn repo_path(&self) -> &Path {
         &self.repo_path
     }
@@ -134,7 +136,9 @@ impl GitHub {
 
     /// Executes a GraphQL query via `gh api graphql`.
     pub async fn graphql(&self, query: &str) -> Result<serde_json::Value, GitHubError> {
-        let output = self.run(&["api", "graphql", "-f", &format!("query={}", query)]).await?;
+        let output = self
+            .run(&["api", "graphql", "-f", &format!("query={}", query)])
+            .await?;
         let parsed: serde_json::Value = serde_json::from_str(&output.stdout)?;
         Ok(parsed)
     }

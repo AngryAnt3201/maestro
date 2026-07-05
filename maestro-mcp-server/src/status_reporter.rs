@@ -116,10 +116,7 @@ impl StatusReporter {
             {
                 Ok(response) => {
                     let status = response.status();
-                    eprintln!(
-                        "[maestro-mcp-server] Status response: {}",
-                        status
-                    );
+                    eprintln!("[maestro-mcp-server] Status response: {}", status);
                     if status.is_success() || status.as_u16() == 202 {
                         return Ok(());
                     }

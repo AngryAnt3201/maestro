@@ -1,30 +1,24 @@
-import {
-  X,
-  GitMerge,
-  GitPullRequest,
-  XCircle,
-  ExternalLink,
-  FileEdit,
-  MessageSquare,
-  Loader2,
-} from "lucide-react";
+import ExternalLink from "lucide-react/dist/esm/icons/external-link";
+import FileEdit from "lucide-react/dist/esm/icons/file-edit";
+import GitMerge from "lucide-react/dist/esm/icons/git-merge";
+import GitPullRequest from "lucide-react/dist/esm/icons/git-pull-request";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import MessageSquare from "lucide-react/dist/esm/icons/message-square";
+import X from "lucide-react/dist/esm/icons/x";
+import XCircle from "lucide-react/dist/esm/icons/x-circle";
 import { useState } from "react";
 import { useGitHubStore } from "../../../stores/useGitHubStore";
-import { MergePRModal } from "./MergePRModal";
-import { MarkdownBody } from "../shared/MarkdownBody";
 import { CommentList } from "../shared/CommentList";
+import { MarkdownBody } from "../shared/MarkdownBody";
+import { MergePRModal } from "./MergePRModal";
 
 interface PullRequestDetailPanelProps {
   repoPath: string;
   onClose: () => void;
 }
 
-export function PullRequestDetailPanel({
-  repoPath,
-  onClose,
-}: PullRequestDetailPanelProps) {
-  const { selectedPR, isLoadingPRDetail, closePullRequest, commentPullRequest } =
-    useGitHubStore();
+export function PullRequestDetailPanel({ repoPath, onClose }: PullRequestDetailPanelProps) {
+  const { selectedPR, isLoadingPRDetail, closePullRequest, commentPullRequest } = useGitHubStore();
 
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -99,18 +93,14 @@ export function PullRequestDetailPanel({
               className={selectedPR.isDraft ? "text-maestro-muted" : "text-green-400"}
             />
           )}
-          <span className="text-sm font-medium text-maestro-text">
-            #{selectedPR.number}
-          </span>
+          <span className="text-sm font-medium text-maestro-text">#{selectedPR.number}</span>
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-3" style={{ scrollbarWidth: "thin" }}>
         {/* Title */}
-        <h3 className="mb-2 text-sm font-medium text-maestro-text">
-          {selectedPR.title}
-        </h3>
+        <h3 className="mb-2 text-sm font-medium text-maestro-text">{selectedPR.title}</h3>
 
         {/* Branch info */}
         <div className="mb-3 text-[10px] text-maestro-muted">
@@ -125,8 +115,7 @@ export function PullRequestDetailPanel({
 
         {/* Author and date */}
         <div className="mb-3 text-[10px] text-maestro-muted">
-          by {selectedPR.author.login} on{" "}
-          {new Date(selectedPR.createdAt).toLocaleDateString()}
+          by {selectedPR.author.login} on {new Date(selectedPR.createdAt).toLocaleDateString()}
         </div>
 
         {/* Stats */}
@@ -136,9 +125,7 @@ export function PullRequestDetailPanel({
             <span className="text-green-400">+{selectedPR.additions}</span>
             <span className="text-red-400">-{selectedPR.deletions}</span>
           </div>
-          <span className="text-maestro-muted">
-            {selectedPR.changedFiles} files
-          </span>
+          <span className="text-maestro-muted">{selectedPR.changedFiles} files</span>
         </div>
 
         {/* Status badges */}
@@ -275,11 +262,7 @@ export function PullRequestDetailPanel({
               disabled={isClosing}
               className="flex items-center justify-center gap-1 rounded bg-maestro-surface px-3 py-1.5 text-xs font-medium text-maestro-muted hover:bg-maestro-border hover:text-maestro-text disabled:opacity-50"
             >
-              {isClosing ? (
-                <Loader2 size={12} className="animate-spin" />
-              ) : (
-                <XCircle size={12} />
-              )}
+              {isClosing ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={12} />}
               Close
             </button>
           </div>

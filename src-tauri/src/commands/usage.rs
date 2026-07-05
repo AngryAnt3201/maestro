@@ -111,8 +111,10 @@ async fn read_keychain_credentials() -> Result<CredentialsData, String> {
     let output = tokio::process::Command::new("security")
         .args([
             "find-generic-password",
-            "-s", "Claude Code-credentials",
-            "-a", &username,
+            "-s",
+            "Claude Code-credentials",
+            "-a",
+            &username,
             "-w",
         ])
         .output()
@@ -123,11 +125,9 @@ async fn read_keychain_credentials() -> Result<CredentialsData, String> {
         return Err("No keychain entry found".to_string());
     }
 
-    let data = String::from_utf8(output.stdout)
-        .map_err(|_| "Invalid keychain data")?;
+    let data = String::from_utf8(output.stdout).map_err(|_| "Invalid keychain data")?;
 
-    serde_json::from_str(data.trim())
-        .map_err(|e| format!("Failed to parse keychain data: {}", e))
+    serde_json::from_str(data.trim()).map_err(|e| format!("Failed to parse keychain data: {}", e))
 }
 
 /// Read credentials from platform credential store (Windows/Linux).
@@ -149,8 +149,7 @@ async fn read_keychain_credentials() -> Result<CredentialsData, String> {
     .await
     .map_err(|e| format!("Task join error: {}", e))??;
 
-    serde_json::from_str(&result)
-        .map_err(|e| format!("Failed to parse credential data: {}", e))
+    serde_json::from_str(&result).map_err(|e| format!("Failed to parse credential data: {}", e))
 }
 
 /// Read credentials from file (fallback for non-macOS or if keychain fails).
@@ -169,8 +168,7 @@ async fn read_file_credentials() -> Result<CredentialsData, String> {
         .await
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse file: {}", e))
+    serde_json::from_str(&content).map_err(|e| format!("Failed to parse file: {}", e))
 }
 
 /// Get a valid access token, trying platform credential store first then file.
@@ -215,7 +213,11 @@ pub async fn get_claude_usage() -> Result<UsageData, String> {
     if let Ok(guard) = USAGE_CACHE.lock() {
         if let Some((fetched_at, ttl, ref data)) = *guard {
             if fetched_at.elapsed().as_secs() < ttl {
-                log::debug!("Returning cached usage data (age: {}s, ttl: {}s)", fetched_at.elapsed().as_secs(), ttl);
+                log::debug!(
+                    "Returning cached usage data (age: {}s, ttl: {}s)",
+                    fetched_at.elapsed().as_secs(),
+                    ttl
+                );
                 return Ok(data.clone());
             }
         }
@@ -304,7 +306,11 @@ async fn fetch_usage_from_api() -> Result<UsageData, String> {
     // Helper to convert utilization to percentage
     // API returns 0-1 (multiply by 100) or already 0-100 (use as-is)
     let to_percent = |val: f64| {
-        if val > 1.0 { val } else { val * 100.0 }
+        if val > 1.0 {
+            val
+        } else {
+            val * 100.0
+        }
     };
 
     let usage = UsageData {

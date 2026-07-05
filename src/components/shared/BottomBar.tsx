@@ -1,4 +1,7 @@
-import { FolderOpen, Play, Plus, Square } from "lucide-react";
+import FolderOpen from "lucide-react/dist/esm/icons/folder-open";
+import Play from "lucide-react/dist/esm/icons/play";
+import Plus from "lucide-react/dist/esm/icons/plus";
+import Square from "lucide-react/dist/esm/icons/square";
 
 interface BottomBarProps {
   /** Whether in the grid view (project selected and launched) */

@@ -1,5 +1,5 @@
-import { create } from "zustand";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { create } from "zustand";
 import type { ClaudeEvent } from "@/types/claude-events";
 
 interface SessionActivity {

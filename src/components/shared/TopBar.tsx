@@ -1,14 +1,12 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import {
-  ChevronDown,
-  GitBranch,
-  GitMerge,
-  Loader2,
-  Minus,
-  PanelLeft,
-  Square,
-  X,
-} from "lucide-react";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
+import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import GitMerge from "lucide-react/dist/esm/icons/git-merge";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import Minus from "lucide-react/dist/esm/icons/minus";
+import PanelLeft from "lucide-react/dist/esm/icons/panel-left";
+import Square from "lucide-react/dist/esm/icons/square";
+import X from "lucide-react/dist/esm/icons/x";
 import { useCallback, useMemo, useState } from "react";
 import { isMac } from "@/lib/platform";
 import { useGitStore } from "../../stores/useGitStore";
@@ -53,13 +51,13 @@ export function TopBar({
       }
 
       // Warn if there are active non-worktree sessions that share the main checkout
-      const activeSessions = useSessionStore.getState().sessions.filter(
-        (s) => s.project_path === repoPath && !s.worktree_path
-      );
+      const activeSessions = useSessionStore
+        .getState()
+        .sessions.filter((s) => s.project_path === repoPath && !s.worktree_path);
       if (activeSessions.length > 0) {
         const proceed = window.confirm(
           `Switching branches will affect ${activeSessions.length} active session(s) ` +
-          `that share the main repository checkout.\n\nContinue?`
+            `that share the main repository checkout.\n\nContinue?`,
         );
         if (!proceed) {
           setBranchDropdownOpen(false);
@@ -82,7 +80,7 @@ export function TopBar({
         setIsSwitching(false);
       }
     },
-    [repoPath, branchName, checkoutBranch, fetchCurrentBranch, onBranchChanged]
+    [repoPath, branchName, checkoutBranch, fetchCurrentBranch, onBranchChanged],
   );
 
   const handleCreateBranch = useCallback(
@@ -94,7 +92,7 @@ export function TopBar({
         await handleBranchSelect(name);
       }
     },
-    [repoPath, createBranch, handleBranchSelect]
+    [repoPath, createBranch, handleBranchSelect],
   );
 
   return (

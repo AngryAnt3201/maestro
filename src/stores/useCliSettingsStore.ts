@@ -156,6 +156,6 @@ export const useCliSettingsStore = create<CliSettingsState & CliSettingsActions>
       storage: createJSONStorage(() => tauriStorage),
       partialize: (state) => ({ flags: state.flags }),
       version: 1,
-    }
-  )
+    },
+  ),
 );

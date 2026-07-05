@@ -7,19 +7,20 @@
 
 import { create } from "zustand";
 
+import { toInvokeErrorMessage } from "@/lib/invokeError";
 import {
-  getProjectPlugins,
-  refreshProjectPlugins,
-  setSessionSkills as setSessionSkillsApi,
-  setSessionPlugins as setSessionPluginsApi,
-  saveProjectSkillDefaults,
-  loadProjectSkillDefaults,
-  saveProjectPluginDefaults,
-  loadProjectPluginDefaults,
-  deleteSkill as deleteSkillApi,
   deletePlugin as deletePluginApi,
+  deleteSkill as deleteSkillApi,
+  getProjectPlugins,
+  loadProjectPluginDefaults,
+  loadProjectSkillDefaults,
   type PluginConfig,
+  refreshProjectPlugins,
   type SkillConfig,
+  saveProjectPluginDefaults,
+  saveProjectSkillDefaults,
+  setSessionPlugins as setSessionPluginsApi,
+  setSessionSkills as setSessionSkillsApi,
 } from "@/lib/plugins";
 
 /** Key for session-enabled lookup: "projectPath:sessionId" */
@@ -82,17 +83,13 @@ interface PluginState {
   setSessionEnabledSkills: (
     projectPath: string,
     sessionId: number,
-    enabled: string[]
+    enabled: string[],
   ) => Promise<void>;
 
   /**
    * Toggles a specific skill for a session.
    */
-  toggleSessionSkill: (
-    projectPath: string,
-    sessionId: number,
-    skillId: string
-  ) => Promise<void>;
+  toggleSessionSkill: (projectPath: string, sessionId: number, skillId: string) => Promise<void>;
 
   /**
    * Gets the enabled plugin IDs for a session.
@@ -107,17 +104,13 @@ interface PluginState {
   setSessionEnabledPlugins: (
     projectPath: string,
     sessionId: number,
-    enabled: string[]
+    enabled: string[],
   ) => Promise<void>;
 
   /**
    * Toggles a specific plugin for a session.
    */
-  toggleSessionPlugin: (
-    projectPath: string,
-    sessionId: number,
-    pluginId: string
-  ) => Promise<void>;
+  toggleSessionPlugin: (projectPath: string, sessionId: number, pluginId: string) => Promise<void>;
 
   /**
    * Gets the count of enabled skills for a session.
@@ -191,7 +184,7 @@ export const usePluginStore = create<PluginState>()((set, get) => ({
         isLoading: { ...state.isLoading, [projectPath]: false },
       }));
     } catch (err) {
-      const errorMsg = String(err);
+      const errorMsg = toInvokeErrorMessage(err);
       console.error("Failed to fetch plugins:", err);
       set((state) => ({
         isLoading: { ...state.isLoading, [projectPath]: false },
@@ -214,7 +207,7 @@ export const usePluginStore = create<PluginState>()((set, get) => ({
         isLoading: { ...state.isLoading, [projectPath]: false },
       }));
     } catch (err) {
-      const errorMsg = String(err);
+      const errorMsg = toInvokeErrorMessage(err);
       console.error("Failed to refresh plugins:", err);
       set((state) => ({
         isLoading: { ...state.isLoading, [projectPath]: false },
@@ -243,11 +236,7 @@ export const usePluginStore = create<PluginState>()((set, get) => ({
     return skills.map((s) => s.id);
   },
 
-  setSessionEnabledSkills: async (
-    projectPath: string,
-    sessionId: number,
-    enabled: string[]
-  ) => {
+  setSessionEnabledSkills: async (projectPath: string, sessionId: number, enabled: string[]) => {
     const key = sessionKey(projectPath, sessionId);
 
     // Update local state optimistically (both session and project defaults)
@@ -267,11 +256,7 @@ export const usePluginStore = create<PluginState>()((set, get) => ({
     }
   },
 
-  toggleSessionSkill: async (
-    projectPath: string,
-    sessionId: number,
-    skillId: string
-  ) => {
+  toggleSessionSkill: async (projectPath: string, sessionId: number, skillId: string) => {
     const currentEnabled = get().getSessionEnabledSkills(projectPath, sessionId);
     const isEnabled = currentEnabled.includes(skillId);
 
@@ -302,11 +287,7 @@ export const usePluginStore = create<PluginState>()((set, get) => ({
     return plugins.filter((p) => p.enabled_by_default).map((p) => p.id);
   },
 
-  setSessionEnabledPlugins: async (
-    projectPath: string,
-    sessionId: number,
-    enabled: string[]
-  ) => {
+  setSessionEnabledPlugins: async (projectPath: string, sessionId: number, enabled: string[]) => {
     const key = sessionKey(projectPath, sessionId);
 
     // Update local state optimistically (both session and project defaults)
@@ -326,11 +307,7 @@ export const usePluginStore = create<PluginState>()((set, get) => ({
     }
   },
 
-  toggleSessionPlugin: async (
-    projectPath: string,
-    sessionId: number,
-    pluginId: string
-  ) => {
+  toggleSessionPlugin: async (projectPath: string, sessionId: number, pluginId: string) => {
     const currentEnabled = get().getSessionEnabledPlugins(projectPath, sessionId);
     const isEnabled = currentEnabled.includes(pluginId);
 
@@ -379,7 +356,7 @@ export const usePluginStore = create<PluginState>()((set, get) => ({
     } catch (err) {
       console.error(`Failed to delete skill ${skillId}:`, err);
       set((state) => ({
-        errors: { ...state.errors, [projectPath]: String(err) },
+        errors: { ...state.errors, [projectPath]: toInvokeErrorMessage(err) },
       }));
     } finally {
       set({ deletingSkillId: null });
@@ -396,7 +373,7 @@ export const usePluginStore = create<PluginState>()((set, get) => ({
     } catch (err) {
       console.error(`Failed to delete plugin ${pluginId}:`, err);
       set((state) => ({
-        errors: { ...state.errors, [projectPath]: String(err) },
+        errors: { ...state.errors, [projectPath]: toInvokeErrorMessage(err) },
       }));
     } finally {
       set({ deletingPluginId: null });

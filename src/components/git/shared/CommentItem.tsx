@@ -1,4 +1,4 @@
-import { CheckCircle } from "lucide-react";
+import CheckCircle from "lucide-react/dist/esm/icons/check-circle";
 import type { Comment } from "../../../stores/useGitHubStore";
 import { MarkdownBody } from "./MarkdownBody";
 
@@ -45,10 +45,7 @@ export function CommentItem({ comment }: CommentItemProps) {
 
   // Get active reactions (count > 0)
   const activeReactions = Object.entries(comment.reactions)
-    .filter(
-      ([key, count]) =>
-        key !== "totalCount" && typeof count === "number" && count > 0
-    )
+    .filter(([key, count]) => key !== "totalCount" && typeof count === "number" && count > 0)
     .map(([key, count]) => ({
       emoji: REACTION_EMOJI[key] || key,
       count: count as number,
@@ -69,9 +66,7 @@ export function CommentItem({ comment }: CommentItemProps) {
           {comment.author.login.charAt(0).toUpperCase()}
         </div>
 
-        <span className="text-[10px] font-medium text-maestro-text">
-          {comment.author.login}
-        </span>
+        <span className="text-[10px] font-medium text-maestro-text">{comment.author.login}</span>
 
         <span className="text-[10px] text-maestro-muted">
           {formatRelativeTime(comment.createdAt)}

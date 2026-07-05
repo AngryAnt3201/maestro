@@ -33,7 +33,7 @@ function generateConnectionPath(
   fromColumn: number,
   fromRow: number,
   connection: ParentConnection,
-  rowHeight: number
+  rowHeight: number,
 ): string {
   const startX = columnToX(fromColumn);
   const startY = rowToY(fromRow, rowHeight);
@@ -118,15 +118,11 @@ export function GraphCanvas({
       width={canvasWidth}
       height={canvasHeight}
       style={{ overflow: "visible" }}
+      aria-hidden="true"
     >
       {/* Connection lines */}
       {visibleConnections.map(({ node, connection }) => {
-        const path = generateConnectionPath(
-          node.column,
-          node.row,
-          connection,
-          rowHeight
-        );
+        const path = generateConnectionPath(node.column, node.row, connection, rowHeight);
 
         return (
           <path

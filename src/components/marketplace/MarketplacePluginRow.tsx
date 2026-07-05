@@ -1,6 +1,9 @@
+import Check from "lucide-react/dist/esm/icons/check";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import Download from "lucide-react/dist/esm/icons/download";
+import Package from "lucide-react/dist/esm/icons/package";
 import { useMarketplaceStore } from "@/stores/useMarketplaceStore";
 import type { MarketplacePlugin } from "@/types/marketplace";
-import { Check, ChevronRight, Download, Package } from "lucide-react";
 
 interface MarketplacePluginRowProps {
   plugin: MarketplacePlugin;
@@ -20,6 +23,7 @@ export function MarketplacePluginRow({ plugin, onInstall, onSelect }: Marketplac
   const typesLabel = plugin.types.map((t) => t.charAt(0).toUpperCase() + t.slice(1)).join(", ");
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: Row contains a nested install button, so the container cannot be a button.
     <div
       className="group flex items-center gap-3 border-b border-maestro-border px-4 py-3 transition-colors hover:bg-maestro-surface/50 cursor-pointer"
       onClick={onSelect}
@@ -30,11 +34,7 @@ export function MarketplacePluginRow({ plugin, onInstall, onSelect }: Marketplac
       {/* Icon */}
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-maestro-accent/10">
         {plugin.icon_url ? (
-          <img
-            src={plugin.icon_url}
-            alt={plugin.name}
-            className="h-5 w-5 rounded"
-          />
+          <img src={plugin.icon_url} alt={plugin.name} className="h-5 w-5 rounded" />
         ) : (
           <Package size={16} className="text-maestro-accent" />
         )}
@@ -43,12 +43,8 @@ export function MarketplacePluginRow({ plugin, onInstall, onSelect }: Marketplac
       {/* Info */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-maestro-text">
-            {plugin.name}
-          </span>
-          <span className="shrink-0 text-[10px] text-maestro-muted">
-            v{plugin.version}
-          </span>
+          <span className="truncate text-sm font-medium text-maestro-text">{plugin.name}</span>
+          <span className="shrink-0 text-[10px] text-maestro-muted">v{plugin.version}</span>
           {installed && (
             <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] text-green-400">
               <Check size={10} />
@@ -68,9 +64,7 @@ export function MarketplacePluginRow({ plugin, onInstall, onSelect }: Marketplac
         <span className="rounded bg-maestro-accent/10 px-1.5 py-0.5 text-maestro-accent">
           {plugin.category}
         </span>
-        {typesLabel && (
-          <span className="text-maestro-border">|</span>
-        )}
+        {typesLabel && <span className="text-maestro-border">|</span>}
         <span>{typesLabel}</span>
       </div>
 
@@ -94,7 +88,10 @@ export function MarketplacePluginRow({ plugin, onInstall, onSelect }: Marketplac
       <div className="shrink-0">
         {installed ? (
           <span className="text-xs text-maestro-muted">
-            <ChevronRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+            <ChevronRight
+              size={16}
+              className="opacity-0 group-hover:opacity-100 transition-opacity"
+            />
           </span>
         ) : (
           <button

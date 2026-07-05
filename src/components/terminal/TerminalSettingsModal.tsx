@@ -1,4 +1,7 @@
-import { Loader2, RefreshCw, RotateCcw, X } from "lucide-react";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
+import X from "lucide-react/dist/esm/icons/x";
 import { useEffect, useRef, useState } from "react";
 import { clearFontCache, EMBEDDED_FONT } from "@/lib/fonts";
 import { useTerminalSettingsStore } from "@/stores/useTerminalSettingsStore";
@@ -243,9 +246,7 @@ function FontFamilySection({
           size={8}
         >
           {/* Always show embedded font first */}
-          <option value={EMBEDDED_FONT}>
-            {EMBEDDED_FONT} (Embedded)
-          </option>
+          <option value={EMBEDDED_FONT}>{EMBEDDED_FONT} (Embedded)</option>
 
           {/* Nerd Fonts group */}
           {availableFonts.some((f) => f.is_nerd_font) && (

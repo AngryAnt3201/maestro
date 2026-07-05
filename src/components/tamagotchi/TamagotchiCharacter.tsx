@@ -1,4 +1,4 @@
-import { type TamagotchiMood } from "@/lib/usageParser";
+import type { TamagotchiMood } from "@/lib/usageParser";
 
 interface TamagotchiCharacterProps {
   mood: TamagotchiMood;
@@ -29,10 +29,7 @@ const MOOD_ANIMATIONS: Record<TamagotchiMood, string> = {
  * Tamagotchi character component.
  * Uses custom images from /public/tamagotchi/usage_state_N.png
  */
-export function TamagotchiCharacter({
-  mood,
-  size = 32,
-}: TamagotchiCharacterProps) {
+export function TamagotchiCharacter({ mood, size = 32 }: TamagotchiCharacterProps) {
   const stateNum = MOOD_TO_STATE[mood];
   const imagePath = `/tamagotchi/usage_state_${stateNum}.png`;
   const animClass = MOOD_ANIMATIONS[mood];
@@ -50,4 +47,3 @@ export function TamagotchiCharacter({
     </div>
   );
 }
-

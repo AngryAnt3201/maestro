@@ -1,4 +1,4 @@
-import { useGitHubStore, type IssueFilterState } from "../../../stores/useGitHubStore";
+import { type IssueFilterState, useGitHubStore } from "../../../stores/useGitHubStore";
 
 const FILTERS: Array<{ value: IssueFilterState; label: string }> = [
   { value: "open", label: "Open" },

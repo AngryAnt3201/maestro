@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BranchDropdown } from "../BranchDropdown";
 
 // Mock invoke — return empty branch list by default
@@ -105,7 +105,9 @@ describe("BranchDropdown", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText("Invalid branch name. Use only letters, numbers, dots, dashes, and slashes.")
+        screen.getByText(
+          "Invalid branch name. Use only letters, numbers, dots, dashes, and slashes.",
+        ),
       ).toBeInTheDocument();
     });
 

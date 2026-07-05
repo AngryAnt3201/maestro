@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import { toInvokeErrorMessage } from "@/lib/invokeError";
 
 /** Branch info returned from the backend. */
 export interface BranchInfo {
@@ -20,13 +21,7 @@ export interface CommitInfo {
 }
 
 /** File change status enum. */
-export type FileChangeStatus =
-  | "added"
-  | "modified"
-  | "deleted"
-  | "renamed"
-  | "copied"
-  | "unknown";
+export type FileChangeStatus = "added" | "modified" | "deleted" | "renamed" | "copied" | "unknown";
 
 /** File changed in a commit. */
 export interface FileChange {
@@ -99,7 +94,7 @@ interface GitState {
     repoPath: string,
     name: string | null,
     email: string | null,
-    global?: boolean
+    global?: boolean,
   ) => Promise<void>;
   fetchRemotes: (repoPath: string) => Promise<void>;
   addRemote: (repoPath: string, name: string, url: string) => Promise<void>;
@@ -142,7 +137,7 @@ export const useGitStore = create<GitState>()((set, get) => ({
       set({ branches, isLoading: false });
     } catch (err) {
       console.error("Failed to fetch branches:", err);
-      set({ error: String(err), isLoading: false, branches: [] });
+      set({ error: toInvokeErrorMessage(err), isLoading: false, branches: [] });
     }
   },
 
@@ -171,7 +166,7 @@ export const useGitStore = create<GitState>()((set, get) => ({
       });
     } catch (err) {
       console.error("Failed to fetch commits:", err);
-      set({ error: String(err), isLoading: false, commits: [] });
+      set({ error: toInvokeErrorMessage(err), isLoading: false, commits: [] });
     }
   },
 
@@ -209,7 +204,7 @@ export const useGitStore = create<GitState>()((set, get) => ({
       get().fetchCommits(repoPath);
     } catch (err) {
       console.error("Failed to checkout branch:", err);
-      set({ error: String(err), isLoading: false });
+      set({ error: toInvokeErrorMessage(err), isLoading: false });
       throw err;
     }
   },
@@ -227,7 +222,7 @@ export const useGitStore = create<GitState>()((set, get) => ({
       set({ isLoading: false });
     } catch (err) {
       console.error("Failed to create branch:", err);
-      set({ error: String(err), isLoading: false });
+      set({ error: toInvokeErrorMessage(err), isLoading: false });
       throw err;
     }
   },
@@ -246,7 +241,7 @@ export const useGitStore = create<GitState>()((set, get) => ({
     repoPath: string,
     name: string | null,
     email: string | null,
-    global = false
+    global = false,
   ) => {
     try {
       await invoke("git_set_user_config", {

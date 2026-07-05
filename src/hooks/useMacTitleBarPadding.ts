@@ -25,7 +25,8 @@ export function useMacTitleBarPadding(): boolean {
     let unlistenResized: (() => void) | undefined;
 
     const updateVisibility = () => {
-      appWindow.isFullscreen()
+      appWindow
+        .isFullscreen()
         .then((fullscreen) => setTrafficLightsVisible(!fullscreen))
         .catch(() => setTrafficLightsVisible(true));
     };

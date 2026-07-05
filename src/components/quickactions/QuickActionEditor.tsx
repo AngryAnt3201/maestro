@@ -1,8 +1,9 @@
-import { Check, X } from "lucide-react";
+import Check from "lucide-react/dist/esm/icons/check";
+import X from "lucide-react/dist/esm/icons/x";
 import { useEffect, useRef, useState } from "react";
-import { DynamicIcon } from "./DynamicIcon";
 import type { QuickAction } from "@/types/quickAction";
 import { QUICK_ACTION_COLORS, QUICK_ACTION_ICONS } from "@/types/quickAction";
+import { DynamicIcon } from "./DynamicIcon";
 
 interface QuickActionEditorProps {
   /** Existing action to edit, or undefined to create new */
@@ -87,24 +88,25 @@ export function QuickActionEditor({ action, onSave, onClose }: QuickActionEditor
         <div className="max-h-[70vh] space-y-4 overflow-y-auto p-4">
           {/* Name input */}
           <div>
-            <label className="mb-1 block text-xs font-medium text-maestro-muted">
+            <label
+              htmlFor="quick-action-name"
+              className="mb-1 block text-xs font-medium text-maestro-muted"
+            >
               Name
             </label>
             <input
+              id="quick-action-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Quick action name"
               className="w-full rounded border border-maestro-border bg-maestro-card px-3 py-2 text-sm text-maestro-text placeholder:text-maestro-muted focus:border-maestro-accent focus:outline-none"
-              autoFocus
             />
           </div>
 
           {/* Icon picker */}
           <div>
-            <label className="mb-2 block text-xs font-medium text-maestro-muted">
-              Icon
-            </label>
+            <div className="mb-2 block text-xs font-medium text-maestro-muted">Icon</div>
             <div className="grid grid-cols-8 gap-1 rounded border border-maestro-border bg-maestro-card p-2">
               {QUICK_ACTION_ICONS.map((iconName) => (
                 <button
@@ -130,9 +132,7 @@ export function QuickActionEditor({ action, onSave, onClose }: QuickActionEditor
 
           {/* Color picker */}
           <div>
-            <label className="mb-2 block text-xs font-medium text-maestro-muted">
-              Color
-            </label>
+            <div className="mb-2 block text-xs font-medium text-maestro-muted">Color</div>
             <div className="flex flex-wrap gap-2 rounded border border-maestro-border bg-maestro-card p-2">
               {QUICK_ACTION_COLORS.map((color) => (
                 <button
@@ -140,7 +140,9 @@ export function QuickActionEditor({ action, onSave, onClose }: QuickActionEditor
                   type="button"
                   onClick={() => setColorHex(color.hex)}
                   className={`h-6 w-6 rounded-full transition-transform ${
-                    colorHex === color.hex ? "scale-110 ring-2 ring-white ring-offset-2 ring-offset-maestro-card" : "hover:scale-105"
+                    colorHex === color.hex
+                      ? "scale-110 ring-2 ring-white ring-offset-2 ring-offset-maestro-card"
+                      : "hover:scale-105"
                   }`}
                   style={{ backgroundColor: color.hex }}
                   title={color.name}
@@ -151,10 +153,14 @@ export function QuickActionEditor({ action, onSave, onClose }: QuickActionEditor
 
           {/* Prompt textarea */}
           <div>
-            <label className="mb-1 block text-xs font-medium text-maestro-muted">
+            <label
+              htmlFor="quick-action-prompt"
+              className="mb-1 block text-xs font-medium text-maestro-muted"
+            >
               Prompt
             </label>
             <textarea
+              id="quick-action-prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="Enter the prompt that will be sent to Claude..."
@@ -176,21 +182,14 @@ export function QuickActionEditor({ action, onSave, onClose }: QuickActionEditor
 
           {/* Live preview */}
           <div>
-            <label className="mb-2 block text-xs font-medium text-maestro-muted">
-              Preview
-            </label>
+            <div className="mb-2 block text-xs font-medium text-maestro-muted">Preview</div>
             <div className="flex items-center gap-2 rounded border border-maestro-border bg-maestro-surface p-2">
               <button
                 type="button"
                 disabled
                 className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-maestro-muted"
               >
-                <DynamicIcon
-                  name={icon}
-                  size={9}
-                  style={{ color: colorHex }}
-                  fill="currentColor"
-                />
+                <DynamicIcon name={icon} size={9} style={{ color: colorHex }} fill="currentColor" />
                 {name || "Quick Action"}
               </button>
             </div>

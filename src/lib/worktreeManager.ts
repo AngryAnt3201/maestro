@@ -32,7 +32,7 @@ function hashString(str: string): string {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+    hash = (hash << 5) - hash + char;
     hash = hash & hash; // Convert to 32bit integer
   }
   return Math.abs(hash).toString(16).slice(0, 8);
@@ -86,7 +86,7 @@ export async function createSessionWorktree(
   repoPath: string,
   sessionId: number,
   branch: string,
-  createBranch = false
+  createBranch = false,
 ): Promise<string> {
   const worktreePath = await getWorktreePath(repoPath, branch);
 
@@ -110,7 +110,9 @@ export async function createSessionWorktree(
       checkoutRef: createBranch ? null : branch,
     });
 
-    console.log(`[Session ${sessionId}] Created worktree at ${result.path} on branch ${result.branch}`);
+    console.log(
+      `[Session ${sessionId}] Created worktree at ${result.path} on branch ${result.branch}`,
+    );
     return result.path;
   } catch (err) {
     console.error(`[Session ${sessionId}] Failed to create worktree:`, err);
@@ -128,7 +130,7 @@ export async function createSessionWorktree(
 export async function removeSessionWorktree(
   repoPath: string,
   worktreePath: string,
-  force = false
+  force = false,
 ): Promise<void> {
   try {
     await invoke("git_worktree_remove", {
@@ -160,10 +162,7 @@ export async function listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
  * @param branch - The branch name to check
  * @returns True if a worktree exists for this branch
  */
-export async function worktreeExistsForBranch(
-  repoPath: string,
-  branch: string
-): Promise<boolean> {
+export async function worktreeExistsForBranch(repoPath: string, branch: string): Promise<boolean> {
   const worktrees = await listWorktrees(repoPath);
   return worktrees.some((wt) => wt.branch === branch);
 }
@@ -177,7 +176,7 @@ export async function worktreeExistsForBranch(
  */
 export async function getWorktreeForBranch(
   repoPath: string,
-  branch: string
+  branch: string,
 ): Promise<WorktreeInfo | null> {
   const worktrees = await listWorktrees(repoPath);
   return worktrees.find((wt) => wt.branch === branch) ?? null;
@@ -251,7 +250,7 @@ export async function prepareSessionWorktree(
  */
 export async function cleanupSessionWorktree(
   projectPath: string,
-  worktreePath: string | null
+  worktreePath: string | null,
 ): Promise<boolean> {
   if (!worktreePath) {
     return false;

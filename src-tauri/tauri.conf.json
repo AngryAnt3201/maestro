@@ -54,9 +54,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": [
-      "binaries/maestro-mcp-server"
-    ],
+    "externalBin": ["binaries/maestro-mcp-server"],
     "linux": {
       "deb": {
         "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]

@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-labelledby="maestro-icon-title">
+  <title id="maestro-icon-title">Maestro</title>
   <rect width="32" height="32" rx="6" fill="#58a6ff"/>
   <text x="16" y="23" text-anchor="middle" font-family="sans-serif" font-weight="bold" font-size="20" fill="white">M</text>
 </svg>

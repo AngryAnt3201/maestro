@@ -1,4 +1,5 @@
-import { CircleDot, CheckCircle2 } from "lucide-react";
+import CheckCircle2 from "lucide-react/dist/esm/icons/check-circle-2";
+import CircleDot from "lucide-react/dist/esm/icons/circle-dot";
 import { useMemo } from "react";
 import type { IssueInfo } from "../../../stores/useGitHubStore";
 
@@ -40,21 +41,12 @@ export function IssueRow({ issue, isSelected, onClick }: IssueRowProps) {
       type="button"
       onClick={onClick}
       className={`flex w-full items-center gap-2 border-b border-maestro-border/30 px-3 py-2 text-left transition-colors ${
-        isSelected
-          ? "bg-maestro-accent/20 hover:bg-maestro-accent/25"
-          : "hover:bg-maestro-card/50"
+        isSelected ? "bg-maestro-accent/20 hover:bg-maestro-accent/25" : "hover:bg-maestro-card/50"
       }`}
     >
       {/* State icon */}
-      <div
-        className={`shrink-0 rounded p-1 ${
-          isOpen ? "bg-green-500/20" : "bg-purple-500/20"
-        }`}
-      >
-        <StateIcon
-          size={14}
-          className={isOpen ? "text-green-400" : "text-purple-400"}
-        />
+      <div className={`shrink-0 rounded p-1 ${isOpen ? "bg-green-500/20" : "bg-purple-500/20"}`}>
+        <StateIcon size={14} className={isOpen ? "text-green-400" : "text-purple-400"} />
       </div>
 
       {/* Title and labels */}
@@ -80,9 +72,7 @@ export function IssueRow({ issue, isSelected, onClick }: IssueRowProps) {
                 </span>
               ))}
               {issue.labels.length > 2 && (
-                <span className="text-maestro-muted/60">
-                  +{issue.labels.length - 2}
-                </span>
+                <span className="text-maestro-muted/60">+{issue.labels.length - 2}</span>
               )}
             </div>
           )}

@@ -1,4 +1,6 @@
-import { Check, Loader2, X } from "lucide-react";
+import Check from "lucide-react/dist/esm/icons/check";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import X from "lucide-react/dist/esm/icons/x";
 import type { RemoteStatus } from "@/stores/useGitStore";
 
 interface RemoteStatusIndicatorProps {

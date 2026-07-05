@@ -25,11 +25,11 @@ fn take_pending_cli_path(state: State<'_, PendingCliPath>) -> Option<String> {
 use core::marketplace_manager::MarketplaceManager;
 use core::mcp_manager::McpManager;
 use core::plugin_manager::PluginManager;
-use core::status_server::StatusServer;
-use core::{ClaudeEvent, EventBus, TranscriptWatcher};
-use core::ProcessManager;
 use core::session_manager::SessionManager;
+use core::status_server::StatusServer;
 use core::worktree_manager::WorktreeManager;
+use core::ProcessManager;
+use core::{ClaudeEvent, EventBus, TranscriptWatcher};
 
 /// Entry point for the Tauri application.
 ///
@@ -46,7 +46,7 @@ pub fn run() {
 
     log::info!("Maestro starting up...");
 
-    let mut builder = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_cli::init())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // A second instance was launched with these args — forward to the
@@ -73,9 +73,7 @@ pub fn run() {
 
     // Register macOS permissions plugin (for Full Disk Access check)
     #[cfg(target_os = "macos")]
-    {
-        builder = builder.plugin(tauri_plugin_macos_permissions::init());
-    }
+    let builder = builder.plugin(tauri_plugin_macos_permissions::init());
 
     builder
         .menu(|handle| {
@@ -104,9 +102,17 @@ pub fn run() {
                 .build()?;
 
             // View submenu with terminal font zoom controls
-            let zoom_in = MenuItem::with_id(handle, "zoom-in", "Zoom In", true, Some("CmdOrCtrl+="))?;
-            let zoom_out = MenuItem::with_id(handle, "zoom-out", "Zoom Out", true, Some("CmdOrCtrl+-"))?;
-            let zoom_reset = MenuItem::with_id(handle, "zoom-reset", "Actual Size", true, Some("CmdOrCtrl+0"))?;
+            let zoom_in =
+                MenuItem::with_id(handle, "zoom-in", "Zoom In", true, Some("CmdOrCtrl+="))?;
+            let zoom_out =
+                MenuItem::with_id(handle, "zoom-out", "Zoom Out", true, Some("CmdOrCtrl+-"))?;
+            let zoom_reset = MenuItem::with_id(
+                handle,
+                "zoom-reset",
+                "Actual Size",
+                true,
+                Some("CmdOrCtrl+0"),
+            )?;
             let view_menu = SubmenuBuilder::new(handle, "View")
                 .item(&zoom_in)
                 .item(&zoom_out)
@@ -152,9 +158,10 @@ pub fn run() {
 
             // Create EventBus - emits events to frontend via Tauri
             let app_handle_for_bus = app.handle().clone();
-            let emit_fn: Arc<dyn Fn(ClaudeEvent) + Send + Sync> = Arc::new(move |event: ClaudeEvent| {
-                let _ = app_handle_for_bus.emit("claude-event", &event);
-            });
+            let emit_fn: Arc<dyn Fn(ClaudeEvent) + Send + Sync> =
+                Arc::new(move |event: ClaudeEvent| {
+                    let _ = app_handle_for_bus.emit("claude-event", &event);
+                });
             let event_bus = Arc::new(EventBus::new(emit_fn));
 
             // Create TranscriptWatcher
@@ -164,15 +171,19 @@ pub fn run() {
             // When SessionStarted events arrive via hooks, start watching the transcript
             let event_bus_for_hooks = event_bus.clone();
             let transcript_watcher_for_hooks = transcript_watcher.clone();
-            let hook_emit_fn: Arc<dyn Fn(ClaudeEvent) + Send + Sync> = Arc::new(move |event: ClaudeEvent| {
-                if let ClaudeEvent::SessionStarted { session_id, ref transcript_path, .. } = event {
-                    transcript_watcher_for_hooks.start_watching(
+            let hook_emit_fn: Arc<dyn Fn(ClaudeEvent) + Send + Sync> =
+                Arc::new(move |event: ClaudeEvent| {
+                    if let ClaudeEvent::SessionStarted {
                         session_id,
-                        std::path::PathBuf::from(transcript_path),
-                    );
-                }
-                event_bus_for_hooks.emit(event);
-            });
+                        ref transcript_path,
+                        ..
+                    } = event
+                    {
+                        transcript_watcher_for_hooks
+                            .start_watching(session_id, std::path::PathBuf::from(transcript_path));
+                    }
+                    event_bus_for_hooks.emit(event);
+                });
 
             // Start the HTTP status server for MCP status reporting
             // IMPORTANT: This must be done synchronously so the server is ready
@@ -192,7 +203,9 @@ pub fn run() {
                     app.manage(Arc::new(server));
                 }
                 None => {
-                    log::error!("Failed to start status server - MCP status reporting will not work");
+                    log::error!(
+                        "Failed to start status server - MCP status reporting will not work"
+                    );
                     // Return error to prevent app from starting without status server
                     return Err("Failed to start status server".into());
                 }

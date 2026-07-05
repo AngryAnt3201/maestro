@@ -48,11 +48,14 @@ export type AiMode = "Claude" | "Gemini" | "Codex" | "OpenCode" | "Plain";
 export type CliAiMode = Exclude<AiMode, "Plain">;
 
 /** CLI command configuration for each AI mode */
-export const AI_CLI_CONFIG: Record<AiMode, {
-  command: string | null;
-  installHint: string;
-  skipPermissionsFlag: string | null;
-}> = {
+export const AI_CLI_CONFIG: Record<
+  AiMode,
+  {
+    command: string | null;
+    installHint: string;
+    skipPermissionsFlag: string | null;
+  }
+> = {
   Claude: {
     command: "claude",
     installHint: "npm install -g @anthropic-ai/claude-code",
@@ -83,7 +86,7 @@ export const AI_CLI_CONFIG: Record<AiMode, {
 /** Writes hooks configuration for a Claude session to .claude/settings.local.json. */
 export async function writeSessionHooksConfig(
   workingDir: string,
-  sessionId: number
+  sessionId: number,
 ): Promise<void> {
   await invoke("write_session_hooks_config", {
     workingDir,
@@ -92,9 +95,7 @@ export async function writeSessionHooksConfig(
 }
 
 /** Removes hooks configuration from .claude/settings.local.json. */
-export async function removeSessionHooksConfig(
-  workingDir: string
-): Promise<void> {
+export async function removeSessionHooksConfig(workingDir: string): Promise<void> {
   await invoke("remove_session_hooks_config", { workingDir });
 }
 
@@ -139,7 +140,7 @@ export async function createSession(
   id: number,
   mode: AiMode,
   projectPath: string,
-  workingDirectory?: string
+  workingDirectory?: string,
 ): Promise<SessionConfig> {
   return invoke<SessionConfig>("create_session", {
     id,
@@ -153,7 +154,7 @@ export async function createSession(
 export async function assignSessionBranch(
   sessionId: number,
   branch: string,
-  worktreePath: string | null
+  worktreePath: string | null,
 ): Promise<SessionConfig> {
   return invoke<SessionConfig>("assign_session_branch", { sessionId, branch, worktreePath });
 }
@@ -284,7 +285,11 @@ export type CliFlags = {
  * buildCliCommand("Codex", { skipPermissions: true, customFlags: "" })
  * // Returns: "codex --dangerously-bypass-approvals-and-sandbox"
  */
-export function buildCliCommand(mode: AiMode, flags?: CliFlags, resumeSessionId?: string): string | null {
+export function buildCliCommand(
+  mode: AiMode,
+  flags?: CliFlags,
+  resumeSessionId?: string,
+): string | null {
   const config = AI_CLI_CONFIG[mode];
   if (!config.command) return null;
 

@@ -6,7 +6,6 @@ use tauri::{AppHandle, State};
 
 use crate::core::session_manager::SessionManager;
 use crate::core::status_server::StatusServer;
-use crate::core::windows_process::TokioCommandExt;
 use crate::core::{BackendCapabilities, BackendType, ProcessManager, PtyError, SessionProcessTree};
 
 /// Backend information returned to the frontend.
@@ -193,7 +192,9 @@ pub async fn get_session_process_tree(
         None => return Ok(None),
     };
 
-    Ok(crate::core::process_tree::get_process_tree(session_id, root_pid))
+    Ok(crate::core::process_tree::get_process_tree(
+        session_id, root_pid,
+    ))
 }
 
 /// Returns process trees for all active sessions.
@@ -214,10 +215,7 @@ pub async fn get_all_process_trees(
 /// Sends SIGTERM first, waits up to 2 seconds, then SIGKILL if still alive.
 /// Will refuse to kill root session processes (use kill_session for that).
 #[tauri::command]
-pub async fn kill_process(
-    state: State<'_, ProcessManager>,
-    pid: u32,
-) -> Result<(), String> {
+pub async fn kill_process(state: State<'_, ProcessManager>, pid: u32) -> Result<(), String> {
     let pm = state.inner().clone();
     let session_root_pids: Vec<i32> = pm
         .get_all_session_pids()

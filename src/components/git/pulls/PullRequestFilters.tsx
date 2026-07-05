@@ -1,4 +1,4 @@
-import { useGitHubStore, type PrFilterState } from "../../../stores/useGitHubStore";
+import { type PrFilterState, useGitHubStore } from "../../../stores/useGitHubStore";
 
 const FILTERS: Array<{ value: PrFilterState; label: string }> = [
   { value: "open", label: "Open" },

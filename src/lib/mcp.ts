@@ -83,7 +83,7 @@ export async function refreshProjectMcpServers(projectPath: string): Promise<Mcp
  */
 export async function getSessionMcpServers(
   projectPath: string,
-  sessionId: number
+  sessionId: number,
 ): Promise<string[]> {
   return invoke<string[]>("get_session_mcp_servers", { projectPath, sessionId });
 }
@@ -94,7 +94,7 @@ export async function getSessionMcpServers(
 export async function setSessionMcpServers(
   projectPath: string,
   sessionId: number,
-  enabled: string[]
+  enabled: string[],
 ): Promise<void> {
   return invoke("set_session_mcp_servers", { projectPath, sessionId, enabled });
 }
@@ -102,10 +102,7 @@ export async function setSessionMcpServers(
 /**
  * Returns the count of enabled MCP servers for a session.
  */
-export async function getSessionMcpCount(
-  projectPath: string,
-  sessionId: number
-): Promise<number> {
+export async function getSessionMcpCount(projectPath: string, sessionId: number): Promise<number> {
   return invoke<number>("get_session_mcp_count", { projectPath, sessionId });
 }
 
@@ -115,7 +112,7 @@ export async function getSessionMcpCount(
  */
 export async function saveProjectMcpDefaults(
   projectPath: string,
-  enabledServers: string[]
+  enabledServers: string[],
 ): Promise<void> {
   return invoke("save_project_mcp_defaults", { projectPath, enabledServers });
 }
@@ -124,9 +121,7 @@ export async function saveProjectMcpDefaults(
  * Loads the default enabled MCP servers for a project.
  * Returns null if no defaults have been saved.
  */
-export async function loadProjectMcpDefaults(
-  projectPath: string
-): Promise<string[] | null> {
+export async function loadProjectMcpDefaults(projectPath: string): Promise<string[] | null> {
   return invoke<string[] | null>("load_project_mcp_defaults", { projectPath });
 }
 
@@ -145,7 +140,7 @@ export async function writeSessionMcpConfig(
   workingDir: string,
   sessionId: number,
   projectPath: string,
-  enabledServerNames: string[]
+  enabledServerNames: string[],
 ): Promise<void> {
   return invoke("write_session_mcp_config", {
     workingDir,
@@ -170,7 +165,7 @@ export async function writeOpenCodeMcpConfig(
   workingDir: string,
   sessionId: number,
   projectPath: string,
-  enabledServerNames: string[]
+  enabledServerNames: string[],
 ): Promise<void> {
   return invoke("write_opencode_mcp_config", {
     workingDir,
@@ -189,10 +184,7 @@ export async function writeOpenCodeMcpConfig(
  * @param workingDir - Directory containing the `.mcp.json` file
  * @param sessionId - Session ID to remove from the config
  */
-export async function removeSessionMcpConfig(
-  workingDir: string,
-  sessionId: number,
-): Promise<void> {
+export async function removeSessionMcpConfig(workingDir: string, sessionId: number): Promise<void> {
   return invoke("remove_session_mcp_config", { workingDir, sessionId });
 }
 

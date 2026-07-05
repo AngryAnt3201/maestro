@@ -1,5 +1,5 @@
-use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 
 /// Which AI backend a session is configured to use.
@@ -104,6 +104,7 @@ impl SessionManager {
     }
 
     /// Returns a snapshot of the session config, or `None` if not found.
+    #[allow(dead_code)]
     pub fn get_session(&self, id: u32) -> Option<SessionConfig> {
         self.sessions.get(&id).map(|s| s.clone())
     }
@@ -132,7 +133,12 @@ impl SessionManager {
 
     /// Associates a branch (and optional worktree path) with an existing session.
     /// Returns the updated config, or `None` if the session does not exist.
-    pub fn assign_branch(&self, id: u32, branch: String, worktree_path: Option<String>) -> Option<SessionConfig> {
+    pub fn assign_branch(
+        &self,
+        id: u32,
+        branch: String,
+        worktree_path: Option<String>,
+    ) -> Option<SessionConfig> {
         if let Some(mut session) = self.sessions.get_mut(&id) {
             session.branch = Some(branch);
             session.worktree_path = worktree_path;
@@ -173,7 +179,8 @@ impl SessionManager {
     /// Removes all sessions for a project. Returns the removed configs.
     /// Useful when closing a project tab.
     pub fn remove_sessions_for_project(&self, project_path: &str) -> Vec<SessionConfig> {
-        let ids_to_remove: Vec<u32> = self.sessions
+        let ids_to_remove: Vec<u32> = self
+            .sessions
             .iter()
             .filter(|entry| entry.value().project_path == project_path)
             .map(|entry| *entry.key())

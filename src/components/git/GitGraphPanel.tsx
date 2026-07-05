@@ -1,15 +1,18 @@
-import { GitFork, AlertCircle, Loader2, Terminal } from "lucide-react";
+import AlertCircle from "lucide-react/dist/esm/icons/alert-circle";
+import GitFork from "lucide-react/dist/esm/icons/git-fork";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import Terminal from "lucide-react/dist/esm/icons/terminal";
 import { useCallback, useEffect, useState } from "react";
 import type { GraphNode } from "../../lib/graphLayout";
-import { useGitStore } from "../../stores/useGitStore";
 import { useGitHubStore } from "../../stores/useGitHubStore";
+import { useGitStore } from "../../stores/useGitStore";
 import type { RepositoryInfo, WorkspaceType } from "../../stores/useWorkspaceStore";
 import { CommitDetailPanel } from "./CommitDetailPanel";
-import { GitPanelTabs, type GitPanelTab } from "./GitPanelTabs";
-import { GitPanelContent } from "./GitPanelContent";
-import { PullRequestDetailPanel } from "./pulls/PullRequestDetailPanel";
-import { IssueDetailPanel } from "./issues/IssueDetailPanel";
 import { DiscussionDetailPanel } from "./discussions/DiscussionDetailPanel";
+import { GitPanelContent } from "./GitPanelContent";
+import { type GitPanelTab, GitPanelTabs } from "./GitPanelTabs";
+import { IssueDetailPanel } from "./issues/IssueDetailPanel";
+import { PullRequestDetailPanel } from "./pulls/PullRequestDetailPanel";
 import { RepoRail } from "./RepoRail";
 
 interface GitGraphPanelProps {
@@ -58,6 +61,7 @@ export function GitGraphPanel({
   } = useGitHubStore();
 
   // Clear all selections when switching repos
+  // biome-ignore lint/correctness/useExhaustiveDependencies: repoPath is intentionally used as a reset trigger.
   useEffect(() => {
     setSelectedNode(null);
     setSelectedPRNumber(null);
@@ -89,7 +93,7 @@ export function GitGraphPanel({
       setSelectedPRNumber(prNumber);
       await fetchPullRequestDetail(repoPath, prNumber);
     },
-    [repoPath, fetchPullRequestDetail]
+    [repoPath, fetchPullRequestDetail],
   );
 
   // Handle closing PR detail panel
@@ -105,7 +109,7 @@ export function GitGraphPanel({
       setSelectedIssueNumber(issueNumber);
       await fetchIssueDetail(repoPath, issueNumber);
     },
-    [repoPath, fetchIssueDetail]
+    [repoPath, fetchIssueDetail],
   );
 
   // Handle closing Issue detail panel
@@ -121,7 +125,7 @@ export function GitGraphPanel({
       setSelectedDiscussionNumber(discussionNumber);
       await fetchDiscussionDetail(repoPath, discussionNumber);
     },
-    [repoPath, fetchDiscussionDetail]
+    [repoPath, fetchDiscussionDetail],
   );
 
   // Handle closing Discussion detail panel
@@ -131,17 +135,20 @@ export function GitGraphPanel({
   }, [clearSelectedDiscussion]);
 
   // Handle tab change
-  const handleTabChange = useCallback((tab: GitPanelTab) => {
-    setActiveTab(tab);
-    // Clear selections when switching tabs
-    setSelectedNode(null);
-    setSelectedPRNumber(null);
-    setSelectedIssueNumber(null);
-    setSelectedDiscussionNumber(null);
-    clearSelectedPR();
-    clearSelectedIssue();
-    clearSelectedDiscussion();
-  }, [clearSelectedPR, clearSelectedIssue, clearSelectedDiscussion]);
+  const handleTabChange = useCallback(
+    (tab: GitPanelTab) => {
+      setActiveTab(tab);
+      // Clear selections when switching tabs
+      setSelectedNode(null);
+      setSelectedPRNumber(null);
+      setSelectedIssueNumber(null);
+      setSelectedDiscussionNumber(null);
+      clearSelectedPR();
+      clearSelectedIssue();
+      clearSelectedDiscussion();
+    },
+    [clearSelectedPR, clearSelectedIssue, clearSelectedDiscussion],
+  );
 
   // Handle commit selection
   const handleSelectCommit = useCallback((node: GraphNode) => {
@@ -168,7 +175,7 @@ export function GitGraphPanel({
         window.alert(`Failed to create branch: ${err}`);
       }
     },
-    [repoPath, createBranch]
+    [repoPath, createBranch],
   );
 
   // Handle checkout commit
@@ -176,9 +183,7 @@ export function GitGraphPanel({
     async (commitHash: string) => {
       if (!repoPath) return;
 
-      const confirm = window.confirm(
-        "This will checkout a detached HEAD. Continue?"
-      );
+      const confirm = window.confirm("This will checkout a detached HEAD. Continue?");
       if (!confirm) return;
 
       try {
@@ -188,7 +193,7 @@ export function GitGraphPanel({
         window.alert(`Failed to checkout: ${err}`);
       }
     },
-    [repoPath, checkoutBranch]
+    [repoPath, checkoutBranch],
   );
 
   const hasRepo = Boolean(repoPath);
@@ -205,8 +210,7 @@ export function GitGraphPanel({
     (authError != null && ghMissingPattern.test(authError)) ||
     (prsError != null && ghMissingPattern.test(prsError));
   const isGhError = activeTab !== "commits" && hasGhError;
-  const showAuthPrompt =
-    activeTab !== "commits" && authStatus && !authStatus.logged_in;
+  const showAuthPrompt = activeTab !== "commits" && authStatus && !authStatus.logged_in;
 
   // Show PR detail panel full width when a PR is selected
   const showPRDetail = selectedPRNumber && repoPath && activeTab === "prs";
@@ -214,6 +218,7 @@ export function GitGraphPanel({
   const showIssueDetail = selectedIssueNumber && repoPath && activeTab === "issues";
   // Show Discussion detail panel full width when a discussion is selected
   const showDiscussionDetail = selectedDiscussionNumber && repoPath && activeTab === "discussions";
+  const activeRepoPath = repoPath ?? "";
 
   return (
     <aside
@@ -227,24 +232,15 @@ export function GitGraphPanel({
       {/* PR Detail panel - full width when shown */}
       {showPRDetail ? (
         <div className="flex min-w-[320px] flex-1 flex-col">
-          <PullRequestDetailPanel
-            repoPath={repoPath}
-            onClose={handleClosePRDetail}
-          />
+          <PullRequestDetailPanel repoPath={repoPath} onClose={handleClosePRDetail} />
         </div>
       ) : showIssueDetail ? (
         <div className="flex min-w-[320px] flex-1 flex-col">
-          <IssueDetailPanel
-            repoPath={repoPath}
-            onClose={handleCloseIssueDetail}
-          />
+          <IssueDetailPanel repoPath={repoPath} onClose={handleCloseIssueDetail} />
         </div>
       ) : showDiscussionDetail ? (
         <div className="flex min-w-[320px] flex-1 flex-col">
-          <DiscussionDetailPanel
-            repoPath={repoPath}
-            onClose={handleCloseDiscussionDetail}
-          />
+          <DiscussionDetailPanel repoPath={repoPath} onClose={handleCloseDiscussionDetail} />
         </div>
       ) : (
         <>
@@ -279,14 +275,8 @@ export function GitGraphPanel({
               // gh CLI not installed
               <div className="flex flex-1 items-center justify-center px-4 text-center">
                 <div className="flex flex-col items-center gap-3">
-                  <Terminal
-                    size={32}
-                    className="text-maestro-muted/30"
-                    strokeWidth={1}
-                  />
-                  <p className="text-xs text-maestro-muted/60">
-                    GitHub CLI not found
-                  </p>
+                  <Terminal size={32} className="text-maestro-muted/30" strokeWidth={1} />
+                  <p className="text-xs text-maestro-muted/60">GitHub CLI not found</p>
                   <a
                     href="https://cli.github.com"
                     target="_blank"
@@ -301,16 +291,11 @@ export function GitGraphPanel({
               // Not authenticated
               <div className="flex flex-1 items-center justify-center px-4 text-center">
                 <div className="flex flex-col items-center gap-3">
-                  <AlertCircle
-                    size={32}
-                    className="text-maestro-yellow/50"
-                    strokeWidth={1}
-                  />
-                  <p className="text-xs text-maestro-muted/60">
-                    Not authenticated with GitHub
-                  </p>
+                  <AlertCircle size={32} className="text-maestro-yellow/50" strokeWidth={1} />
+                  <p className="text-xs text-maestro-muted/60">Not authenticated with GitHub</p>
                   <p className="text-[10px] text-maestro-muted/40">
-                    Run <code className="rounded bg-maestro-card px-1 py-0.5">gh auth login</code> in your terminal
+                    Run <code className="rounded bg-maestro-card px-1 py-0.5">gh auth login</code>{" "}
+                    in your terminal
                   </p>
                   <button
                     type="button"
@@ -318,9 +303,7 @@ export function GitGraphPanel({
                     disabled={isCheckingAuth}
                     className="mt-1 flex items-center gap-1.5 rounded bg-maestro-card px-3 py-1 text-xs text-maestro-muted/60 transition-colors hover:bg-maestro-border hover:text-maestro-text disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isCheckingAuth && (
-                      <Loader2 size={12} className="animate-spin" />
-                    )}
+                    {isCheckingAuth && <Loader2 size={12} className="animate-spin" />}
                     {isCheckingAuth ? "Checking..." : "Retry"}
                   </button>
                 </div>
@@ -329,7 +312,7 @@ export function GitGraphPanel({
               // Tab content
               <GitPanelContent
                 activeTab={activeTab}
-                repoPath={repoPath!}
+                repoPath={activeRepoPath}
                 currentBranch={currentBranch}
                 onSelectCommit={handleSelectCommit}
                 selectedCommitHash={selectedNode?.commit.hash ?? null}

@@ -7,17 +7,18 @@
 
 import { create } from "zustand";
 
+import { toInvokeErrorMessage } from "@/lib/invokeError";
 import {
-  getProjectMcpServers,
-  refreshProjectMcpServers,
-  setSessionMcpServers as setSessionMcpServersApi,
-  saveProjectMcpDefaults,
-  loadProjectMcpDefaults,
-  getCustomMcpServers,
-  saveCustomMcpServer,
   deleteCustomMcpServer as deleteCustomMcpServerApi,
-  type McpServerConfig,
+  getCustomMcpServers,
+  getProjectMcpServers,
+  loadProjectMcpDefaults,
   type McpCustomServer,
+  type McpServerConfig,
+  refreshProjectMcpServers,
+  saveCustomMcpServer,
+  saveProjectMcpDefaults,
+  setSessionMcpServers as setSessionMcpServersApi,
 } from "@/lib/mcp";
 
 /** Key for session-enabled lookup: "projectPath:sessionId" */
@@ -68,11 +69,7 @@ interface McpState {
    * Sets the enabled server names for a session.
    * Updates both local state and backend.
    */
-  setSessionEnabled: (
-    projectPath: string,
-    sessionId: number,
-    enabled: string[]
-  ) => Promise<void>;
+  setSessionEnabled: (projectPath: string, sessionId: number, enabled: string[]) => Promise<void>;
 
   /**
    * Toggles a specific server for a session.
@@ -80,7 +77,7 @@ interface McpState {
   toggleSessionServer: (
     projectPath: string,
     sessionId: number,
-    serverName: string
+    serverName: string,
   ) => Promise<void>;
 
   /**
@@ -153,7 +150,7 @@ export const useMcpStore = create<McpState>()((set, get) => ({
       }));
       return servers;
     } catch (err) {
-      const errorMsg = String(err);
+      const errorMsg = toInvokeErrorMessage(err);
       console.error("Failed to fetch MCP servers:", err);
       set((state) => ({
         isLoading: { ...state.isLoading, [projectPath]: false },
@@ -177,7 +174,7 @@ export const useMcpStore = create<McpState>()((set, get) => ({
       }));
       return servers;
     } catch (err) {
-      const errorMsg = String(err);
+      const errorMsg = toInvokeErrorMessage(err);
       console.error("Failed to refresh MCP servers:", err);
       set((state) => ({
         isLoading: { ...state.isLoading, [projectPath]: false },
@@ -207,11 +204,7 @@ export const useMcpStore = create<McpState>()((set, get) => ({
     return servers.map((s) => s.name);
   },
 
-  setSessionEnabled: async (
-    projectPath: string,
-    sessionId: number,
-    enabled: string[]
-  ) => {
+  setSessionEnabled: async (projectPath: string, sessionId: number, enabled: string[]) => {
     const key = sessionKey(projectPath, sessionId);
 
     // Update local state optimistically (both session and project defaults)
@@ -231,11 +224,7 @@ export const useMcpStore = create<McpState>()((set, get) => ({
     }
   },
 
-  toggleSessionServer: async (
-    projectPath: string,
-    sessionId: number,
-    serverName: string
-  ) => {
+  toggleSessionServer: async (projectPath: string, sessionId: number, serverName: string) => {
     const currentEnabled = get().getSessionEnabled(projectPath, sessionId);
     const isEnabled = currentEnabled.includes(serverName);
 
@@ -297,9 +286,7 @@ export const useMcpStore = create<McpState>()((set, get) => ({
 
     // Optimistically update local state
     set((state) => ({
-      customServers: state.customServers.map((s) =>
-        s.id === server.id ? server : s
-      ),
+      customServers: state.customServers.map((s) => (s.id === server.id ? server : s)),
     }));
 
     try {
@@ -337,15 +324,13 @@ export const useMcpStore = create<McpState>()((set, get) => ({
     const enabledCustomServers = state.customServers.filter((s) => s.isEnabled);
 
     // Convert custom servers to McpServerConfig format
-    const customServerConfigs: McpServerConfig[] = enabledCustomServers.map(
-      (custom) => ({
-        name: custom.name,
-        type: "stdio" as const,
-        command: custom.command,
-        args: custom.args,
-        env: custom.env,
-      })
-    );
+    const customServerConfigs: McpServerConfig[] = enabledCustomServers.map((custom) => ({
+      name: custom.name,
+      type: "stdio" as const,
+      command: custom.command,
+      args: custom.args,
+      env: custom.env,
+    }));
 
     return [...discoveredServers, ...customServerConfigs];
   },

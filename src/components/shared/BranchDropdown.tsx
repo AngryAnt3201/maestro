@@ -1,6 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Check, GitBranch, Plus } from "lucide-react";
+import Check from "lucide-react/dist/esm/icons/check";
+import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import Plus from "lucide-react/dist/esm/icons/plus";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toInvokeErrorMessage } from "@/lib/invokeError";
 
 interface BranchInfo {
   name: string;
@@ -66,7 +69,7 @@ export function BranchDropdown({
       console.error("Failed to fetch branches:", err);
       if (!mountedRef.current) return;
       setBranches([]);
-      setError(err instanceof Error ? err.message : "Failed to load branches");
+      setError(toInvokeErrorMessage(err) || "Failed to load branches");
       setLoading(false);
     }
   }, [repoPath]);
@@ -176,7 +179,7 @@ export function BranchDropdown({
       await fetchBranches();
     } catch (err) {
       console.error("Failed to create branch:", err);
-      setError(err instanceof Error ? err.message : "Failed to create branch");
+      setError(toInvokeErrorMessage(err) || "Failed to create branch");
     } finally {
       setIsCreating(false);
     }

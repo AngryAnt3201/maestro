@@ -1,32 +1,22 @@
-import {
-  X,
-  CircleDot,
-  CheckCircle2,
-  ExternalLink,
-  MessageSquare,
-  Loader2,
-} from "lucide-react";
+import CheckCircle2 from "lucide-react/dist/esm/icons/check-circle-2";
+import CircleDot from "lucide-react/dist/esm/icons/circle-dot";
+import ExternalLink from "lucide-react/dist/esm/icons/external-link";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import MessageSquare from "lucide-react/dist/esm/icons/message-square";
+import X from "lucide-react/dist/esm/icons/x";
 import { useState } from "react";
 import { useGitHubStore } from "../../../stores/useGitHubStore";
-import { MarkdownBody } from "../shared/MarkdownBody";
 import { CommentList } from "../shared/CommentList";
+import { MarkdownBody } from "../shared/MarkdownBody";
 
 interface IssueDetailPanelProps {
   repoPath: string;
   onClose: () => void;
 }
 
-export function IssueDetailPanel({
-  repoPath,
-  onClose,
-}: IssueDetailPanelProps) {
-  const {
-    selectedIssue,
-    isLoadingIssueDetail,
-    closeIssue,
-    reopenIssue,
-    commentIssue,
-  } = useGitHubStore();
+export function IssueDetailPanel({ repoPath, onClose }: IssueDetailPanelProps) {
+  const { selectedIssue, isLoadingIssueDetail, closeIssue, reopenIssue, commentIssue } =
+    useGitHubStore();
 
   const [commentText, setCommentText] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
@@ -102,22 +92,15 @@ export function IssueDetailPanel({
           >
             <X size={16} />
           </button>
-          <StateIcon
-            size={16}
-            className={isOpen ? "text-green-400" : "text-purple-400"}
-          />
-          <span className="text-sm font-medium text-maestro-text">
-            #{selectedIssue.number}
-          </span>
+          <StateIcon size={16} className={isOpen ? "text-green-400" : "text-purple-400"} />
+          <span className="text-sm font-medium text-maestro-text">#{selectedIssue.number}</span>
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-3" style={{ scrollbarWidth: "thin" }}>
         {/* Title */}
-        <h3 className="mb-2 text-sm font-medium text-maestro-text">
-          {selectedIssue.title}
-        </h3>
+        <h3 className="mb-2 text-sm font-medium text-maestro-text">{selectedIssue.title}</h3>
 
         {/* Author and date */}
         <div className="mb-3 text-[10px] text-maestro-muted">
@@ -129,9 +112,7 @@ export function IssueDetailPanel({
         <div className="mb-3 flex flex-wrap items-center gap-1">
           <span
             className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-              isOpen
-                ? "bg-green-500/20 text-green-400"
-                : "bg-purple-500/20 text-purple-400"
+              isOpen ? "bg-green-500/20 text-green-400" : "bg-purple-500/20 text-purple-400"
             }`}
           >
             {isOpen ? "Open" : "Closed"}

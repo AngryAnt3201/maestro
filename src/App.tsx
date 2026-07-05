@@ -1,32 +1,40 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { GitFork, RefreshCw, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import GitFork from "lucide-react/dist/esm/icons/git-fork";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import X from "lucide-react/dist/esm/icons/x";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { MAC_TITLE_BAR_INSET_PX, useMacTitleBarPadding } from "@/hooks/useMacTitleBarPadding";
 import { getDeduplicatedCurrentBranch } from "@/lib/git";
+import { isMac } from "@/lib/platform";
 import { killSession } from "@/lib/terminal";
 import { useOpenProject } from "@/lib/useOpenProject";
 import { useFDAStore } from "@/stores/useFDAStore";
 import { useSessionStore } from "@/stores/useSessionStore";
-import { useWorkspaceStore, type RepositoryInfo } from "@/stores/useWorkspaceStore";
-import { useGitStore } from "./stores/useGitStore";
-import { useTerminalSettingsStore } from "./stores/useTerminalSettingsStore";
-import { useAppKeyboard } from "./hooks/useAppKeyboard";
-import { useSwipeNavigation } from "./hooks/useSwipeNavigation";
-import { useUpdateStore } from "./stores/useUpdateStore";
-import { initActivityListener, stopActivityListener } from "./stores/useActivityStore";
-import { UpdateNotification } from "./components/update/UpdateNotification";
-import { GitGraphPanel } from "./components/git/GitGraphPanel";
+import { type RepositoryInfo, useWorkspaceStore } from "@/stores/useWorkspaceStore";
 import { BottomBar } from "./components/shared/BottomBar";
 import { FDADialog } from "./components/shared/FDADialog";
-import { MultiProjectView, type MultiProjectViewHandle } from "./components/shared/MultiProjectView";
-import { MAC_TITLE_BAR_INSET_PX, useMacTitleBarPadding } from "@/hooks/useMacTitleBarPadding";
-import { isMac } from "@/lib/platform";
+import {
+  MultiProjectView,
+  type MultiProjectViewHandle,
+} from "./components/shared/MultiProjectView";
 import { ProjectTabs } from "./components/shared/ProjectTabs";
 import { TopBar } from "./components/shared/TopBar";
 import { Sidebar } from "./components/sidebar/Sidebar";
+import { UpdateNotification } from "./components/update/UpdateNotification";
+import { useAppKeyboard } from "./hooks/useAppKeyboard";
+import { useSwipeNavigation } from "./hooks/useSwipeNavigation";
+import { initActivityListener, stopActivityListener } from "./stores/useActivityStore";
+import { useGitStore } from "./stores/useGitStore";
+import { useTerminalSettingsStore } from "./stores/useTerminalSettingsStore";
+import { useUpdateStore } from "./stores/useUpdateStore";
 
 const DEFAULT_SESSION_COUNT = 6;
+
+const GitGraphPanel = lazy(() =>
+  import("./components/git/GitGraphPanel").then((module) => ({ default: module.GitGraphPanel })),
+);
 
 type Theme = "dark" | "light";
 
@@ -54,7 +62,9 @@ function App() {
   const multiProjectRef = useRef<MultiProjectViewHandle>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [gitPanelOpen, setGitPanelOpen] = useState(false);
-  const [sessionCounts, setSessionCounts] = useState<Map<string, { slotCount: number; launchedCount: number }>>(new Map());
+  const [sessionCounts, setSessionCounts] = useState<
+    Map<string, { slotCount: number; launchedCount: number }>
+  >(new Map());
   const [isStoppingAll, setIsStoppingAll] = useState(false);
   const [currentBranch, setCurrentBranch] = useState<string | undefined>(undefined);
   const [theme, setTheme] = useState<Theme>(() => {
@@ -157,7 +167,9 @@ function App() {
         console.error("cli-open-project failed:", err);
         return;
       }
-      getCurrentWindow().setFocus().catch(() => {});
+      getCurrentWindow()
+        .setFocus()
+        .catch(() => {});
     };
 
     // Drain any path captured before we mounted.
@@ -307,16 +319,18 @@ function App() {
     }
   };
 
-  const handleSessionCountChange = useCallback((tabId: string, slotCount: number, launchedCount: number) => {
-    setSessionCounts((prev) => {
-      const next = new Map(prev);
-      next.set(tabId, { slotCount, launchedCount });
-      return next;
-    });
-  }, []);
+  const handleSessionCountChange = useCallback(
+    (tabId: string, slotCount: number, launchedCount: number) => {
+      setSessionCounts((prev) => {
+        const next = new Map(prev);
+        next.set(tabId, { slotCount, launchedCount });
+        return next;
+      });
+    },
+    [],
+  );
 
-  const macTitleBarInset =
-    isMac() && macTitleBarPadding ? `${MAC_TITLE_BAR_INSET_PX}px` : "0";
+  const macTitleBarInset = isMac() && macTitleBarPadding ? `${MAC_TITLE_BAR_INSET_PX}px` : "0";
 
   return (
     <div
@@ -373,7 +387,10 @@ function App() {
                 <GitFork size={14} className="text-maestro-muted" />
                 {activeTab?.workspaceType === "multi-repo" && activeTab.selectedRepoPath && (
                   <span className="text-xs font-medium text-maestro-accent">
-                    {activeTab.repositories.find((r) => r.path === activeTab.selectedRepoPath)?.name}
+                    {
+                      activeTab.repositories.find((r) => r.path === activeTab.selectedRepoPath)
+                        ?.name
+                    }
                   </span>
                 )}
                 <span className="text-sm font-medium text-maestro-text">Commits</span>
@@ -417,15 +434,19 @@ function App() {
             </main>
 
             {/* Git graph panel (optional right side) */}
-            <GitGraphPanel
-              open={gitPanelOpen}
-              onClose={() => setGitPanelOpen(false)}
-              repoPath={activeRepoPath ?? null}
-              currentBranch={currentBranch ?? null}
-              repositories={activeTab?.repositories ?? []}
-              workspaceType={activeTab?.workspaceType ?? "single-repo"}
-              onRepoChange={(path) => activeTab && setSelectedRepo(activeTab.id, path)}
-            />
+            {gitPanelOpen && (
+              <Suspense fallback={null}>
+                <GitGraphPanel
+                  open={gitPanelOpen}
+                  onClose={() => setGitPanelOpen(false)}
+                  repoPath={activeRepoPath ?? null}
+                  currentBranch={currentBranch ?? null}
+                  repositories={activeTab?.repositories ?? []}
+                  workspaceType={activeTab?.workspaceType ?? "single-repo"}
+                  onRepoChange={(path) => activeTab && setSelectedRepo(activeTab.id, path)}
+                />
+              </Suspense>
+            )}
           </div>
 
           {/* Bottom action bar */}
@@ -452,7 +473,9 @@ function App() {
                   // Kill all running PTY sessions for this project
                   const sessionStore = useSessionStore.getState();
                   const projectSessions = sessionStore.getSessionsByProject(activeTab.projectPath);
-                  const results = await Promise.allSettled(projectSessions.map((s) => killSession(s.id)));
+                  const results = await Promise.allSettled(
+                    projectSessions.map((s) => killSession(s.id)),
+                  );
                   for (const result of results) {
                     if (result.status === "rejected") {
                       console.error("Failed to stop session:", result.reason);

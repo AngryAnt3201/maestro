@@ -1,8 +1,7 @@
 import type { Config } from "tailwindcss";
 
 /** Reference a CSS variable RGB triplet with alpha support */
-const rgb = (varName: string) =>
-  `rgb(var(--maestro-${varName}) / <alpha-value>)`;
+const rgb = (varName: string) => `rgb(var(--maestro-${varName}) / <alpha-value>)`;
 
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
@@ -25,12 +24,7 @@ export default {
         },
       },
       fontFamily: {
-        mono: [
-          "JetBrains Mono",
-          "Fira Code",
-          "Cascadia Code",
-          "monospace",
-        ],
+        mono: ["JetBrains Mono", "Fira Code", "Cascadia Code", "monospace"],
       },
     },
   },

@@ -102,10 +102,7 @@ function quoteFont(font: string): string {
  * @param timeout - Timeout in milliseconds (default: 2000)
  * @returns True if the font loaded successfully, false on timeout
  */
-export async function waitForFont(
-  fontFamily: string,
-  timeout: number = 2000
-): Promise<boolean> {
+export async function waitForFont(fontFamily: string, timeout: number = 2000): Promise<boolean> {
   // Extract the first font from the font-family string
   const firstFont = fontFamily.split(",")[0].trim().replace(/["']/g, "");
 
@@ -113,9 +110,7 @@ export async function waitForFont(
     // Use the CSS Font Loading API
     const font = await Promise.race([
       document.fonts.load(`16px "${firstFont}"`),
-      new Promise<FontFace[]>((resolve) =>
-        setTimeout(() => resolve([]), timeout)
-      ),
+      new Promise<FontFace[]>((resolve) => setTimeout(() => resolve([]), timeout)),
     ]);
 
     // Check if any fonts were loaded

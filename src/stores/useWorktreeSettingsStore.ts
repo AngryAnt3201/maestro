@@ -40,6 +40,6 @@ export const useWorktreeSettingsStore = create<WorktreeSettingsState>()(
       name: "maestro-worktree-settings",
       storage: createJSONStorage(() => tauriStorage),
       partialize: (state) => ({ worktreeCloseAction: state.worktreeCloseAction }),
-    }
-  )
+    },
+  ),
 );

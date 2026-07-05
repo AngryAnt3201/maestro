@@ -92,34 +92,33 @@ export function layoutGraph(commits: CommitInfo[]): { nodes: GraphNode[]; rails:
     const commit = commits[row];
     const column = commitToColumn.get(commit.hash) ?? 0;
 
-    const parentConnections: ParentConnection[] = commit.parent_hashes
-      .map((parentHash) => {
-        const parentColumn = commitToColumn.get(parentHash);
-        const parentRow = commitToRow.get(parentHash);
+    const parentConnections: ParentConnection[] = commit.parent_hashes.map((parentHash) => {
+      const parentColumn = commitToColumn.get(parentHash);
+      const parentRow = commitToRow.get(parentHash);
 
-        if (parentColumn !== undefined && parentRow !== undefined) {
-          // Parent is in our loaded commits - normal connection
-          const connectionType = determineConnectionType(column, parentColumn);
+      if (parentColumn !== undefined && parentRow !== undefined) {
+        // Parent is in our loaded commits - normal connection
+        const connectionType = determineConnectionType(column, parentColumn);
 
-          return {
-            parentHash,
-            parentColumn,
-            parentRow,
-            connectionType,
-            isOffScreen: false,
-          };
-        } else {
-          // Parent exists but is outside loaded range - create off-screen connection
-          // Draw line extending to bottom of visible area in the same column
-          return {
-            parentHash,
-            parentColumn: column, // Stay in same column
-            parentRow: totalRows, // Extend to bottom
-            connectionType: "straight" as ConnectionType,
-            isOffScreen: true,
-          };
-        }
-      });
+        return {
+          parentHash,
+          parentColumn,
+          parentRow,
+          connectionType,
+          isOffScreen: false,
+        };
+      } else {
+        // Parent exists but is outside loaded range - create off-screen connection
+        // Draw line extending to bottom of visible area in the same column
+        return {
+          parentHash,
+          parentColumn: column, // Stay in same column
+          parentRow: totalRows, // Extend to bottom
+          connectionType: "straight" as ConnectionType,
+          isOffScreen: true,
+        };
+      }
+    });
 
     nodes.push({
       commit,
@@ -146,7 +145,7 @@ export function layoutGraph(commits: CommitInfo[]): { nodes: GraphNode[]; rails:
 function findColumn(
   commit: CommitInfo,
   activeColumns: Map<number, string>,
-  _commitToColumn: Map<string, number>
+  _commitToColumn: Map<string, number>,
 ): number {
   // Check if any active column is waiting for this commit
   for (const [column, expectedHash] of activeColumns) {
@@ -171,7 +170,7 @@ function updateActiveColumns(
   commit: CommitInfo,
   column: number,
   activeColumns: Map<number, string>,
-  commitHashSet: Set<string>
+  commitHashSet: Set<string>,
 ): void {
   // Remove this commit from active columns (it's been consumed)
   for (const [col, hash] of activeColumns) {

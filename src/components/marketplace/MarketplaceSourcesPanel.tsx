@@ -1,23 +1,15 @@
-import { useMarketplaceStore } from "@/stores/useMarketplaceStore";
-import {
-  AlertCircle,
-  Check,
-  ExternalLink,
-  Plus,
-  RefreshCw,
-  Trash2,
-} from "lucide-react";
+import AlertCircle from "lucide-react/dist/esm/icons/alert-circle";
+import Check from "lucide-react/dist/esm/icons/check";
+import ExternalLink from "lucide-react/dist/esm/icons/external-link";
+import Plus from "lucide-react/dist/esm/icons/plus";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import { useState } from "react";
+import { useMarketplaceStore } from "@/stores/useMarketplaceStore";
 
 export function MarketplaceSourcesPanel() {
-  const {
-    sources,
-    addSource,
-    removeSource,
-    toggleSource,
-    refreshSource,
-    isRefreshing,
-  } = useMarketplaceStore();
+  const { sources, addSource, removeSource, toggleSource, refreshSource, isRefreshing } =
+    useMarketplaceStore();
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState("");
@@ -62,7 +54,6 @@ export function MarketplaceSourcesPanel() {
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Source name"
               className="w-full rounded border border-maestro-border bg-maestro-surface px-2 py-1.5 text-xs text-maestro-text placeholder:text-maestro-muted focus:border-maestro-accent focus:outline-none"
-              autoFocus
             />
           </div>
           <div className="mb-2">
@@ -114,10 +105,7 @@ export function MarketplaceSourcesPanel() {
         ) : (
           <div className="divide-y divide-maestro-border">
             {sources.map((source) => (
-              <div
-                key={source.id}
-                className={`p-3 ${!source.is_enabled ? "opacity-50" : ""}`}
-              >
+              <div key={source.id} className={`p-3 ${!source.is_enabled ? "opacity-50" : ""}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -139,7 +127,10 @@ export function MarketplaceSourcesPanel() {
                       <span className="truncate">
                         {source.repository_url.replace("https://github.com/", "")}
                       </span>
-                      <ExternalLink size={8} className="shrink-0 opacity-0 group-hover:opacity-100" />
+                      <ExternalLink
+                        size={8}
+                        className="shrink-0 opacity-0 group-hover:opacity-100"
+                      />
                     </a>
                   </div>
 
@@ -152,10 +143,7 @@ export function MarketplaceSourcesPanel() {
                       className="rounded p-1 text-maestro-muted hover:bg-maestro-surface hover:text-maestro-text disabled:opacity-50"
                       title="Refresh"
                     >
-                      <RefreshCw
-                        size={12}
-                        className={isRefreshing ? "animate-spin" : ""}
-                      />
+                      <RefreshCw size={12} className={isRefreshing ? "animate-spin" : ""} />
                     </button>
                     <button
                       type="button"
@@ -201,9 +189,7 @@ export function MarketplaceSourcesPanel() {
                 {/* Delete confirmation */}
                 {deleteConfirmId === source.id && (
                   <div className="mt-2 flex items-center gap-2 rounded bg-red-500/10 p-2">
-                    <span className="flex-1 text-[10px] text-red-400">
-                      Remove this source?
-                    </span>
+                    <span className="flex-1 text-[10px] text-red-400">Remove this source?</span>
                     <button
                       type="button"
                       onClick={() => setDeleteConfirmId(null)}

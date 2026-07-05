@@ -1,4 +1,4 @@
-import { useCallback, useRef, type ReactNode } from "react";
+import { type ReactNode, useCallback, useRef } from "react";
 
 import type { TreeNode } from "./splitTree";
 
@@ -22,7 +22,12 @@ function clampRatio(ratio: number): number {
  * - SplitNode → flex container with a draggable divider between two children
  * - LeafNode → calls `renderLeaf(slotId)`
  */
-export function SplitPaneView({ node, renderLeaf, onRatioChange, onDragStateChange }: SplitPaneViewProps) {
+export function SplitPaneView({
+  node,
+  renderLeaf,
+  onRatioChange,
+  onDragStateChange,
+}: SplitPaneViewProps) {
   if (node.type === "leaf") {
     return (
       <div className="h-full w-full min-w-0 min-h-0 relative" data-slot-id={node.slotId}>
@@ -36,9 +41,7 @@ export function SplitPaneView({ node, renderLeaf, onRatioChange, onDragStateChan
   // Use flexGrow proportional sharing so the 4px divider is naturally
   // subtracted from available space before children divide the remainder.
   return (
-    <div
-      className={`flex ${isVertical ? "flex-row" : "flex-col"} h-full w-full min-w-0 min-h-0`}
-    >
+    <div className={`flex ${isVertical ? "flex-row" : "flex-col"} h-full w-full min-w-0 min-h-0`}>
       <div
         style={{ flexGrow: node.ratio, flexShrink: 1, flexBasis: 0 }}
         className="min-w-0 min-h-0 overflow-hidden"
@@ -54,6 +57,7 @@ export function SplitPaneView({ node, renderLeaf, onRatioChange, onDragStateChan
       <Divider
         direction={node.direction}
         nodeId={node.id}
+        ratio={node.ratio}
         onRatioChange={onRatioChange}
         onDragStateChange={onDragStateChange}
       />
@@ -76,11 +80,12 @@ export function SplitPaneView({ node, renderLeaf, onRatioChange, onDragStateChan
 interface DividerProps {
   direction: "horizontal" | "vertical";
   nodeId: string;
+  ratio: number;
   onRatioChange: (nodeId: string, ratio: number) => void;
   onDragStateChange: (dragging: boolean) => void;
 }
 
-function Divider({ direction, nodeId, onRatioChange, onDragStateChange }: DividerProps) {
+function Divider({ direction, nodeId, ratio, onRatioChange, onDragStateChange }: DividerProps) {
   const dividerRef = useRef<HTMLDivElement>(null);
 
   const handleMouseDown = useCallback(
@@ -124,10 +129,17 @@ function Divider({ direction, nodeId, onRatioChange, onDragStateChange }: Divide
   const isVertical = direction === "vertical";
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: This is a draggable splitter, not static horizontal content.
     <div
       ref={dividerRef}
       className={`split-divider ${isVertical ? "split-divider-vertical" : "split-divider-horizontal"}`}
       onMouseDown={handleMouseDown}
+      role="separator"
+      aria-orientation={isVertical ? "vertical" : "horizontal"}
+      aria-valuemin={Math.round(MIN_RATIO * 100)}
+      aria-valuemax={Math.round(MAX_RATIO * 100)}
+      aria-valuenow={Math.round(ratio * 100)}
+      tabIndex={0}
     />
   );
 }

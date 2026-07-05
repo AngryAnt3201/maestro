@@ -1,22 +1,22 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
-  DndContext,
   closestCenter,
+  DndContext,
+  type DragEndEvent,
   PointerSensor,
   useSensor,
   useSensors,
-  type DragEndEvent,
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  horizontalListSortingStrategy,
-  useSortable,
-} from "@dnd-kit/sortable";
 import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
+import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Minus, PanelLeft, Plus, Square, X } from "lucide-react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import Minus from "lucide-react/dist/esm/icons/minus";
+import PanelLeft from "lucide-react/dist/esm/icons/panel-left";
+import Plus from "lucide-react/dist/esm/icons/plus";
+import Square from "lucide-react/dist/esm/icons/square";
+import X from "lucide-react/dist/esm/icons/x";
 import { useCallback, useMemo, useRef } from "react";
-import { useProjectStatus, STATUS_COLORS } from "@/hooks/useProjectStatus";
+import { STATUS_COLORS, useProjectStatus } from "@/hooks/useProjectStatus";
 import { isMac } from "@/lib/platform";
 
 export type ProjectTab = {
@@ -55,14 +55,9 @@ function TabItem({
   const { status, sessionCount } = useProjectStatus(tab.id);
   const shouldPulse = status === "working" || status === "needs-input";
 
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: tab.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: tab.id,
+  });
 
   const combinedRef = useCallback(
     (node: HTMLElement | null) => {
@@ -146,18 +141,21 @@ export function ProjectTabs({
 
   // Ref map for focus management (WAI-ARIA tablist keyboard navigation)
   const tabRefs = useRef(new Map<string, HTMLElement>());
-  const setTabRef = useCallback((id: string) => (node: HTMLElement | null) => {
-    if (node) {
-      tabRefs.current.set(id, node);
-    } else {
-      tabRefs.current.delete(id);
-    }
-  }, []);
+  const setTabRef = useCallback(
+    (id: string) => (node: HTMLElement | null) => {
+      if (node) {
+        tabRefs.current.set(id, node);
+      } else {
+        tabRefs.current.delete(id);
+      }
+    },
+    [],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 },
-    })
+    }),
   );
 
   const handleDragEnd = useCallback(
@@ -167,7 +165,7 @@ export function ProjectTabs({
         onReorderTab(active.id as string, over.id as string);
       }
     },
-    [onReorderTab]
+    [onReorderTab],
   );
 
   const handleTabKeyDown = useCallback(
@@ -201,7 +199,7 @@ export function ProjectTabs({
         onSelectTab(tab.id);
       }
     },
-    [tabs, onSelectTab, onMoveTab]
+    [tabs, onSelectTab, onMoveTab],
   );
 
   return (
@@ -235,10 +233,7 @@ export function ProjectTabs({
           modifiers={[restrictToHorizontalAxis]}
           onDragEnd={handleDragEnd}
         >
-          <SortableContext
-            items={tabs.map((t) => t.id)}
-            strategy={horizontalListSortingStrategy}
-          >
+          <SortableContext items={tabs.map((t) => t.id)} strategy={horizontalListSortingStrategy}>
             <div role="tablist" aria-label="Open projects" className="flex items-center gap-0.5">
               {tabs.length === 0 ? (
                 <span className="px-2 text-xs text-maestro-muted">No projects</span>

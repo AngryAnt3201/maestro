@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { pickProjectFolder } from "@/lib/dialog";
-import { useWorkspaceStore } from "@/stores/useWorkspaceStore";
 import { useFDAStore } from "@/stores/useFDAStore";
+import { useWorkspaceStore } from "@/stores/useWorkspaceStore";
 
 /**
  * Hook for opening project folders with macOS FDA permission handling.

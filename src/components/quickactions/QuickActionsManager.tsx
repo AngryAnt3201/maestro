@@ -1,9 +1,13 @@
-import { Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import Pencil from "lucide-react/dist/esm/icons/pencil";
+import Plus from "lucide-react/dist/esm/icons/plus";
+import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
+import X from "lucide-react/dist/esm/icons/x";
 import { useEffect, useRef, useState } from "react";
-import { DynamicIcon } from "./DynamicIcon";
-import { QuickActionEditor } from "./QuickActionEditor";
 import { useQuickActionStore } from "@/stores/useQuickActionStore";
 import type { QuickAction } from "@/types/quickAction";
+import { DynamicIcon } from "./DynamicIcon";
+import { QuickActionEditor } from "./QuickActionEditor";
 
 interface QuickActionsManagerProps {
   onClose: () => void;
@@ -132,19 +136,13 @@ export function QuickActionsManager({ onClose }: QuickActionsManagerProps) {
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded"
                     style={{ backgroundColor: `${action.colorHex}20` }}
                   >
-                    <DynamicIcon
-                      name={action.icon}
-                      size={16}
-                      style={{ color: action.colorHex }}
-                    />
+                    <DynamicIcon name={action.icon} size={16} style={{ color: action.colorHex }} />
                   </div>
 
                   {/* Info */}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-maestro-text">
-                        {action.name}
-                      </span>
+                      <span className="text-sm font-medium text-maestro-text">{action.name}</span>
                       {!action.isEnabled && (
                         <span className="rounded bg-maestro-border/40 px-1.5 py-0.5 text-[9px] text-maestro-muted">
                           Disabled

@@ -1,18 +1,19 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
-import { PreLaunchCard, type SessionSlot } from "../PreLaunchCard";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PreLaunchCard } from "../PreLaunchCard";
+import type { SessionSlot } from "../PreLaunchCard/PreLaunchCard.types";
 
 vi.mock("@/lib/terminal", () => ({
   listClaudeSessions: vi.fn().mockResolvedValue([]),
   deleteClaudeSession: vi.fn().mockResolvedValue(undefined),
 }));
 
-
 describe("PreLaunchCard branch creation", () => {
   const makeSlot = (overrides?: Partial<SessionSlot>): SessionSlot => ({
     id: "slot-1",
     mode: "Claude",
     branch: null,
+    worktreeMode: "new",
     sessionId: null,
     worktreePath: null,
     worktreeWarning: null,
@@ -139,7 +140,7 @@ describe("PreLaunchCard branch creation", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText("Invalid name. Use letters, numbers, dots, dashes, slashes.")
+        screen.getByText("Invalid name. Use letters, numbers, dots, dashes, slashes."),
       ).toBeInTheDocument();
     });
     expect(onCreateBranch).not.toHaveBeenCalled();
@@ -167,6 +168,7 @@ describe("PreLaunchCard AI Mode Selection", () => {
     id: "slot-1",
     mode: "Claude",
     branch: null,
+    worktreeMode: "new",
     sessionId: null,
     worktreePath: null,
     worktreeWarning: null,

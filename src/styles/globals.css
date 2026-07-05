@@ -559,12 +559,16 @@
 
 /* Sidebar card shadows */
 .platform-linux .sidebar-card-link {
+  /* biome-ignore lint/complexity/noImportantStyles: Linux shadow override must beat utility classes. */
   box-shadow: none !important;
+  /* biome-ignore lint/complexity/noImportantStyles: Linux transition override must beat utility classes. */
   transition: border-color 200ms ease !important;
 }
 
 /* Pod grid card shadows */
 .platform-linux .pod-grid-card {
+  /* biome-ignore lint/complexity/noImportantStyles: Linux shadow override must beat utility classes. */
   box-shadow: none !important;
+  /* biome-ignore lint/complexity/noImportantStyles: Linux transition override must beat utility classes. */
   transition: border-color 200ms ease !important;
 }

@@ -67,11 +67,4 @@ tauri-plugin-macos-permissions = "2.1"
 [dev-dependencies]
 tempfile = "3"
 
-[profile.release]
-panic = "abort"
-codegen-units = 1
-lto = true
-opt-level = "s"
-strip = true
-
 # Note: This crate is part of the root workspace (see ../Cargo.toml)

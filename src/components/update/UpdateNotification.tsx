@@ -1,4 +1,8 @@
-import { AlertTriangle, ArrowDownCircle, Download, Loader2, X } from "lucide-react";
+import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
+import ArrowDownCircle from "lucide-react/dist/esm/icons/arrow-down-circle";
+import Download from "lucide-react/dist/esm/icons/download";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import X from "lucide-react/dist/esm/icons/x";
 import { useUpdateStore } from "@/stores/useUpdateStore";
 
 export function UpdateNotification() {
@@ -72,13 +76,9 @@ export function UpdateNotification() {
           <>
             <div className="flex items-center gap-2 text-xs">
               <span className="text-maestro-muted">Current:</span>
-              <span className="font-medium text-maestro-text">
-                v{updateInfo.current_version}
-              </span>
+              <span className="font-medium text-maestro-text">v{updateInfo.current_version}</span>
               <span className="text-maestro-muted mx-0.5">&rarr;</span>
-              <span className="font-medium text-maestro-green">
-                v{updateInfo.latest_version}
-              </span>
+              <span className="font-medium text-maestro-green">v{updateInfo.latest_version}</span>
             </div>
             {updateInfo.release_notes && (
               <p className="text-[11px] text-maestro-muted leading-relaxed line-clamp-3">

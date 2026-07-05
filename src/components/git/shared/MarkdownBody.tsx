@@ -1,7 +1,6 @@
 import ReactMarkdown from "react-markdown";
-import rehypeRaw from "rehype-raw";
-import remarkGfm from "remark-gfm";
 import remarkGemoji from "remark-gemoji";
+import remarkGfm from "remark-gfm";
 
 interface MarkdownBodyProps {
   content: string;
@@ -14,19 +13,16 @@ interface MarkdownBodyProps {
  */
 export function MarkdownBody({ content, className = "" }: MarkdownBodyProps) {
   if (!content) {
-    return (
-      <p className="text-xs italic text-maestro-muted">No description provided.</p>
-    );
+    return <p className="text-xs italic text-maestro-muted">No description provided.</p>;
   }
 
   // Convert <image src="..."> tags to standard markdown images
-  const processedContent = content.replace(/<image\s+src="([^"]+)"[^>]*>/gi, '![]($1)');
+  const processedContent = content.replace(/<image\s+src="([^"]+)"[^>]*>/gi, "![]($1)");
 
   return (
     <div className={`markdown-body ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkGemoji]}
-        rehypePlugins={[rehypeRaw]}
         components={{
           // Style links
           a: ({ href, children }) => (
@@ -69,20 +65,14 @@ export function MarkdownBody({ content, className = "" }: MarkdownBodyProps) {
           },
           // Style paragraphs
           p: ({ children }) => (
-            <p className="mb-2 text-xs leading-relaxed text-maestro-muted last:mb-0">
-              {children}
-            </p>
+            <p className="mb-2 text-xs leading-relaxed text-maestro-muted last:mb-0">{children}</p>
           ),
           // Style lists
           ul: ({ children }) => (
-            <ul className="mb-2 ml-4 list-disc text-xs text-maestro-muted">
-              {children}
-            </ul>
+            <ul className="mb-2 ml-4 list-disc text-xs text-maestro-muted">{children}</ul>
           ),
           ol: ({ children }) => (
-            <ol className="mb-2 ml-4 list-decimal text-xs text-maestro-muted">
-              {children}
-            </ol>
+            <ol className="mb-2 ml-4 list-decimal text-xs text-maestro-muted">{children}</ol>
           ),
           li: ({ children }) => <li className="mb-0.5">{children}</li>,
           // Style headers
@@ -127,12 +117,7 @@ export function MarkdownBody({ content, className = "" }: MarkdownBodyProps) {
           ),
           // Style task list items (GFM)
           input: ({ checked }) => (
-            <input
-              type="checkbox"
-              checked={checked}
-              disabled
-              className="mr-1 h-3 w-3"
-            />
+            <input type="checkbox" checked={checked} disabled className="mr-1 h-3 w-3" />
           ),
         }}
       >

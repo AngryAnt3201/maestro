@@ -18,10 +18,7 @@ function getBarColor(percent: number): string {
 /**
  * Horizontal progress bar for weekly usage display.
  */
-export function UsageProgressBar({
-  percent,
-  showLabel = true,
-}: UsageProgressBarProps) {
+export function UsageProgressBar({ percent, showLabel = true }: UsageProgressBarProps) {
   const barColor = getBarColor(percent);
 
   return (

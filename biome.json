@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.13/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.2/schema.json",
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
@@ -8,16 +8,17 @@
   "files": {
     "includes": [
       "**/*",
-      "!**/node_modules/**",
-      "!**/dist/**",
-      "!**/src-tauri/target/**",
-      "!**/src-tauri/gen/**"
+      "!**/node_modules",
+      "!**/dist",
+      "!**/target",
+      "!**/src-tauri/target",
+      "!**/src-tauri/gen"
     ]
   },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "suspicious": {
         "noUnknownAtRules": {
           "level": "error",

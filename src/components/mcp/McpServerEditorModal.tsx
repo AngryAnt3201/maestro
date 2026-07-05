@@ -1,15 +1,14 @@
-import {
-  FolderOpen,
-  Loader2,
-  Plus,
-  Terminal,
-  Trash2,
-  X,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { useMcpStore } from "@/stores/useMcpStore";
+import FolderOpen from "lucide-react/dist/esm/icons/folder-open";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import Plus from "lucide-react/dist/esm/icons/plus";
+import Terminal from "lucide-react/dist/esm/icons/terminal";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
+import X from "lucide-react/dist/esm/icons/x";
+import { useEffect, useRef, useState } from "react";
+import { toInvokeErrorMessage } from "@/lib/invokeError";
 import type { McpCustomServer } from "@/lib/mcp";
+import { useMcpStore } from "@/stores/useMcpStore";
 
 interface McpServerEditorModalProps {
   /** Existing server to edit, or undefined to create a new one. */
@@ -29,11 +28,7 @@ interface McpServerEditorModalProps {
  * - Environment Variables (dynamic key-value pairs)
  * - Command preview section
  */
-export function McpServerEditorModal({
-  server,
-  onClose,
-  onSaved,
-}: McpServerEditorModalProps) {
+export function McpServerEditorModal({ server, onClose, onSaved }: McpServerEditorModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const { addCustomServer, updateCustomServer } = useMcpStore();
 
@@ -43,11 +38,13 @@ export function McpServerEditorModal({
   const [name, setName] = useState(server?.name ?? "");
   const [command, setCommand] = useState(server?.command ?? "");
   const [argsString, setArgsString] = useState(server?.args.join(" ") ?? "");
-  const [workingDirectory, setWorkingDirectory] = useState(
-    server?.workingDirectory ?? ""
-  );
-  const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>(
-    Object.entries(server?.env ?? {}).map(([key, value]) => ({ key, value }))
+  const [workingDirectory, setWorkingDirectory] = useState(server?.workingDirectory ?? "");
+  const [envVars, setEnvVars] = useState<Array<{ id: string; key: string; value: string }>>(
+    Object.entries(server?.env ?? {}).map(([key, value]) => ({
+      id: crypto.randomUUID(),
+      key,
+      value,
+    })),
   );
   const [isEnabled, setIsEnabled] = useState(server?.isEnabled ?? true);
   const [saving, setSaving] = useState(false);
@@ -90,17 +87,11 @@ export function McpServerEditorModal({
   };
 
   const addEnvVar = () => {
-    setEnvVars([...envVars, { key: "", value: "" }]);
+    setEnvVars([...envVars, { id: crypto.randomUUID(), key: "", value: "" }]);
   };
 
-  const updateEnvVar = (
-    index: number,
-    field: "key" | "value",
-    value: string
-  ) => {
-    setEnvVars(
-      envVars.map((ev, i) => (i === index ? { ...ev, [field]: value } : ev))
-    );
+  const updateEnvVar = (index: number, field: "key" | "value", value: string) => {
+    setEnvVars(envVars.map((ev, i) => (i === index ? { ...ev, [field]: value } : ev)));
   };
 
   const removeEnvVar = (index: number) => {
@@ -145,9 +136,9 @@ export function McpServerEditorModal({
       .join(" ");
 
     let preview = "";
-    if (envPrefix) preview += envPrefix + " ";
+    if (envPrefix) preview += `${envPrefix} `;
     preview += command || "<command>";
-    if (args.length > 0) preview += " " + args.join(" ");
+    if (args.length > 0) preview += ` ${args.join(" ")}`;
     return preview;
   };
 
@@ -172,9 +163,7 @@ export function McpServerEditorModal({
         command: command.trim(),
         args: parseArgs(argsString),
         env: Object.fromEntries(
-          envVars
-            .filter((ev) => ev.key.trim())
-            .map((ev) => [ev.key.trim(), ev.value])
+          envVars.filter((ev) => ev.key.trim()).map((ev) => [ev.key.trim(), ev.value]),
         ),
         workingDirectory: workingDirectory.trim() || undefined,
         isEnabled,
@@ -190,7 +179,7 @@ export function McpServerEditorModal({
       onSaved?.();
       onClose();
     } catch (err) {
-      setError(String(err));
+      setError(toInvokeErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -220,25 +209,32 @@ export function McpServerEditorModal({
         <div className="max-h-[70vh] space-y-4 overflow-y-auto p-4">
           {/* Name */}
           <section>
-            <label className="mb-1.5 block text-xs font-medium text-maestro-text">
+            <label
+              htmlFor="mcp-server-name"
+              className="mb-1.5 block text-xs font-medium text-maestro-text"
+            >
               Name
             </label>
             <input
+              id="mcp-server-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="My MCP Server"
               className="w-full rounded border border-maestro-border bg-maestro-surface px-3 py-2 text-xs text-maestro-text placeholder:text-maestro-muted focus:border-maestro-accent focus:outline-none"
-              autoFocus
             />
           </section>
 
           {/* Command */}
           <section>
-            <label className="mb-1.5 block text-xs font-medium text-maestro-text">
+            <label
+              htmlFor="mcp-server-command"
+              className="mb-1.5 block text-xs font-medium text-maestro-text"
+            >
               Command
             </label>
             <input
+              id="mcp-server-command"
               type="text"
               value={command}
               onChange={(e) => setCommand(e.target.value)}
@@ -249,10 +245,14 @@ export function McpServerEditorModal({
 
           {/* Arguments */}
           <section>
-            <label className="mb-1.5 block text-xs font-medium text-maestro-text">
+            <label
+              htmlFor="mcp-server-args"
+              className="mb-1.5 block text-xs font-medium text-maestro-text"
+            >
               Arguments
             </label>
             <input
+              id="mcp-server-args"
               type="text"
               value={argsString}
               onChange={(e) => setArgsString(e.target.value)}
@@ -266,11 +266,15 @@ export function McpServerEditorModal({
 
           {/* Working Directory */}
           <section>
-            <label className="mb-1.5 block text-xs font-medium text-maestro-text">
+            <label
+              htmlFor="mcp-server-working-directory"
+              className="mb-1.5 block text-xs font-medium text-maestro-text"
+            >
               Working Directory
             </label>
             <div className="flex gap-2">
               <input
+                id="mcp-server-working-directory"
                 type="text"
                 value={workingDirectory}
                 onChange={(e) => setWorkingDirectory(e.target.value)}
@@ -290,9 +294,7 @@ export function McpServerEditorModal({
           {/* Environment Variables */}
           <section>
             <div className="mb-1.5 flex items-center justify-between">
-              <label className="text-xs font-medium text-maestro-text">
-                Environment Variables
-              </label>
+              <div className="text-xs font-medium text-maestro-text">Environment Variables</div>
               <button
                 type="button"
                 onClick={addEnvVar}
@@ -309,7 +311,7 @@ export function McpServerEditorModal({
                 </p>
               ) : (
                 envVars.map((ev, index) => (
-                  <div key={index} className="flex items-center gap-2">
+                  <div key={ev.id} className="flex items-center gap-2">
                     <input
                       type="text"
                       value={ev.key}
@@ -356,10 +358,10 @@ export function McpServerEditorModal({
 
           {/* Command Preview */}
           <section>
-            <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-maestro-text">
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-maestro-text">
               <Terminal size={12} />
               Command Preview
-            </label>
+            </div>
             <div className="rounded-lg border border-maestro-border bg-maestro-surface p-2">
               <code className="text-[11px] text-maestro-accent break-all">
                 {buildCommandPreview()}
@@ -368,9 +370,7 @@ export function McpServerEditorModal({
           </section>
 
           {/* Error */}
-          {error && (
-            <p className="text-xs text-maestro-red">{error}</p>
-          )}
+          {error && <p className="text-xs text-maestro-red">{error}</p>}
         </div>
 
         {/* Actions */}
@@ -393,8 +393,10 @@ export function McpServerEditorModal({
                 <Loader2 size={12} className="animate-spin" />
                 Saving...
               </>
+            ) : isEditing ? (
+              "Save Changes"
             ) : (
-              isEditing ? "Save Changes" : "Add Server"
+              "Add Server"
             )}
           </button>
         </div>

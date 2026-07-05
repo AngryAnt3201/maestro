@@ -1,4 +1,4 @@
-import { CheckCircle } from "lucide-react";
+import CheckCircle from "lucide-react/dist/esm/icons/check-circle";
 import { useMemo } from "react";
 import type { DiscussionInfo } from "../../../stores/useGitHubStore";
 import { parseEmoji } from "../shared/emojiUtils";
@@ -40,9 +40,7 @@ export function DiscussionRow({ discussion, isSelected, onClick }: DiscussionRow
       type="button"
       onClick={onClick}
       className={`flex w-full items-center gap-2 border-b border-maestro-border/30 px-3 py-2 text-left transition-colors ${
-        isSelected
-          ? "bg-maestro-accent/20 hover:bg-maestro-accent/25"
-          : "hover:bg-maestro-card/50"
+        isSelected ? "bg-maestro-accent/20 hover:bg-maestro-accent/25" : "hover:bg-maestro-card/50"
       }`}
     >
       {/* Category emoji */}
@@ -53,18 +51,12 @@ export function DiscussionRow({ discussion, isSelected, onClick }: DiscussionRow
       {/* Title and category */}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-center gap-1.5">
-          {isAnswered && (
-            <CheckCircle size={12} className="shrink-0 text-green-400" />
-          )}
-          <span className="truncate text-xs text-maestro-text">
-            {discussion.title}
-          </span>
+          {isAnswered && <CheckCircle size={12} className="shrink-0 text-green-400" />}
+          <span className="truncate text-xs text-maestro-text">{discussion.title}</span>
         </div>
         <div className="flex items-center gap-2 text-[10px] text-maestro-muted">
           <span className="font-mono">#{discussion.number}</span>
-          <span className="rounded bg-maestro-surface px-1 py-0.5">
-            {discussion.category.name}
-          </span>
+          <span className="rounded bg-maestro-surface px-1 py-0.5">{discussion.category.name}</span>
           <span>by {discussion.author.login}</span>
         </div>
       </div>

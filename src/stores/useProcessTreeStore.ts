@@ -7,6 +7,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import { toInvokeErrorMessage } from "@/lib/invokeError";
 
 /** Information about a single process. */
 export interface ProcessInfo {
@@ -91,23 +92,19 @@ export const useProcessTreeStore = create<ProcessTreeState>()((set, get) => ({
       set({ trees, isLoading: false });
     } catch (err) {
       console.error("Failed to fetch process trees:", err);
-      set({ isLoading: false, error: String(err) });
+      set({ isLoading: false, error: toInvokeErrorMessage(err) });
     }
   },
 
   fetchSessionTree: async (sessionId: number) => {
     try {
-      const tree = await invoke<SessionProcessTree | null>(
-        "get_session_process_tree",
-        { sessionId }
-      );
+      const tree = await invoke<SessionProcessTree | null>("get_session_process_tree", {
+        sessionId,
+      });
 
       if (tree) {
         set((state) => ({
-          trees: [
-            ...state.trees.filter((t) => t.sessionId !== sessionId),
-            tree,
-          ],
+          trees: [...state.trees.filter((t) => t.sessionId !== sessionId), tree],
         }));
       }
 

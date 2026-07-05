@@ -1,4 +1,7 @@
-import { GitBranch, GitPullRequest, CircleDot, MessageCircle } from "lucide-react";
+import CircleDot from "lucide-react/dist/esm/icons/circle-dot";
+import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import GitPullRequest from "lucide-react/dist/esm/icons/git-pull-request";
+import MessageCircle from "lucide-react/dist/esm/icons/message-circle";
 
 export type GitPanelTab = "commits" | "prs" | "issues" | "discussions";
 
@@ -20,12 +23,7 @@ const TABS: Array<{
   { id: "discussions", label: "Discussions", icon: MessageCircle },
 ];
 
-export function GitPanelTabs({
-  activeTab,
-  onTabChange,
-  prCount,
-  issueCount,
-}: GitPanelTabsProps) {
+export function GitPanelTabs({ activeTab, onTabChange, prCount, issueCount }: GitPanelTabsProps) {
   return (
     <div className="flex shrink-0 border-b border-maestro-border">
       {TABS.map((tab) => {

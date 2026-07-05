@@ -41,9 +41,7 @@ export function MarketplaceFilters() {
           <button
             key={cat.value}
             type="button"
-            onClick={() =>
-              setFilter("category", filters.category === cat.value ? null : cat.value)
-            }
+            onClick={() => setFilter("category", filters.category === cat.value ? null : cat.value)}
             className={`rounded-full px-2 py-0.5 text-xs transition-colors ${
               filters.category === cat.value
                 ? "bg-maestro-accent text-white"
@@ -59,16 +57,12 @@ export function MarketplaceFilters() {
 
       {/* Type chips */}
       <div className="flex flex-wrap items-center gap-1">
-        <span className="mr-1 text-[10px] uppercase tracking-wider text-maestro-muted">
-          Type:
-        </span>
+        <span className="mr-1 text-[10px] uppercase tracking-wider text-maestro-muted">Type:</span>
         {TYPES.map((t) => (
           <button
             key={t.value}
             type="button"
-            onClick={() =>
-              setFilter("type", filters.type === t.value ? null : t.value)
-            }
+            onClick={() => setFilter("type", filters.type === t.value ? null : t.value)}
             className={`rounded-full px-2 py-0.5 text-xs transition-colors ${
               filters.type === t.value
                 ? "bg-maestro-accent text-white"

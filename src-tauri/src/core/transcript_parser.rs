@@ -60,10 +60,7 @@ fn truncate(s: &str, max: usize) -> String {
 fn summarize_tool_input(tool_name: &str, input: &Value) -> String {
     match tool_name {
         "Bash" => {
-            let cmd = input
-                .get("command")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let cmd = input.get("command").and_then(|v| v.as_str()).unwrap_or("");
             truncate(cmd, 120)
         }
         "Read" | "Edit" | "Write" => input
@@ -72,10 +69,7 @@ fn summarize_tool_input(tool_name: &str, input: &Value) -> String {
             .unwrap_or("")
             .to_string(),
         "Grep" => {
-            let pattern = input
-                .get("pattern")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let pattern = input.get("pattern").and_then(|v| v.as_str()).unwrap_or("");
             let path = input.get("path").and_then(|v| v.as_str()).unwrap_or(".");
             format!("{pattern} in {path}")
         }
@@ -323,7 +317,8 @@ mod tests {
 
     const ASSISTANT_MSG_TASK: &str = r#"{"parentUuid":"uuid-user-1","isSidechain":false,"type":"assistant","message":{"model":"claude-opus-4-6","id":"msg_003","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_task1","name":"Task","input":{"description":"Search for auth code","prompt":"Find authentication","subagent_type":"Explore"}}],"usage":{"input_tokens":200,"output_tokens":30}},"uuid":"uuid-asst-3","timestamp":"2026-02-24T10:00:15.000Z"}"#;
 
-    const FILE_HISTORY: &str = r#"{"type":"file-history-snapshot","messageId":"e2c301be","snapshot":{}}"#;
+    const FILE_HISTORY: &str =
+        r#"{"type":"file-history-snapshot","messageId":"e2c301be","snapshot":{}}"#;
 
     #[test]
     fn test_parse_user_message() {
@@ -364,9 +359,9 @@ mod tests {
         );
 
         // Find ToolUseStarted for Read.
-        let tool_event = events.iter().find(|e| {
-            matches!(e, ClaudeEvent::ToolUseStarted { tool_name, .. } if tool_name == "Read")
-        });
+        let tool_event = events.iter().find(
+            |e| matches!(e, ClaudeEvent::ToolUseStarted { tool_name, .. } if tool_name == "Read"),
+        );
         assert!(tool_event.is_some(), "Should have a ToolUseStarted(Read)");
         if let Some(ClaudeEvent::ToolUseStarted {
             tool_use_id,

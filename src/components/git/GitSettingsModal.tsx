@@ -1,25 +1,27 @@
-import {
-  Check,
-  Download,
-  Edit2,
-  FolderGit2,
-  FolderSearch,
-  GitBranch,
-  Loader2,
-  Mail,
-  Plus,
-  RefreshCw,
-  RotateCcw,
-  Trash2,
-  User,
-  X,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import Check from "lucide-react/dist/esm/icons/check";
+import Download from "lucide-react/dist/esm/icons/download";
+import FolderGit2 from "lucide-react/dist/esm/icons/folder-git-2";
+import FolderSearch from "lucide-react/dist/esm/icons/folder-search";
+import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import Mail from "lucide-react/dist/esm/icons/mail";
+import Edit2 from "lucide-react/dist/esm/icons/pen";
+import Plus from "lucide-react/dist/esm/icons/plus";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
+import User from "lucide-react/dist/esm/icons/user";
+import X from "lucide-react/dist/esm/icons/x";
+import { useEffect, useRef, useState } from "react";
+import { toInvokeErrorMessage } from "@/lib/invokeError";
 import { useGitStore } from "@/stores/useGitStore";
-import { useWorkspaceStore, type RepositoryInfo } from "@/stores/useWorkspaceStore";
-import { useWorktreeSettingsStore, type WorktreeCloseAction } from "@/stores/useWorktreeSettingsStore";
+import { type RepositoryInfo, useWorkspaceStore } from "@/stores/useWorkspaceStore";
+import {
+  useWorktreeSettingsStore,
+  type WorktreeCloseAction,
+} from "@/stores/useWorktreeSettingsStore";
 import { RemoteStatusIndicator } from "./RemoteStatusIndicator";
 
 interface GitSettingsModalProps {
@@ -125,10 +127,11 @@ function UserIdentitySection({ repoPath }: { repoPath: string }) {
     }
   };
 
-  const handleChange = (setter: (v: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setter(e.target.value);
-    setDirty(true);
-  };
+  const handleChange =
+    (setter: (v: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
+      setter(e.target.value);
+      setDirty(true);
+    };
 
   return (
     <section>
@@ -220,7 +223,7 @@ function RepositoryDiscoverySection({ repoPath, tabId }: { repoPath: string; tab
       }
     } catch (err) {
       console.error("Failed to scan for repositories:", err);
-      setError(err instanceof Error ? err.message : "Failed to scan for repositories");
+      setError(toInvokeErrorMessage(err) || "Failed to scan for repositories");
     } finally {
       setScanning(false);
     }
@@ -242,32 +245,26 @@ function RepositoryDiscoverySection({ repoPath, tabId }: { repoPath: string; tab
           disabled={scanning}
           className="flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium bg-maestro-accent/10 text-maestro-accent hover:bg-maestro-accent/20 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {scanning ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <FolderSearch size={14} />
-          )}
+          {scanning ? <Loader2 size={14} className="animate-spin" /> : <FolderSearch size={14} />}
           {scanning ? "Scanning..." : "Scan for Repositories"}
         </button>
 
-        {error && (
-          <p className="text-xs text-maestro-red">{error}</p>
-        )}
+        {error && <p className="text-xs text-maestro-red">{error}</p>}
 
         {hasScanned && !error && (
           <div className="pt-2 border-t border-maestro-border">
             <p className="text-xs font-medium text-maestro-text mb-2">
-              Found {repositories.length} {repositories.length === 1 ? "repository" : "repositories"}:
+              Found {repositories.length}{" "}
+              {repositories.length === 1 ? "repository" : "repositories"}:
             </p>
             {repositories.length === 0 ? (
-              <p className="text-xs text-maestro-muted">No git repositories found in this directory.</p>
+              <p className="text-xs text-maestro-muted">
+                No git repositories found in this directory.
+              </p>
             ) : (
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {repositories.map((repo) => (
-                  <div
-                    key={repo.path}
-                    className="text-xs text-maestro-text py-1"
-                  >
+                  <div key={repo.path} className="text-xs text-maestro-text py-1">
                     <div className="flex items-center gap-2">
                       <GitBranch size={12} className="text-maestro-green shrink-0" />
                       <span className="font-medium truncate">{repo.name}</span>
@@ -276,7 +273,10 @@ function RepositoryDiscoverySection({ repoPath, tabId }: { repoPath: string; tab
                       )}
                     </div>
                     {repo.remoteUrl && (
-                      <div className="pl-5 text-[11px] text-maestro-muted truncate" title={repo.remoteUrl}>
+                      <div
+                        className="pl-5 text-[11px] text-maestro-muted truncate"
+                        title={repo.remoteUrl}
+                      >
                         {formatRemoteUrl(repo.remoteUrl)}
                       </div>
                     )}
@@ -295,8 +295,18 @@ function RepositoryDiscoverySection({ repoPath, tabId }: { repoPath: string; tab
 
 function RemotesSection({ repoPath }: { repoPath: string }) {
   const {
-    remotes, remoteStatuses, fetchRemotes, addRemote, removeRemote, setRemoteUrl,
-    testRemote, testAllRemotes, fetchRemoteRefs, fetchAllRemoteRefs, isFetching, fetchingRemotes,
+    remotes,
+    remoteStatuses,
+    fetchRemotes,
+    addRemote,
+    removeRemote,
+    setRemoteUrl,
+    testRemote,
+    testAllRemotes,
+    fetchRemoteRefs,
+    fetchAllRemoteRefs,
+    isFetching,
+    fetchingRemotes,
   } = useGitStore();
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
@@ -420,7 +430,6 @@ function RemotesSection({ repoPath }: { repoPath: string }) {
                   onChange={(e) => setEditUrl(e.target.value)}
                   placeholder="URL"
                   className="w-full rounded border border-maestro-border bg-maestro-bg px-2 py-1 text-xs text-maestro-text placeholder:text-maestro-muted focus:outline-none focus:border-maestro-accent"
-                  autoFocus
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleEditSave();
                     if (e.key === "Escape") handleEditCancel();
@@ -502,7 +511,6 @@ function RemotesSection({ repoPath }: { repoPath: string }) {
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Remote name (e.g., origin)"
               className="w-full rounded border border-maestro-border bg-maestro-bg px-2 py-1 text-xs text-maestro-text placeholder:text-maestro-muted focus:outline-none focus:border-maestro-accent"
-              autoFocus
             />
             <input
               type="text"
@@ -644,8 +652,16 @@ function SessionCloseBehaviorSection() {
 
   const options: { value: WorktreeCloseAction; label: string; description: string }[] = [
     { value: "keep", label: "Keep", description: "Preserve the worktree for the next session" },
-    { value: "delete", label: "Delete", description: "Remove the worktree when the session closes" },
-    { value: "ask", label: "Ask", description: "Prompt each time a session with a worktree closes" },
+    {
+      value: "delete",
+      label: "Delete",
+      description: "Remove the worktree when the session closes",
+    },
+    {
+      value: "ask",
+      label: "Ask",
+      description: "Prompt each time a session with a worktree closes",
+    },
   ];
 
   return (
@@ -683,7 +699,7 @@ function SessionCloseBehaviorSection() {
 
 function WorktreeSection({ tabId }: { repoPath: string; tabId: string }) {
   const worktreeBasePath = useWorkspaceStore(
-    (s) => s.tabs.find((t) => t.id === tabId)?.worktreeBasePath ?? null
+    (s) => s.tabs.find((t) => t.id === tabId)?.worktreeBasePath ?? null,
   );
   const setWorktreeBasePath = useWorkspaceStore((s) => s.setWorktreeBasePath);
 
@@ -752,7 +768,6 @@ function WorktreeSection({ tabId }: { repoPath: string; tabId: string }) {
                 onChange={(e) => setEditValue(e.target.value)}
                 placeholder="Worktree base directory"
                 className="flex-1 rounded border border-maestro-border bg-maestro-bg px-2 py-1 text-xs text-maestro-text placeholder:text-maestro-muted focus:outline-none focus:border-maestro-accent"
-                autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave();
                   if (e.key === "Escape") handleCancel();
@@ -788,15 +803,10 @@ function WorktreeSection({ tabId }: { repoPath: string; tabId: string }) {
           <>
             <div className="flex items-center gap-2">
               <FolderGit2 size={14} className="text-maestro-accent shrink-0" />
-              <span
-                className="flex-1 text-xs text-maestro-text truncate"
-                title={displayPath}
-              >
+              <span className="flex-1 text-xs text-maestro-text truncate" title={displayPath}>
                 {displayPath || "Loading..."}
               </span>
-              {!isCustom && (
-                <span className="text-[10px] text-maestro-muted">(default)</span>
-              )}
+              {!isCustom && <span className="text-[10px] text-maestro-muted">(default)</span>}
               <button
                 type="button"
                 onClick={handleEditStart}

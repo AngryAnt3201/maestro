@@ -289,9 +289,7 @@ pub async fn write_session_mcp_config(
         .into_owned();
 
     // Register this session with the status server
-    status_server
-        .register_session(session_id, &canonical)
-        .await;
+    status_server.register_session(session_id, &canonical).await;
 
     // Get the status URL and instance ID from the status server
     let status_url = status_server.status_url();
@@ -353,9 +351,7 @@ pub async fn write_opencode_mcp_config(
         .into_owned();
 
     // Register this session with the status server
-    status_server
-        .register_session(session_id, &canonical)
-        .await;
+    status_server.register_session(session_id, &canonical).await;
 
     // Get the status URL and instance ID from the status server
     let status_url = status_server.status_url();
@@ -423,7 +419,10 @@ pub async fn remove_session_mcp_config(working_dir: String, session_id: u32) -> 
 ///
 /// This should be called when an OpenCode session is killed to clean up the config file.
 #[tauri::command]
-pub async fn remove_opencode_mcp_config(working_dir: String, session_id: u32) -> Result<(), String> {
+pub async fn remove_opencode_mcp_config(
+    working_dir: String,
+    session_id: u32,
+) -> Result<(), String> {
     let path = PathBuf::from(&working_dir);
     mcp_config_writer::remove_opencode_mcp_config(&path, session_id).await
 }

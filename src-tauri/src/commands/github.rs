@@ -118,10 +118,7 @@ pub async fn github_list_discussions(
 
 /// Gets detailed information about a specific issue.
 #[tauri::command]
-pub async fn github_get_issue(
-    repo_path: String,
-    number: u64,
-) -> Result<IssueDetail, GitHubError> {
+pub async fn github_get_issue(repo_path: String, number: u64) -> Result<IssueDetail, GitHubError> {
     let gh = GitHub::new(&repo_path);
     gh.get_issue(number).await
 }

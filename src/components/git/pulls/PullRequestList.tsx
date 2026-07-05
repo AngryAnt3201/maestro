@@ -1,4 +1,4 @@
-import { GitPullRequest } from "lucide-react";
+import GitPullRequest from "lucide-react/dist/esm/icons/git-pull-request";
 import { useGitHubStore } from "../../../stores/useGitHubStore";
 import { PullRequestFilters } from "./PullRequestFilters";
 import { PullRequestRow } from "./PullRequestRow";
@@ -9,11 +9,7 @@ interface PullRequestListProps {
   selectedPRNumber: number | null;
 }
 
-export function PullRequestList({
-  repoPath,
-  onSelectPR,
-  selectedPRNumber,
-}: PullRequestListProps) {
+export function PullRequestList({ repoPath, onSelectPR, selectedPRNumber }: PullRequestListProps) {
   const { pullRequests, isPRsLoading, prsError } = useGitHubStore();
 
   if (prsError) {
@@ -42,14 +38,8 @@ export function PullRequestList({
       {pullRequests.length === 0 ? (
         <div className="flex flex-1 items-center justify-center px-4 text-center">
           <div className="flex flex-col items-center gap-3">
-            <GitPullRequest
-              size={32}
-              className="text-maestro-muted/30"
-              strokeWidth={1}
-            />
-            <p className="text-xs text-maestro-muted/60">
-              No pull requests found
-            </p>
+            <GitPullRequest size={32} className="text-maestro-muted/30" strokeWidth={1} />
+            <p className="text-xs text-maestro-muted/60">No pull requests found</p>
           </div>
         </div>
       ) : (

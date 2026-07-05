@@ -1,60 +1,103 @@
-import {
-  Activity,
-  AlertTriangle,
-  Bot,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Circle,
-  Cpu,
-  Edit2,
-  FileText,
-  FolderGit2,
-  GitBranch,
-  Globe,
-  Home,
-  Info,
-  Loader2,
-  Moon,
-  Package,
-  Play,
-  Plus,
-  PlusCircle,
-  RefreshCw,
-  Server,
-  Settings,
-  Skull,
-  Sparkles,
-  Store,
-  Sun,
-  Trash2,
-  User,
-  Wrench,
-  X,
-  Zap,
-} from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { type AiMode, type BackendSessionStatus, useSessionStore } from "@/stores/useSessionStore";
+import Activity from "lucide-react/dist/esm/icons/activity";
+import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
+import Bot from "lucide-react/dist/esm/icons/bot";
+import Check from "lucide-react/dist/esm/icons/check";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import Circle from "lucide-react/dist/esm/icons/circle";
+import Cpu from "lucide-react/dist/esm/icons/cpu";
+import FileText from "lucide-react/dist/esm/icons/file-text";
+import FolderGit2 from "lucide-react/dist/esm/icons/folder-git-2";
+import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import Globe from "lucide-react/dist/esm/icons/globe";
+import Home from "lucide-react/dist/esm/icons/home";
+import Info from "lucide-react/dist/esm/icons/info";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import Moon from "lucide-react/dist/esm/icons/moon";
+import Package from "lucide-react/dist/esm/icons/package";
+import Edit2 from "lucide-react/dist/esm/icons/pen";
+import Play from "lucide-react/dist/esm/icons/play";
+import Plus from "lucide-react/dist/esm/icons/plus";
+import PlusCircle from "lucide-react/dist/esm/icons/plus-circle";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import Server from "lucide-react/dist/esm/icons/server";
+import Settings from "lucide-react/dist/esm/icons/settings";
+import Skull from "lucide-react/dist/esm/icons/skull";
+import Sparkles from "lucide-react/dist/esm/icons/sparkles";
+import Store from "lucide-react/dist/esm/icons/store";
+import Sun from "lucide-react/dist/esm/icons/sun";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
+import User from "lucide-react/dist/esm/icons/user";
+import Wrench from "lucide-react/dist/esm/icons/wrench";
+import X from "lucide-react/dist/esm/icons/x";
+import Zap from "lucide-react/dist/esm/icons/zap";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { RemoteStatusIndicator } from "@/components/git/RemoteStatusIndicator";
+import { OpenCodeIcon } from "@/components/icons/OpenCodeIcon";
+import { SidebarResizeHandle } from "@/components/sidebar/components/SidebarResizeHandle/SidebarResizeHandle";
+import { SidebarTabButton } from "@/components/sidebar/components/SidebarTabButton/SidebarTabButton";
+import { useSidebarResize } from "@/components/sidebar/hooks/useSidebarResize";
+import { type ClaudeMdStatus, checkClaudeMd } from "@/lib/claudemd";
+import type { McpCustomServer } from "@/lib/mcp";
 import { useGitStore } from "@/stores/useGitStore";
+import { useMarketplaceStore } from "@/stores/useMarketplaceStore";
 import { useMcpStore } from "@/stores/useMcpStore";
 import { usePluginStore } from "@/stores/usePluginStore";
-import { useMarketplaceStore } from "@/stores/useMarketplaceStore";
-import { useWorkspaceStore } from "@/stores/useWorkspaceStore";
-import { useProcessTreeStore, type ProcessInfo, type SessionProcessTree } from "@/stores/useProcessTreeStore";
+import {
+  type ProcessInfo,
+  type SessionProcessTree,
+  useProcessTreeStore,
+} from "@/stores/useProcessTreeStore";
+import { type AiMode, type BackendSessionStatus, useSessionStore } from "@/stores/useSessionStore";
 import { useUsageStore } from "@/stores/useUsageStore";
-import { GitSettingsModal, RemoteStatusIndicator } from "@/components/git";
-import { QuickActionsManager } from "@/components/quickactions/QuickActionsManager";
-import { MarketplaceBrowser } from "@/components/marketplace";
-import { McpServerEditorModal } from "@/components/mcp";
-import { ClaudeMdEditorModal } from "@/components/claudemd";
-import { CliSettingsModal } from "@/components/terminal/CliSettingsModal";
-import { TerminalSettingsModal } from "@/components/terminal/TerminalSettingsModal";
-import { MaestroSettingsModal } from "@/components/settings";
-import { Tamagotchi } from "@/components/tamagotchi";
-import type { McpCustomServer } from "@/lib/mcp";
-import { checkClaudeMd, type ClaudeMdStatus } from "@/lib/claudemd";
-import { OpenCodeIcon } from "@/components/icons/OpenCodeIcon";
+import { useWorkspaceStore } from "@/stores/useWorkspaceStore";
+
+const ClaudeMdEditorModal = lazy(() =>
+  import("@/components/claudemd/ClaudeMdEditorModal").then((module) => ({
+    default: module.ClaudeMdEditorModal,
+  })),
+);
+const CliSettingsModal = lazy(() =>
+  import("@/components/terminal/CliSettingsModal").then((module) => ({
+    default: module.CliSettingsModal,
+  })),
+);
+const GitSettingsModal = lazy(() =>
+  import("@/components/git/GitSettingsModal").then((module) => ({
+    default: module.GitSettingsModal,
+  })),
+);
+const MaestroSettingsModal = lazy(() =>
+  import("@/components/settings/MaestroSettingsModal").then((module) => ({
+    default: module.MaestroSettingsModal,
+  })),
+);
+const MarketplaceBrowser = lazy(() =>
+  import("@/components/marketplace/MarketplaceBrowser").then((module) => ({
+    default: module.MarketplaceBrowser,
+  })),
+);
+const McpServerEditorModal = lazy(() =>
+  import("@/components/mcp/McpServerEditorModal").then((module) => ({
+    default: module.McpServerEditorModal,
+  })),
+);
+const QuickActionsManager = lazy(() =>
+  import("@/components/quickactions/QuickActionsManager").then((module) => ({
+    default: module.QuickActionsManager,
+  })),
+);
+const Tamagotchi = lazy(() =>
+  import("@/components/tamagotchi/Tamagotchi").then((module) => ({
+    default: module.Tamagotchi,
+  })),
+);
+const TerminalSettingsModal = lazy(() =>
+  import("@/components/terminal/TerminalSettingsModal").then((module) => ({
+    default: module.TerminalSettingsModal,
+  })),
+);
 
 type SidebarTab = "config" | "processes";
 
@@ -70,11 +113,6 @@ const cardClass =
   "sidebar-card-link rounded-lg border border-maestro-border/60 bg-maestro-card p-3 overflow-hidden shadow-[0_1px_4px_rgb(0_0_0/0.15),0_0_0_1px_rgb(255_255_255/0.03)_inset] transition-shadow hover:shadow-[0_2px_8px_rgb(0_0_0/0.25),0_0_0_1px_rgb(255_255_255/0.05)_inset]";
 
 const divider = <div className="h-px bg-maestro-border/30 my-1" />;
-
-const SIDEBAR_MIN_WIDTH = 180;
-const SIDEBAR_MAX_WIDTH = 320;
-const SIDEBAR_COLLAPSE_THRESHOLD = 60;
-const SIDEBAR_WIDTH_STEP = 4;
 
 const STATUS_DOT_CLASS: Record<BackendSessionStatus, string> = {
   Starting: "bg-maestro-orange",
@@ -102,88 +140,9 @@ const STATUS_LABEL: Record<BackendSessionStatus, string> = {
 
 export function Sidebar({ collapsed, onCollapse, theme, onToggleTheme }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<SidebarTab>("config");
-  const [width, setWidth] = useState(240);
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef<{ x: number; w: number } | null>(null);
+  const { width, minWidth, maxWidth, isDragging, handleDragStart, handleResizeKeyDown } =
+    useSidebarResize({ onCollapse });
   const sidebarWidthClass = collapsed ? "w-0" : `sidebar-w-${width}`;
-
-  const handleDragStart = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      setIsDragging(true);
-      dragStartRef.current = { x: e.clientX, w: width };
-    },
-    [width],
-  );
-
-  const clampWidth = useCallback((value: number) => {
-    const clamped = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, value));
-    const snapped = Math.round(clamped / SIDEBAR_WIDTH_STEP) * SIDEBAR_WIDTH_STEP;
-    return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, snapped));
-  }, []);
-
-  const handleResizeKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      let next = width;
-      const smallStep = 8;
-      const largeStep = 24;
-
-      switch (e.key) {
-        case "ArrowLeft":
-          next = width - smallStep;
-          break;
-        case "ArrowRight":
-          next = width + smallStep;
-          break;
-        case "PageDown":
-          next = width - largeStep;
-          break;
-        case "PageUp":
-          next = width + largeStep;
-          break;
-        case "Home":
-          next = SIDEBAR_MIN_WIDTH;
-          break;
-        case "End":
-          next = SIDEBAR_MAX_WIDTH;
-          break;
-        default:
-          return;
-      }
-
-      e.preventDefault();
-      if (next < SIDEBAR_COLLAPSE_THRESHOLD) {
-        onCollapse?.();
-        return;
-      }
-      setWidth(clampWidth(next));
-    },
-    [width, onCollapse, clampWidth],
-  );
-
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const onMove = (e: MouseEvent) => {
-      if (!dragStartRef.current) return;
-      const raw = dragStartRef.current.w + (e.clientX - dragStartRef.current.x);
-      if (raw < SIDEBAR_COLLAPSE_THRESHOLD) {
-        setIsDragging(false);
-        onCollapse?.();
-        return;
-      }
-      setWidth(clampWidth(raw));
-    };
-
-    const onUp = () => setIsDragging(false);
-
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    return () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-  }, [isDragging, onCollapse, clampWidth]);
 
   return (
     // Use a class-based width to avoid inline styles (CSP-friendly).
@@ -194,30 +153,22 @@ export function Sidebar({ collapsed, onCollapse, theme, onToggleTheme }: Sidebar
     >
       {/* Tab switcher */}
       <div className="flex shrink-0 border-b border-maestro-border">
-        <button
-          type="button"
-          onClick={() => setActiveTab("config")}
-          className={`flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[11px] font-semibold tracking-wide uppercase ${
-            activeTab === "config"
-              ? "border-b-2 border-maestro-accent text-maestro-accent"
-              : "text-maestro-muted hover:text-maestro-text"
-          }`}
+        <SidebarTabButton
+          tab="config"
+          activeTab={activeTab}
+          icon={<Settings size={12} />}
+          onSelect={setActiveTab}
         >
-          <Settings size={12} />
           Config
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("processes")}
-          className={`flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[11px] font-semibold tracking-wide uppercase ${
-            activeTab === "processes"
-              ? "border-b-2 border-maestro-accent text-maestro-accent"
-              : "text-maestro-muted hover:text-maestro-text"
-          }`}
+        </SidebarTabButton>
+        <SidebarTabButton
+          tab="processes"
+          activeTab={activeTab}
+          icon={<Activity size={12} />}
+          onSelect={setActiveTab}
         >
-          <Activity size={12} />
           Processes
-        </button>
+        </SidebarTabButton>
       </div>
 
       {/* Scrollable content */}
@@ -230,21 +181,18 @@ export function Sidebar({ collapsed, onCollapse, theme, onToggleTheme }: Sidebar
       </div>
 
       {/* Tamagotchi widget - fixed footer */}
-      {!collapsed && <Tamagotchi />}
+      {!collapsed && (
+        <Suspense fallback={null}>
+          <Tamagotchi />
+        </Suspense>
+      )}
 
       {/* Drag handle */}
       {!collapsed && (
-        // biome-ignore lint/a11y/useSemanticElements: Vertical resizer requires interactive div for pointer/keyboard handling.
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-valuemin={SIDEBAR_MIN_WIDTH}
-          aria-valuemax={SIDEBAR_MAX_WIDTH}
-          aria-valuenow={Math.round(width)}
-          aria-valuetext={`${Math.round(width)} pixels`}
-          tabIndex={0}
-          aria-label="Resize sidebar"
-          className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-maestro-accent/30 active:bg-maestro-accent/40"
+        <SidebarResizeHandle
+          width={width}
+          minWidth={minWidth}
+          maxWidth={maxWidth}
           onMouseDown={handleDragStart}
           onKeyDown={handleResizeKeyDown}
         />
@@ -341,7 +289,9 @@ function GitRepositorySection() {
 
   // Fetch default worktree base dir on mount
   useEffect(() => {
-    invoke<string>("get_default_worktree_base_dir").then(setDefaultWorktreeBase).catch(() => {});
+    invoke<string>("get_default_worktree_base_dir")
+      .then(setDefaultWorktreeBase)
+      .catch(() => {});
   }, []);
 
   // Fetch data on mount and when repoPath changes
@@ -385,11 +335,7 @@ function GitRepositorySection() {
   if (!repoPath) {
     return (
       <div className={cardClass}>
-        <SectionHeader
-          icon={GitBranch}
-          label="Git Repository"
-          iconColor="text-maestro-muted"
-        />
+        <SectionHeader icon={GitBranch} label="Git Repository" iconColor="text-maestro-muted" />
         <div className="px-1 py-1 text-xs text-maestro-muted">No project selected</div>
       </div>
     );
@@ -444,7 +390,9 @@ function GitRepositorySection() {
           <div className="mt-2 border-t border-maestro-border/30 pt-2 min-w-0 overflow-hidden">
             <div className="flex items-center gap-2 px-1 py-1 min-w-0">
               <FolderGit2 size={12} className="text-maestro-accent shrink-0" />
-              <span className="text-xs font-semibold text-maestro-text truncate min-w-0">Worktrees</span>
+              <span className="text-xs font-semibold text-maestro-text truncate min-w-0">
+                Worktrees
+              </span>
               {!worktreeBasePath && (
                 <span className="text-[10px] text-maestro-muted/60 shrink-0">(default)</span>
               )}
@@ -460,7 +408,13 @@ function GitRepositorySection() {
       </div>
 
       {showSettings && (
-        <GitSettingsModal repoPath={repoPath} tabId={activeTab?.id ?? ""} onClose={() => setShowSettings(false)} />
+        <Suspense fallback={null}>
+          <GitSettingsModal
+            repoPath={repoPath}
+            tabId={activeTab?.id ?? ""}
+            onClose={() => setShowSettings(false)}
+          />
+        </Suspense>
       )}
     </>
   );
@@ -516,11 +470,7 @@ function ProjectContextSection() {
   if (!projectPath) {
     return (
       <div className={cardClass}>
-        <SectionHeader
-          icon={FileText}
-          label="Project Context"
-          iconColor="text-maestro-muted"
-        />
+        <SectionHeader icon={FileText} label="Project Context" iconColor="text-maestro-muted" />
         <div className="flex items-center gap-2 px-1 py-1">
           <span className="text-xs text-maestro-muted">No project selected</span>
         </div>
@@ -530,9 +480,18 @@ function ProjectContextSection() {
 
   return (
     <>
+      {/* biome-ignore lint/a11y/useSemanticElements: Card contains a nested refresh button, so it cannot be a button. */}
       <div
         className={`${cardClass} cursor-pointer`}
         onClick={handleClick}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            handleClick();
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <SectionHeader
           icon={FileText}
@@ -576,15 +535,17 @@ function ProjectContextSection() {
       </div>
 
       {showEditor && projectPath && (
-        <ClaudeMdEditorModal
-          projectPath={projectPath}
-          exists={fileExists}
-          initialContent={status?.content ?? undefined}
-          onClose={() => setShowEditor(false)}
-          onSaved={() => {
-            checkStatus();
-          }}
-        />
+        <Suspense fallback={null}>
+          <ClaudeMdEditorModal
+            projectPath={projectPath}
+            exists={fileExists}
+            initialContent={status?.content ?? undefined}
+            onClose={() => setShowEditor(false)}
+            onSaved={() => {
+              checkStatus();
+            }}
+          />
+        </Suspense>
       )}
     </>
   );
@@ -671,15 +632,15 @@ function SessionsSection() {
                       if (e.key === "Escape") cancelEditing();
                     }}
                     className="flex-1 rounded border border-maestro-accent bg-maestro-card px-1 py-0 text-xs font-medium text-maestro-text outline-none"
-                    autoFocus
                   />
                 ) : (
-                  <span
-                    className="flex-1 cursor-text truncate font-medium"
+                  <button
+                    type="button"
+                    className="flex-1 cursor-text truncate text-left font-medium"
                     onClick={() => startEditing(s)}
                   >
                     {s.name || `#${s.id}`}
-                  </span>
+                  </button>
                 )}
                 <span className="text-[10px] text-maestro-muted">{STATUS_LABEL[s.status]}</span>
               </div>
@@ -898,7 +859,10 @@ function MCPServersSection() {
               <ChevronRight size={13} className="text-maestro-muted/80" />
             )}
           </button>
-          <Server size={13} className={totalCount > 0 ? "text-maestro-green" : "text-maestro-muted/80"} />
+          <Server
+            size={13}
+            className={totalCount > 0 ? "text-maestro-green" : "text-maestro-muted/80"}
+          />
           <span className="flex-1">MCP Servers</span>
           {totalCount > 0 && (
             <span className="bg-maestro-green/20 text-maestro-green text-[10px] px-1.5 rounded-full font-bold">
@@ -912,7 +876,10 @@ function MCPServersSection() {
               className="rounded p-0.5 hover:bg-maestro-border/40"
               title="Refresh MCP servers"
             >
-              <RefreshCw size={12} className={`text-maestro-muted ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                size={12}
+                className={`text-maestro-muted ${loading ? "animate-spin" : ""}`}
+              />
             </button>
             <button
               type="button"
@@ -1005,11 +972,13 @@ function MCPServersSection() {
 
       {/* Editor Modal */}
       {showEditorModal && (
-        <McpServerEditorModal
-          server={editingServer}
-          onClose={() => setShowEditorModal(false)}
-          onSaved={() => fetchCustomServers()}
-        />
+        <Suspense fallback={null}>
+          <McpServerEditorModal
+            server={editingServer}
+            onClose={() => setShowEditorModal(false)}
+            onSaved={() => fetchCustomServers()}
+          />
+        </Suspense>
       )}
     </>
   );
@@ -1020,7 +989,11 @@ function MCPServersSection() {
 import type { SkillSource } from "@/lib/plugins";
 
 /** Returns badge styling and text for a skill source. */
-function getSkillSourceBadge(source: SkillSource): { text: string; className: string; icon: React.ElementType } {
+function getSkillSourceBadge(source: SkillSource): {
+  text: string;
+  className: string;
+  icon: React.ElementType;
+} {
   switch (source.type) {
     case "project":
       return {
@@ -1057,9 +1030,24 @@ function PluginsSection() {
   const activeTab = tabs.find((t) => t.active);
   const projectPath = activeTab?.projectPath ?? "";
 
-  const { projectSkills, projectPlugins, fetchProjectPlugins, refreshProjectPlugins, isLoading, deleteSkill, deletingSkillId, deletePlugin, deletingPluginId } =
-    usePluginStore();
-  const { uninstallPluginById, uninstallingPluginId, installedPlugins, fetchAll: fetchMarketplace, isLoading: marketplaceLoading } = useMarketplaceStore();
+  const {
+    projectSkills,
+    projectPlugins,
+    fetchProjectPlugins,
+    refreshProjectPlugins,
+    isLoading,
+    deleteSkill,
+    deletingSkillId,
+    deletePlugin,
+    deletingPluginId,
+  } = usePluginStore();
+  const {
+    uninstallPluginById,
+    uninstallingPluginId,
+    installedPlugins,
+    fetchAll: fetchMarketplace,
+    isLoading: marketplaceLoading,
+  } = useMarketplaceStore();
   const [marketplaceFetched, setMarketplaceFetched] = useState(false);
   const skills = projectPath ? (projectSkills[projectPath] ?? []) : [];
   const plugins = projectPath ? (projectPlugins[projectPath] ?? []) : [];
@@ -1133,47 +1121,70 @@ function PluginsSection() {
   }, [projectPath, refreshProjectPlugins]);
 
   // Handle uninstalling a plugin (installed or marketplace)
-  const handleUninstallPlugin = useCallback(async (e: React.MouseEvent, pluginId: string, pluginPath: string | null, pluginSource: string) => {
-    e.stopPropagation();
+  const handleUninstallPlugin = useCallback(
+    async (
+      e: React.MouseEvent,
+      pluginId: string,
+      pluginPath: string | null,
+      pluginSource: string,
+    ) => {
+      e.stopPropagation();
 
-    // For "installed" plugins (manually installed to ~/.claude/plugins/), delete directly
-    if (pluginSource === "installed" && pluginPath && projectPath) {
-      await deletePlugin(pluginId, pluginPath, projectPath);
-      return;
-    }
-
-    // For "marketplace" plugins, use the marketplace uninstall
-    const installedPlugin = installedPlugins.find(
-      (p) => p.path === pluginPath || p.plugin_id === pluginId || p.id === pluginId
-    );
-    if (installedPlugin) {
-      await uninstallPluginById(installedPlugin.id);
-      // Refresh both marketplace and plugins lists
-      await fetchMarketplace();
-      if (projectPath) {
-        await refreshProjectPlugins(projectPath);
+      // For "installed" plugins (manually installed to ~/.claude/plugins/), delete directly
+      if (pluginSource === "installed" && pluginPath && projectPath) {
+        await deletePlugin(pluginId, pluginPath, projectPath);
+        return;
       }
-    } else {
-      console.warn("Could not find installed plugin to uninstall:", { pluginId, pluginPath, pluginSource, installedPlugins });
-    }
-  }, [installedPlugins, uninstallPluginById, fetchMarketplace, projectPath, refreshProjectPlugins, deletePlugin]);
+
+      // For "marketplace" plugins, use the marketplace uninstall
+      const installedPlugin = installedPlugins.find(
+        (p) => p.path === pluginPath || p.plugin_id === pluginId || p.id === pluginId,
+      );
+      if (installedPlugin) {
+        await uninstallPluginById(installedPlugin.id);
+        // Refresh both marketplace and plugins lists
+        await fetchMarketplace();
+        if (projectPath) {
+          await refreshProjectPlugins(projectPath);
+        }
+      } else {
+        console.warn("Could not find installed plugin to uninstall:", {
+          pluginId,
+          pluginPath,
+          pluginSource,
+          installedPlugins,
+        });
+      }
+    },
+    [
+      installedPlugins,
+      uninstallPluginById,
+      fetchMarketplace,
+      projectPath,
+      refreshProjectPlugins,
+      deletePlugin,
+    ],
+  );
 
   // Handle deleting a standalone skill
-  const handleDeleteSkill = useCallback(async (e: React.MouseEvent, skillId: string, skillPath: string | null) => {
-    e.stopPropagation();
-    if (!skillPath || !projectPath) return;
-    // skill.path points to SKILL.md file, we need the parent directory
-    const skillDir = skillPath.replace(/\/[^/]+$/, ""); // Remove filename to get directory
-    await deleteSkill(skillId, skillDir, projectPath);
-  }, [deleteSkill, projectPath]);
+  const handleDeleteSkill = useCallback(
+    async (e: React.MouseEvent, skillId: string, skillPath: string | null) => {
+      e.stopPropagation();
+      if (!skillPath || !projectPath) return;
+      // skill.path points to SKILL.md file, we need the parent directory
+      const skillDir = skillPath.replace(/\/[^/]+$/, ""); // Remove filename to get directory
+      await deleteSkill(skillId, skillDir, projectPath);
+    },
+    [deleteSkill, projectPath],
+  );
 
   // Check if a plugin can be uninstalled (installed or marketplace, not builtin)
-  const canUninstallPlugin = (plugin: typeof plugins[0]) => {
+  const canUninstallPlugin = (plugin: (typeof plugins)[0]) => {
     return plugin.plugin_source === "installed" || plugin.plugin_source === "marketplace";
   };
 
   // Check if a skill can be deleted (project or personal, not plugin-owned or legacy)
-  const canDeleteSkill = (skill: typeof skills[0]) => {
+  const canDeleteSkill = (skill: (typeof skills)[0]) => {
     return (skill.source.type === "project" || skill.source.type === "personal") && skill.path;
   };
 
@@ -1191,7 +1202,10 @@ function PluginsSection() {
             <ChevronRight size={13} className="text-maestro-muted/80" />
           )}
         </button>
-        <Store size={13} className={totalCount > 0 ? "text-maestro-purple" : "text-maestro-muted/80"} />
+        <Store
+          size={13}
+          className={totalCount > 0 ? "text-maestro-purple" : "text-maestro-muted/80"}
+        />
         <span className="flex-1">Plugins & Skills</span>
         {totalCount > 0 && (
           <span className="bg-maestro-purple/20 text-maestro-purple text-[10px] px-1.5 rounded-full font-bold">
@@ -1205,7 +1219,10 @@ function PluginsSection() {
             className="rounded p-0.5 hover:bg-maestro-border/40"
             title="Refresh plugins"
           >
-            <RefreshCw size={12} className={`text-maestro-muted ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              size={12}
+              className={`text-maestro-muted ${loading ? "animate-spin" : ""}`}
+            />
           </button>
           <button
             type="button"
@@ -1224,9 +1241,7 @@ function PluginsSection() {
             <div className="px-2 py-1 text-[11px] text-maestro-muted/60">No project selected</div>
           ) : totalCount === 0 ? (
             <>
-              <div className="px-2 py-1 text-[11px] text-maestro-muted/60">
-                No skills found
-              </div>
+              <div className="px-2 py-1 text-[11px] text-maestro-muted/60">No skills found</div>
               <div className="px-2 text-[10px] text-maestro-muted/40">
                 Add skills to .claude/skills/ or ~/.claude/skills/
               </div>
@@ -1244,7 +1259,8 @@ function PluginsSection() {
                     const isPluginExpanded = expandedPlugins.has(plugin.id);
                     // Check if plugin is being uninstalled/deleted
                     const matchingInstalled = installedPlugins.find(
-                      (p) => p.path === plugin.path || p.plugin_id === plugin.id || p.id === plugin.id
+                      (p) =>
+                        p.path === plugin.path || p.plugin_id === plugin.id || p.id === plugin.id,
                     );
                     const isUninstalling =
                       deletingPluginId === plugin.id ||
@@ -1272,23 +1288,38 @@ function PluginsSection() {
                               <span className="w-[10px]" />
                             )}
                             <Package size={12} className="shrink-0 text-maestro-purple" />
-                            <span className="flex-1 truncate font-medium text-left">{plugin.name}</span>
+                            <span className="flex-1 truncate font-medium text-left">
+                              {plugin.name}
+                            </span>
                           </button>
                           {pluginSkills.length > 0 && (
-                            <span className="text-[10px] text-maestro-muted">{pluginSkills.length}</span>
+                            <span className="text-[10px] text-maestro-muted">
+                              {pluginSkills.length}
+                            </span>
                           )}
                           <span className="text-[10px] text-maestro-muted">v{plugin.version}</span>
                           {canUninstallPlugin(plugin) && (
                             <button
                               type="button"
-                              onClick={(e) => handleUninstallPlugin(e, plugin.id, plugin.path, plugin.plugin_source)}
+                              onClick={(e) =>
+                                handleUninstallPlugin(
+                                  e,
+                                  plugin.id,
+                                  plugin.path,
+                                  plugin.plugin_source,
+                                )
+                              }
                               disabled={isUninstalling}
                               className="shrink-0 rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-maestro-red/10 transition-opacity"
                               title="Uninstall plugin"
                             >
                               <Trash2
                                 size={10}
-                                className={isUninstalling ? "text-maestro-muted animate-pulse" : "text-maestro-red"}
+                                className={
+                                  isUninstalling
+                                    ? "text-maestro-muted animate-pulse"
+                                    : "text-maestro-red"
+                                }
                               />
                             </button>
                           )}
@@ -1345,7 +1376,9 @@ function PluginsSection() {
                           >
                             <Trash2
                               size={10}
-                              className={isDeleting ? "text-maestro-muted animate-pulse" : "text-maestro-red"}
+                              className={
+                                isDeleting ? "text-maestro-muted animate-pulse" : "text-maestro-red"
+                              }
                             />
                           </button>
                         )}
@@ -1361,10 +1394,12 @@ function PluginsSection() {
 
       {/* Marketplace Browser Modal */}
       {showMarketplace && (
-        <MarketplaceBrowser
-          onClose={() => setShowMarketplace(false)}
-          currentProjectPath={projectPath}
-        />
+        <Suspense fallback={null}>
+          <MarketplaceBrowser
+            onClose={() => setShowMarketplace(false)}
+            currentProjectPath={projectPath}
+          />
+        </Suspense>
       )}
     </div>
   );
@@ -1419,7 +1454,9 @@ function QuickActionsSection() {
       </div>
 
       {showManager && (
-        <QuickActionsManager onClose={() => setShowManager(false)} />
+        <Suspense fallback={null}>
+          <QuickActionsManager onClose={() => setShowManager(false)} />
+        </Suspense>
       )}
     </>
   );
@@ -1494,13 +1531,19 @@ function AppearanceSection({
       </div>
 
       {showTerminalSettings && (
-        <TerminalSettingsModal onClose={() => setShowTerminalSettings(false)} />
+        <Suspense fallback={null}>
+          <TerminalSettingsModal onClose={() => setShowTerminalSettings(false)} />
+        </Suspense>
       )}
       {showCliSettings && (
-        <CliSettingsModal onClose={() => setShowCliSettings(false)} />
+        <Suspense fallback={null}>
+          <CliSettingsModal onClose={() => setShowCliSettings(false)} />
+        </Suspense>
       )}
       {showMaestroSettings && (
-        <MaestroSettingsModal onClose={() => setShowMaestroSettings(false)} />
+        <Suspense fallback={null}>
+          <MaestroSettingsModal onClose={() => setShowMaestroSettings(false)} />
+        </Suspense>
       )}
     </>
   );
@@ -1698,7 +1741,10 @@ function ProcessTreeSection() {
               className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-maestro-red/20 transition-opacity"
               title={`Kill process ${process.pid}`}
             >
-              <X size={10} className={isKilling ? "text-maestro-muted animate-pulse" : "text-maestro-red"} />
+              <X
+                size={10}
+                className={isKilling ? "text-maestro-muted animate-pulse" : "text-maestro-red"}
+              />
             </button>
           )}
         </div>
@@ -1730,7 +1776,10 @@ function ProcessTreeSection() {
             <ChevronRight size={13} className="text-maestro-muted/80" />
           )}
         </button>
-        <Globe size={13} className={totalProcesses > 0 ? "text-maestro-green" : "text-maestro-muted/80"} />
+        <Globe
+          size={13}
+          className={totalProcesses > 0 ? "text-maestro-green" : "text-maestro-muted/80"}
+        />
         <span className="flex-1">Process Tree</span>
         {totalProcesses > 0 && (
           <span className="bg-maestro-green/20 text-maestro-green text-[10px] px-1.5 rounded-full font-bold">
@@ -1743,7 +1792,10 @@ function ProcessTreeSection() {
           className="rounded p-0.5 hover:bg-maestro-border/40"
           title="Refresh process tree"
         >
-          <RefreshCw size={12} className={`text-maestro-muted ${isLoading ? "animate-spin" : ""}`} />
+          <RefreshCw
+            size={12}
+            className={`text-maestro-muted ${isLoading ? "animate-spin" : ""}`}
+          />
         </button>
       </div>
 

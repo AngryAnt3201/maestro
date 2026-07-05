@@ -1,21 +1,27 @@
+import BrainCircuit from "lucide-react/dist/esm/icons/brain-circuit";
+import CheckCircle from "lucide-react/dist/esm/icons/check-circle";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
+import Code2 from "lucide-react/dist/esm/icons/code-2";
+import Expand from "lucide-react/dist/esm/icons/expand";
+import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import GitCompareArrows from "lucide-react/dist/esm/icons/git-compare-arrows";
+import Minimize from "lucide-react/dist/esm/icons/minimize";
+import Sparkles from "lucide-react/dist/esm/icons/sparkles";
+import Terminal from "lucide-react/dist/esm/icons/terminal";
+import X from "lucide-react/dist/esm/icons/x";
+import ZoomIn from "lucide-react/dist/esm/icons/zoom-in";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import {
-  BrainCircuit,
-  CheckCircle,
-  ChevronDown,
-  Code2,
-  Expand,
-  GitBranch,
-  GitCompareArrows,
-  Minimize,
-  Sparkles,
-  Terminal,
-  X,
-  ZoomIn,
-} from "lucide-react";
-import { OpenCodeIcon, type IconComponent } from "@/components/icons";
+import type { IconComponent } from "@/components/icons/IconComponent.types";
+import { OpenCodeIcon } from "@/components/icons/OpenCodeIcon";
 
-export type SessionStatus = "idle" | "starting" | "working" | "needs-input" | "done" | "error" | "timeout";
+export type SessionStatus =
+  | "idle"
+  | "starting"
+  | "working"
+  | "needs-input"
+  | "done"
+  | "error"
+  | "timeout";
 
 export type AIProvider = "claude" | "gemini" | "codex" | "opencode" | "plain";
 
@@ -223,7 +229,9 @@ export const TerminalHeader = memo(function TerminalHeader({
   const adaptive = getAdaptiveClasses();
 
   return (
-    <div className={`no-select flex ${adaptive.headerHeight} shrink-0 items-center ${adaptive.gapSize} border-b border-maestro-border bg-maestro-surface px-2`}>
+    <div
+      className={`no-select flex ${adaptive.headerHeight} shrink-0 items-center ${adaptive.gapSize} border-b border-maestro-border bg-maestro-surface px-2`}
+    >
       {/* Left cluster */}
       <div className={`flex min-w-0 flex-1 items-center ${adaptive.gapSize}`}>
         {/* AI provider icon + dropdown */}
@@ -239,7 +247,9 @@ export const TerminalHeader = memo(function TerminalHeader({
             strokeWidth={1.5}
             className="text-violet-500 drop-shadow-[0_0_4px_rgba(139,92,246,0.5)]"
           />
-          {!isZoomed && terminalCount <= 4 && <ChevronDown size={9} className="text-maestro-muted/60" />}
+          {!isZoomed && terminalCount <= 4 && (
+            <ChevronDown size={9} className="text-maestro-muted/60" />
+          )}
         </button>
 
         {/* Session label */}
@@ -255,27 +265,32 @@ export const TerminalHeader = memo(function TerminalHeader({
               if (e.key === "Escape") cancelEditName();
             }}
             className={`shrink-0 rounded border border-maestro-accent bg-maestro-card px-1 py-0 font-medium text-maestro-text outline-none ${adaptive.sessionLabelSize}`}
-            autoFocus
           />
         ) : (
-          <span
-            className={`shrink-0 cursor-text font-medium text-maestro-text ${adaptive.sessionLabelSize}`}
+          <button
+            type="button"
+            className={`shrink-0 cursor-text bg-transparent p-0 text-left font-medium text-maestro-text ${adaptive.sessionLabelSize}`}
             onClick={startEditingName}
           >
             {sessionName || defaultLabel}
-          </span>
+          </button>
         )}
 
         {/* MCP badge */}
         {(adaptive.showAllElements || terminalCount <= 6) && (
-          <span className={`shrink-0 rounded-full bg-maestro-accent/15 font-medium text-maestro-accent ${adaptive.badgePadding} ${adaptive.badgeSize}`}>
+          <span
+            className={`shrink-0 rounded-full bg-maestro-accent/15 font-medium text-maestro-accent ${adaptive.badgePadding} ${adaptive.badgeSize}`}
+          >
             {mcpCount} MCP
           </span>
         )}
 
         {/* Blue checkmark (verified/ready) - hide in very compact mode */}
         {adaptive.showAllElements && (
-          <CheckCircle size={terminalCount <= 4 ? 11 : 9} className="shrink-0 text-maestro-accent" />
+          <CheckCircle
+            size={terminalCount <= 4 ? 11 : 9}
+            className="shrink-0 text-maestro-accent"
+          />
         )}
 
         {/* Active count - hide in compact mode */}
@@ -301,7 +316,9 @@ export const TerminalHeader = memo(function TerminalHeader({
 
         {/* Truncated status message - hide in very compact mode */}
         {statusMessage && (adaptive.showAllElements || terminalCount <= 6) && (
-          <span className={`min-w-0 truncate text-maestro-muted ${adaptive.badgeSize}`}>{statusMessage}</span>
+          <span className={`min-w-0 truncate text-maestro-muted ${adaptive.badgeSize}`}>
+            {statusMessage}
+          </span>
         )}
       </div>
 
@@ -319,7 +336,9 @@ export const TerminalHeader = memo(function TerminalHeader({
           <GitBranch size={terminalCount <= 4 ? 10 : 8} />
           <span className={`truncate ${adaptive.branchMaxWidth}`}>{branchName}</span>
           {(adaptive.showAllElements || terminalCount <= 6) && (
-            <span className={`ml-0.5 rounded font-medium ${adaptive.badgePadding} ${adaptive.badgeSize} ${isWorktree ? "bg-purple-500/15 text-purple-400" : "bg-maestro-accent/15 text-maestro-accent"}`}>
+            <span
+              className={`ml-0.5 rounded font-medium ${adaptive.badgePadding} ${adaptive.badgeSize} ${isWorktree ? "bg-purple-500/15 text-purple-400" : "bg-maestro-accent/15 text-maestro-accent"}`}
+            >
               {isWorktree ? "worktree" : "checked out"}
             </span>
           )}
@@ -345,7 +364,11 @@ export const TerminalHeader = memo(function TerminalHeader({
             title={isZoomed ? "Restore grid view" : "Zoom terminal"}
             aria-label={isZoomed ? "Restore grid view" : "Zoom terminal"}
           >
-            {isZoomed ? <Minimize size={terminalCount <= 4 ? 14 : 12} /> : <Expand size={terminalCount <= 4 ? 14 : 12} />}
+            {isZoomed ? (
+              <Minimize size={terminalCount <= 4 ? 14 : 12} />
+            ) : (
+              <Expand size={terminalCount <= 4 ? 14 : 12} />
+            )}
           </button>
         )}
 

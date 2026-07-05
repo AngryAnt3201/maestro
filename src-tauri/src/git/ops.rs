@@ -112,10 +112,7 @@ impl Git {
                 continue;
             }
 
-            let is_remote = parts
-                .get(2)
-                .map(|r| r.trim() == "remotes")
-                .unwrap_or(false);
+            let is_remote = parts.get(2).map(|r| r.trim() == "remotes").unwrap_or(false);
 
             branches.push(BranchInfo {
                 name,
@@ -227,7 +224,8 @@ impl Git {
         new_branch: Option<&str>,
         checkout_ref: Option<&str>,
     ) -> Result<WorktreeInfo, GitError> {
-        self.worktree_add_inner(path, new_branch, checkout_ref, false).await
+        self.worktree_add_inner(path, new_branch, checkout_ref, false)
+            .await
     }
 
     pub async fn worktree_add_force(
@@ -235,7 +233,8 @@ impl Git {
         path: &Path,
         checkout_ref: Option<&str>,
     ) -> Result<WorktreeInfo, GitError> {
-        self.worktree_add_inner(path, None, checkout_ref, true).await
+        self.worktree_add_inner(path, None, checkout_ref, true)
+            .await
     }
 
     async fn worktree_add_inner(
@@ -272,7 +271,9 @@ impl Git {
 
         // Read back the created worktree info
         let head_output = self.run_in(path, &["rev-parse", "HEAD"]).await?;
-        let branch_output = self.run_in(path, &["symbolic-ref", "--short", "HEAD"]).await;
+        let branch_output = self
+            .run_in(path, &["symbolic-ref", "--short", "HEAD"])
+            .await;
 
         let branch = match branch_output {
             Ok(o) => Some(o.trimmed().to_string()),
@@ -282,7 +283,10 @@ impl Git {
                 None // Detached HEAD
             }
             Err(e) => {
-                log::warn!("symbolic-ref in worktree {:?} failed unexpectedly: {e}", path);
+                log::warn!(
+                    "symbolic-ref in worktree {:?} failed unexpectedly: {e}",
+                    path
+                );
                 None
             }
         };
@@ -427,9 +431,21 @@ impl Git {
 
             let status_char = parts[0].chars().next().unwrap_or('?');
             let (status, path, old_path) = match status_char {
-                'A' => (FileChangeStatus::Added, parts.get(1).unwrap_or(&"").to_string(), None),
-                'M' => (FileChangeStatus::Modified, parts.get(1).unwrap_or(&"").to_string(), None),
-                'D' => (FileChangeStatus::Deleted, parts.get(1).unwrap_or(&"").to_string(), None),
+                'A' => (
+                    FileChangeStatus::Added,
+                    parts.get(1).unwrap_or(&"").to_string(),
+                    None,
+                ),
+                'M' => (
+                    FileChangeStatus::Modified,
+                    parts.get(1).unwrap_or(&"").to_string(),
+                    None,
+                ),
+                'D' => (
+                    FileChangeStatus::Deleted,
+                    parts.get(1).unwrap_or(&"").to_string(),
+                    None,
+                ),
                 'R' => {
                     // Renamed: R100\told_path\tnew_path
                     let old = parts.get(1).map(|s| s.to_string());
@@ -442,7 +458,11 @@ impl Git {
                     let new = parts.get(2).unwrap_or(&"").to_string();
                     (FileChangeStatus::Copied, new, old)
                 }
-                _ => (FileChangeStatus::Unknown, parts.get(1).unwrap_or(&"").to_string(), None),
+                _ => (
+                    FileChangeStatus::Unknown,
+                    parts.get(1).unwrap_or(&"").to_string(),
+                    None,
+                ),
             };
 
             if !path.is_empty() {
@@ -567,10 +587,7 @@ impl Git {
             .collect();
 
         // Get tags pointing to this commit
-        if let Ok(tag_output) = self
-            .run(&["tag", "--points-at", hash])
-            .await
-        {
+        if let Ok(tag_output) = self.run(&["tag", "--points-at", hash]).await {
             for tag in tag_output.lines() {
                 if !tag.is_empty() {
                     refs.push(format!("tag:{}", tag));
@@ -650,7 +667,10 @@ impl Git {
         }
 
         // Fall back to global
-        match self.run(&["config", "--global", "init.defaultBranch"]).await {
+        match self
+            .run(&["config", "--global", "init.defaultBranch"])
+            .await
+        {
             Ok(output) => Ok(Some(output.trimmed().to_string())),
             Err(GitError::CommandFailed { code: 1, .. }) => Ok(None), // Not set
             Err(e) => Err(e),
@@ -662,7 +682,8 @@ impl Git {
     /// If `global` is true, sets the global config; otherwise, sets repository-local config.
     pub async fn set_default_branch(&self, branch: &str, global: bool) -> Result<(), GitError> {
         let scope = if global { "--global" } else { "--local" };
-        self.run(&["config", scope, "init.defaultBranch", branch]).await?;
+        self.run(&["config", scope, "init.defaultBranch", branch])
+            .await?;
         Ok(())
     }
 
@@ -670,6 +691,7 @@ impl Git {
     ///
     /// Used when we need to free up a branch for worktree creation
     /// but have no other branch to switch to.
+    #[allow(dead_code)]
     pub async fn detach_head(&self) -> Result<(), GitError> {
         self.run(&["checkout", "--detach"]).await?;
         Ok(())
@@ -689,8 +711,10 @@ impl Git {
         let common_dir = std::path::Path::new(common_dir.trimmed());
 
         // Canonicalize both for reliable comparison (handles relative paths)
-        let git_dir_canon = std::fs::canonicalize(git_dir).unwrap_or_else(|_| git_dir.to_path_buf());
-        let common_dir_canon = std::fs::canonicalize(common_dir).unwrap_or_else(|_| common_dir.to_path_buf());
+        let git_dir_canon =
+            std::fs::canonicalize(git_dir).unwrap_or_else(|_| git_dir.to_path_buf());
+        let common_dir_canon =
+            std::fs::canonicalize(common_dir).unwrap_or_else(|_| common_dir.to_path_buf());
 
         Ok(git_dir_canon != common_dir_canon)
     }
@@ -857,7 +881,9 @@ mod tests {
         git.create_branch("from-head", None).await.unwrap();
 
         let branches = git.list_branches().await.unwrap();
-        assert!(branches.iter().any(|b| b.name == "from-head" && !b.is_remote));
+        assert!(branches
+            .iter()
+            .any(|b| b.name == "from-head" && !b.is_remote));
     }
 
     #[tokio::test]

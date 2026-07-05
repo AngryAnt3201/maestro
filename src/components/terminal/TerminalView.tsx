@@ -1,27 +1,36 @@
-import { CanvasAddon } from "@xterm/addon-canvas";
-import { FitAddon } from "@xterm/addon-fit";
-import { WebglAddon } from "@xterm/addon-webgl";
-import { Unicode11Addon } from "@xterm/addon-unicode11";
-import { WebLinksAddon } from "@xterm/addon-web-links";
-import { Terminal } from "@xterm/xterm";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import type { FitAddon as XTermFitAddon } from "@xterm/addon-fit";
+import type { Terminal as XTermTerminal } from "@xterm/xterm";
+import { lazy, memo, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 
-import { QuickActionsManager } from "@/components/quickactions/QuickActionsManager";
+import { useShallow } from "zustand/react/shallow";
 import { ActivityFeed } from "@/components/session/ActivityFeed";
-import { isGitWorktree } from "@/lib/git";
 import { useSessionBranch } from "@/hooks/useSessionBranch";
 import { buildFontFamily, waitForFont } from "@/lib/fonts";
-import { getBackendInfo, killSession, onPtyOutput, resizePty, savePastedImage, signalTerminalReady, writeStdin, type BackendInfo } from "@/lib/terminal";
+import { isGitWorktree } from "@/lib/git";
+import {
+  type BackendInfo,
+  getBackendInfo,
+  killSession,
+  onPtyOutput,
+  resizePty,
+  savePastedImage,
+  signalTerminalReady,
+  writeStdin,
+} from "@/lib/terminal";
 import { DEFAULT_THEME, LIGHT_THEME, toXtermTheme } from "@/lib/terminalTheme";
 import { useMcpStore } from "@/stores/useMcpStore";
 import { type AiMode, type BackendSessionStatus, useSessionStore } from "@/stores/useSessionStore";
 import { useTerminalSettingsStore } from "@/stores/useTerminalSettingsStore";
-import { useShallow } from "zustand/react/shallow";
 import { QuickActionPills } from "./QuickActionPills";
 import { type AIProvider, type SessionStatus, TerminalHeader } from "./TerminalHeader";
+
+const QuickActionsManager = lazy(() =>
+  import("@/components/quickactions/QuickActionsManager").then((module) => ({
+    default: module.QuickActionsManager,
+  })),
+);
 
 /**
  * Props for {@link TerminalView}.
@@ -136,7 +145,7 @@ export const TerminalView = memo(function TerminalView({
         statusMessage: sess.statusMessage,
         needsInputPrompt: sess.needsInputPrompt,
       };
-    })
+    }),
   );
   const effectiveStatus = sessionData ? mapStatus(sessionData.status) : status;
   const effectiveProvider = sessionData ? mapAiMode(sessionData.mode) : "claude";
@@ -155,7 +164,12 @@ export const TerminalView = memo(function TerminalView({
 
   // For useSessionBranch: only Maestro-created worktrees have a locked branch.
   // Project-level worktrees still need polling to discover their branch.
-  const liveBranch = useSessionBranch(projectPath, hasSessionWorktree, sessionData?.branch ?? null, isActive);
+  const liveBranch = useSessionBranch(
+    projectPath,
+    hasSessionWorktree,
+    sessionData?.branch ?? null,
+    isActive,
+  );
   const effectiveBranch = liveBranch ?? "...";
   // For the UI badge: show "worktree" if either Maestro created one or the project itself is a worktree.
   const isWorktree = hasSessionWorktree || isProjectWorktree;
@@ -176,8 +190,8 @@ export const TerminalView = memo(function TerminalView({
   });
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const termRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
+  const termRef = useRef<XTermTerminal | null>(null);
+  const fitAddonRef = useRef<XTermFitAddon | null>(null);
 
   // Quick actions manager modal state
   const [showQuickActionsManager, setShowQuickActionsManager] = useState(false);
@@ -224,6 +238,7 @@ export const TerminalView = memo(function TerminalView({
   }, [appTheme]);
 
   // Update terminal font settings when they change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: explicit setting subscriptions trigger the terminal option refresh.
   useEffect(() => {
     if (termRef.current && fitAddonRef.current) {
       const effectiveFont = getEffectiveFontFamily();
@@ -260,19 +275,16 @@ export const TerminalView = memo(function TerminalView({
     [onKill],
   );
 
-  const handleRename = useCallback(
-    (id: number, name: string | null) => {
-      useSessionStore.getState().renameSession(id, name);
-    },
-    [],
-  );
+  const handleRename = useCallback((id: number, name: string | null) => {
+    useSessionStore.getState().renameSession(id, name);
+  }, []);
 
   /**
    * Handles quick action button clicks by writing the prompt to the terminal.
    */
   const handleQuickAction = useCallback(
     (prompt: string) => {
-      writeStdin(sessionId, prompt + "\n").catch(console.error);
+      writeStdin(sessionId, `${prompt}\n`).catch(console.error);
     },
     [sessionId],
   );
@@ -287,8 +299,8 @@ export const TerminalView = memo(function TerminalView({
     const fontFamily = buildFontFamily(effectiveFont);
 
     let disposed = false;
-    let term: Terminal | null = null;
-    let fitAddon: FitAddon | null = null;
+    let term: XTermTerminal | null = null;
+    let fitAddon: XTermFitAddon | null = null;
     let unlisten: (() => void) | null = null;
     // === PTY Output Batching (reduces xterm.js render overhead) ===
     let writeBuffer: string[] = [];
@@ -301,17 +313,23 @@ export const TerminalView = memo(function TerminalView({
     let lastHeuristicStatus: string | null = null;
 
     const MCP_GRACE_PERIOD_MS = 10_000; // Defer to MCP for 10s after last MCP update
-    const WORKING_DEBOUNCE_MS = 500;    // Sustained output before marking "Working"
-    const IDLE_TIMEOUT_MS = 5_000;      // No output before marking "Idle"
+    const WORKING_DEBOUNCE_MS = 500; // Sustained output before marking "Working"
+    const IDLE_TIMEOUT_MS = 5_000; // No output before marking "Idle"
     // Only overwrite "safe" states — never revert terminal states like Done/Error/NeedsInput/Timeout
     const SAFE_TO_OVERRIDE: BackendSessionStatus[] = ["Working", "Idle", "Starting"];
 
-    const MAX_BUFFER_CHUNKS = 100;  // Force flush at ~400KB (100 × 4KB chunks)
-    const FALLBACK_FLUSH_MS = 50;   // 20fps floor for backgrounded tabs
+    const MAX_BUFFER_CHUNKS = 100; // Force flush at ~400KB (100 × 4KB chunks)
+    const FALLBACK_FLUSH_MS = 50; // 20fps floor for backgrounded tabs
 
     const cancelPendingFlush = () => {
-      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
-      if (fallbackTimerId !== null) { clearTimeout(fallbackTimerId); fallbackTimerId = null; }
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      if (fallbackTimerId !== null) {
+        clearTimeout(fallbackTimerId);
+        fallbackTimerId = null;
+      }
     };
 
     const flushBuffer = () => {
@@ -320,17 +338,17 @@ export const TerminalView = memo(function TerminalView({
         writeBuffer = [];
         return;
       }
-      const data = writeBuffer.join('');
-      writeBuffer = [];  // Clear BEFORE write to prevent duplicates on error
+      const data = writeBuffer.join("");
+      writeBuffer = []; // Clear BEFORE write to prevent duplicates on error
       try {
         term.write(data);
       } catch (e) {
-        console.error('[TerminalView] write error:', e);
+        console.error("[TerminalView] write error:", e);
       }
     };
 
     const scheduleFlush = () => {
-      if (rafId !== null) return;  // Already scheduled
+      if (rafId !== null) return; // Already scheduled
       rafId = requestAnimationFrame(flushBuffer);
       if (fallbackTimerId === null) {
         fallbackTimerId = setTimeout(flushBuffer, FALLBACK_FLUSH_MS);
@@ -341,7 +359,6 @@ export const TerminalView = memo(function TerminalView({
     let resizeDisposable: { dispose: () => void } | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let pasteHandler: ((e: Event) => void) | null = null;
-    let unlistenDragDrop: (() => void) | null = null;
 
     // Wait for font to load before initializing terminal
     const initTerminal = async () => {
@@ -349,7 +366,21 @@ export const TerminalView = memo(function TerminalView({
 
       if (disposed) return;
 
-      const initialTheme = document.documentElement.getAttribute("data-theme") === "light" ? LIGHT_THEME : DEFAULT_THEME;
+      const [{ FitAddon }, { Unicode11Addon }, { WebLinksAddon }, { WebglAddon }, { Terminal }] =
+        await Promise.all([
+          import("@xterm/addon-fit"),
+          import("@xterm/addon-unicode11"),
+          import("@xterm/addon-web-links"),
+          import("@xterm/addon-webgl"),
+          import("@xterm/xterm"),
+        ]);
+
+      if (disposed) return;
+
+      const initialTheme =
+        document.documentElement.getAttribute("data-theme") === "light"
+          ? LIGHT_THEME
+          : DEFAULT_THEME;
       // Reduce scrollback on Linux where the DOM renderer is slow in WebKitGTK.
       // 10000 lines of scrollback with the DOM renderer causes severe lag.
       const isLinux = navigator.userAgent.toLowerCase().includes("linux");
@@ -376,22 +407,29 @@ export const TerminalView = memo(function TerminalView({
       term.unicode.activeVersion = "11";
       term.open(container);
 
+      const loadCanvasAddon = async () => {
+        try {
+          const { CanvasAddon } = await import("@xterm/addon-canvas");
+          if (!disposed && term) {
+            term.loadAddon(new CanvasAddon());
+          }
+        } catch {
+          /* DOM renderer as final fallback */
+        }
+      };
+
       // GPU-accelerated rendering (must be loaded after open())
       // Try WebGL first, fall back to Canvas2D (much faster than DOM on Linux)
       try {
         const webglAddon = new WebglAddon();
         webglAddon.onContextLoss(() => {
           webglAddon.dispose();
-          try {
-            term?.loadAddon(new CanvasAddon());
-          } catch { /* DOM renderer as final fallback */ }
+          void loadCanvasAddon();
         });
         term.loadAddon(webglAddon);
       } catch {
         // WebGL not available — use Canvas2D renderer
-        try {
-          term.loadAddon(new CanvasAddon());
-        } catch { /* DOM renderer as final fallback */ }
+        void loadCanvasAddon();
       }
 
       termRef.current = term;
@@ -411,10 +449,10 @@ export const TerminalView = memo(function TerminalView({
       // prior text remains in the textarea, it extracts the wrong substring — e.g.
       // sending "測試" instead of "這是". We capture the correct text from the
       // compositionend event and replace whatever xterm sends via onData.
-      const textarea = term.textarea!;
+      const textarea = term.textarea;
       let pendingCompositionData: string | null = null;
 
-      textarea.addEventListener("compositionend", (e) => {
+      textarea?.addEventListener("compositionend", (e) => {
         pendingCompositionData = (e as CompositionEvent).data;
       });
 
@@ -447,51 +485,31 @@ export const TerminalView = memo(function TerminalView({
         const mediaType = imageItem.type;
         const MAX_IMAGE_SIZE = 50 * 1024 * 1024; // 50 MB
         // Save image async, then write the path to stdin
-        blob.arrayBuffer().then(async (arrayBuffer) => {
-          if (arrayBuffer.byteLength > MAX_IMAGE_SIZE) {
-            console.error("[TerminalView] Image too large to paste");
-            return;
-          }
-          const bytes = Array.from(new Uint8Array(arrayBuffer));
-          const filePath = await savePastedImage(bytes, mediaType);
-          await writeStdin(sessionId, filePath);
-        }).catch((err) => {
-          console.error("[TerminalView] Failed to paste image:", err);
-        });
+        blob
+          .arrayBuffer()
+          .then(async (arrayBuffer) => {
+            if (arrayBuffer.byteLength > MAX_IMAGE_SIZE) {
+              console.error("[TerminalView] Image too large to paste");
+              return;
+            }
+            const bytes = Array.from(new Uint8Array(arrayBuffer));
+            const filePath = await savePastedImage(bytes, mediaType);
+            await writeStdin(sessionId, filePath);
+          })
+          .catch((err) => {
+            console.error("[TerminalView] Failed to paste image:", err);
+          });
       };
       container.addEventListener("paste", pasteHandler, { capture: true });
-
-      // Drag-and-drop support for images via Tauri's native file-drop API.
-      // Tauri intercepts drag-and-drop at the webview level (JS drop events
-      // never fire), so we listen for its onDragDropEvent instead. This also
-      // gives us file paths directly — no need to read file data into JS.
-      const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp"]);
-      getCurrentWebviewWindow().onDragDropEvent((event) => {
-        if (event.payload.type === "drop") {
-          const imagePaths = event.payload.paths.filter((p) => {
-            const ext = p.split(".").pop()?.toLowerCase() ?? "";
-            return IMAGE_EXTENSIONS.has(ext);
-          });
-          for (const filePath of imagePaths) {
-            writeStdin(sessionId, filePath).catch((err) => {
-              console.error("[TerminalView] Failed to drop image:", err);
-            });
-          }
-        }
-      }).then((unlisten) => {
-        if (disposed) {
-          unlisten();
-        } else {
-          unlistenDragDrop = unlisten;
-        }
-      });
 
       dataDisposable = term.onData((data) => {
         if (pendingCompositionData !== null) {
           const correctData = pendingCompositionData;
           pendingCompositionData = null;
           // Clear textarea to prevent accumulation that corrupts future compositions
-          textarea.value = "";
+          if (textarea) {
+            textarea.value = "";
+          }
           if (correctData.length > 0) {
             writeStdin(sessionId, correctData).catch(console.error);
           }
@@ -520,7 +538,8 @@ export const TerminalView = memo(function TerminalView({
 
         // Cmd+C (Mac) or Ctrl+C (Linux/Windows): copy selection to clipboard
         // Only intercept if there's a selection, otherwise let SIGINT go through
-        const isCopy = event.key === "c" && (event.metaKey || event.ctrlKey) && event.type === "keydown";
+        const isCopy =
+          event.key === "c" && (event.metaKey || event.ctrlKey) && event.type === "keydown";
         if (isCopy && term?.hasSelection()) {
           const selection = term.getSelection();
           navigator.clipboard.writeText(selection).catch(console.error);
@@ -529,23 +548,46 @@ export const TerminalView = memo(function TerminalView({
 
         // Cmd/Ctrl+T: add new session — block xterm so 't' isn't sent to PTY.
         // The DOM event still bubbles to window where useAppKeyboard handles it.
-        if (event.key === "t" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.type === "keydown") {
+        if (
+          event.key === "t" &&
+          (event.metaKey || event.ctrlKey) &&
+          !event.altKey &&
+          !event.shiftKey &&
+          event.type === "keydown"
+        ) {
           return false;
         }
 
         // Cmd/Ctrl+D (with or without Shift): split pane — block xterm so 'd' isn't sent to PTY.
         // The DOM event bubbles to window where useTerminalKeyboard handles it.
-        if (event.key === "d" && (event.metaKey || event.ctrlKey) && !event.altKey && event.type === "keydown") {
+        if (
+          event.key === "d" &&
+          (event.metaKey || event.ctrlKey) &&
+          !event.altKey &&
+          event.type === "keydown"
+        ) {
           return false;
         }
 
         // Cmd/Ctrl+W: close pane — block xterm so 'w' isn't sent to PTY.
-        if (event.key === "w" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.type === "keydown") {
+        if (
+          event.key === "w" &&
+          (event.metaKey || event.ctrlKey) &&
+          !event.altKey &&
+          !event.shiftKey &&
+          event.type === "keydown"
+        ) {
           return false;
         }
 
         // Cmd+K (Mac) or Ctrl+K (Linux/Windows): clear terminal scrollback + viewport
-        if (event.key === "k" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.type === "keydown") {
+        if (
+          event.key === "k" &&
+          (event.metaKey || event.ctrlKey) &&
+          !event.altKey &&
+          !event.shiftKey &&
+          event.type === "keydown"
+        ) {
           term?.clear();
           return false;
         }
@@ -575,17 +617,17 @@ export const TerminalView = memo(function TerminalView({
         if (disposed || !term) return;
         writeBuffer.push(data);
         if (writeBuffer.length >= MAX_BUFFER_CHUNKS) {
-          flushBuffer();  // Backpressure: immediate flush if buffer full
+          flushBuffer(); // Backpressure: immediate flush if buffer full
         } else {
           scheduleFlush();
         }
 
         // --- Activity-based status detection ---
-        const session = useSessionStore.getState().sessions.find(s => s.id === sessionId);
+        const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
         if (!session) return; // Session was removed, skip heuristic
 
         const lastMcp = session.lastMcpUpdateTime ?? 0;
-        const mcpIsActive = (Date.now() - lastMcp) < MCP_GRACE_PERIOD_MS;
+        const mcpIsActive = Date.now() - lastMcp < MCP_GRACE_PERIOD_MS;
 
         if (!mcpIsActive) {
           // Debounce: set "Working" after sustained output
@@ -593,7 +635,7 @@ export const TerminalView = memo(function TerminalView({
             activityWorkingTimer = setTimeout(() => {
               if (disposed) return;
               activityWorkingTimer = null;
-              const current = useSessionStore.getState().sessions.find(s => s.id === sessionId);
+              const current = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
               if (!current || !SAFE_TO_OVERRIDE.includes(current.status)) return;
               lastHeuristicStatus = "Working";
               useSessionStore.getState().updateSession(sessionId, {
@@ -608,7 +650,7 @@ export const TerminalView = memo(function TerminalView({
             if (disposed) return;
             activityIdleTimer = null;
             if (lastHeuristicStatus === "Working") {
-              const current = useSessionStore.getState().sessions.find(s => s.id === sessionId);
+              const current = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
               if (!current || !SAFE_TO_OVERRIDE.includes(current.status)) return;
               lastHeuristicStatus = "Idle";
               useSessionStore.getState().updateSession(sessionId, {
@@ -662,12 +704,15 @@ export const TerminalView = memo(function TerminalView({
       if (activityIdleTimer) clearTimeout(activityIdleTimer);
       // Flush remaining buffered output before disposal
       if (term && writeBuffer.length > 0) {
-        try { term.write(writeBuffer.join('')); } catch { /* ignore errors during cleanup */ }
+        try {
+          term.write(writeBuffer.join(""));
+        } catch {
+          /* ignore errors during cleanup */
+        }
       }
       writeBuffer = [];
       resizeObserver?.disconnect();
       if (pasteHandler) container.removeEventListener("paste", pasteHandler, { capture: true });
-      if (unlistenDragDrop) unlistenDragDrop();
       dataDisposable?.dispose();
       resizeDisposable?.dispose();
       if (unlisten) unlisten();
@@ -675,7 +720,7 @@ export const TerminalView = memo(function TerminalView({
       termRef.current = null;
       fitAddonRef.current = null;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- Font settings are read once at init, dynamic updates via separate effect
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Font settings are read once at init, dynamic updates via separate effect
   }, [sessionId]);
 
   // Focus the terminal when isFocused becomes true
@@ -686,6 +731,8 @@ export const TerminalView = memo(function TerminalView({
   }, [isFocused]);
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: Terminal cell is a composite focus surface with nested controls.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: Keyboard focus is handled by terminal shortcuts and xterm itself.
     <div
       className={`terminal-cell flex h-full flex-col bg-maestro-bg ${cellStatusClass(effectiveStatus)} ${isFocused ? "terminal-cell-focused" : ""}`}
       onClick={onFocus}
@@ -736,7 +783,10 @@ export const TerminalView = memo(function TerminalView({
       </div>
 
       {/* xterm.js container - always mounted but hidden when activity tab is active */}
-      <div ref={containerRef} className={`flex-1 overflow-hidden ${activeTab !== "terminal" ? "hidden" : ""}`} />
+      <div
+        ref={containerRef}
+        className={`flex-1 overflow-hidden ${activeTab !== "terminal" ? "hidden" : ""}`}
+      />
 
       {/* Activity feed - shown when activity tab is active */}
       {activeTab === "activity" && (
@@ -747,15 +797,14 @@ export const TerminalView = memo(function TerminalView({
 
       {/* Quick action pills - only show on terminal tab */}
       {activeTab === "terminal" && (
-        <QuickActionPills
-          onAction={handleQuickAction}
-          onManageClick={handleManageClick}
-        />
+        <QuickActionPills onAction={handleQuickAction} onManageClick={handleManageClick} />
       )}
 
       {/* Quick actions manager modal */}
       {showQuickActionsManager && (
-        <QuickActionsManager onClose={() => setShowQuickActionsManager(false)} />
+        <Suspense fallback={null}>
+          <QuickActionsManager onClose={() => setShowQuickActionsManager(false)} />
+        </Suspense>
       )}
     </div>
   );

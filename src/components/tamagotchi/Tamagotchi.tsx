@@ -1,7 +1,7 @@
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
-import { useUsageStore } from "@/stores/useUsageStore";
 import { formatResetTime } from "@/lib/usageParser";
+import { useUsageStore } from "@/stores/useUsageStore";
 import { TamagotchiCharacter } from "./TamagotchiCharacter";
 
 /**
@@ -61,10 +61,7 @@ export function Tamagotchi() {
 
           {/* Single overlaid usage bar */}
           {!needsAuth && (
-            <div
-              className="absolute left-0 right-0 px-3"
-              style={{ bottom: size * 0.06 }}
-            >
+            <div className="absolute left-0 right-0 px-3" style={{ bottom: size * 0.06 }}>
               <div className="h-2.5 overflow-hidden rounded-full bg-maestro-border/60">
                 <div
                   className={`h-full rounded-full ${currentColor} transition-all duration-500`}
@@ -93,17 +90,24 @@ export function Tamagotchi() {
         <div className="flex-1 min-w-0">
           {needsAuth ? (
             <div className="text-[9px] text-maestro-muted">
-              Run <code className="rounded bg-maestro-border/50 px-1 py-0.5 font-mono">claude</code> to wake
+              Run <code className="rounded bg-maestro-border/50 px-1 py-0.5 font-mono">claude</code>{" "}
+              to wake
             </div>
           ) : (
             <button
               type="button"
               onClick={() => setShowWeekly(!showWeekly)}
               className="flex items-center gap-1.5 text-[9px] text-maestro-muted hover:text-maestro-text transition-colors"
-              title={currentResetTime ? `Resets ${currentResetTime}. Click to toggle.` : "Click to toggle daily/weekly"}
+              title={
+                currentResetTime
+                  ? `Resets ${currentResetTime}. Click to toggle.`
+                  : "Click to toggle daily/weekly"
+              }
             >
               <span className={`inline-block w-1.5 h-1.5 rounded-full ${currentColor}`} />
-              <span>{currentLabel}: {Math.round(currentPercent)}%</span>
+              <span>
+                {currentLabel}: {Math.round(currentPercent)}%
+              </span>
             </button>
           )}
         </div>

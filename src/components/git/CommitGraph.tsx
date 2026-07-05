@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { layoutGraph, type GraphNode } from "../../lib/graphLayout";
+import { type GraphNode, layoutGraph } from "../../lib/graphLayout";
 import { useGitStore } from "../../stores/useGitStore";
 import { CommitRow } from "./CommitRow";
 import { GraphCanvas } from "./GraphCanvas";
@@ -96,11 +96,7 @@ export function CommitGraph({
     setVisibleRange({ start, end });
 
     // Load more when near bottom
-    if (
-      scrollHeight - scrollTop - clientHeight < 200 &&
-      hasMoreCommits &&
-      !isLoadingMore
-    ) {
+    if (scrollHeight - scrollTop - clientHeight < 200 && hasMoreCommits && !isLoadingMore) {
       loadMoreCommits(repoPath);
     }
   }, [hasMoreCommits, isLoadingMore, loadMoreCommits, repoPath]);
@@ -203,9 +199,7 @@ export function CommitGraph({
           {/* End of history indicator */}
           {!hasMoreCommits && commits.length > 0 && (
             <div className="flex items-center justify-center py-2">
-              <span className="text-[10px] text-maestro-muted/50">
-                End of history
-              </span>
+              <span className="text-[10px] text-maestro-muted/50">End of history</span>
             </div>
           )}
         </div>

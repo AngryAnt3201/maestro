@@ -244,6 +244,7 @@ struct PluginManifest {
 #[derive(Debug, Deserialize)]
 struct InstalledPluginsJson {
     #[serde(default)]
+    #[allow(dead_code)]
     version: u32,
     #[serde(default)]
     plugins: HashMap<String, Vec<InstalledPluginEntry>>,
@@ -540,10 +541,7 @@ fn scan_plugins_directory(dir: &Path) -> Vec<(PluginConfig, Vec<SkillConfig>)> {
 /// Otherwise returns None.
 fn derive_cli_id_from_manifest(manifest: &PluginManifest, dir_name: &str) -> Option<String> {
     let marketplace_id = manifest.marketplace_id.as_deref()?;
-    let plugin_id = manifest
-        .plugin_id
-        .as_deref()
-        .unwrap_or(dir_name);
+    let plugin_id = manifest.plugin_id.as_deref().unwrap_or(dir_name);
 
     // Convert marketplace ID to short form used by CLI
     // e.g. "official-anthropic-claude-code" -> "claude-plugins-official"
@@ -584,7 +582,11 @@ fn parse_installed_plugins_json(plugins_dir: &Path) -> Vec<(String, String, Stri
     let mut results = Vec::new();
     for (cli_id, entries) in parsed.plugins {
         // Use the first user-scope entry (or any entry)
-        if let Some(entry) = entries.into_iter().find(|e| e.scope == "user").or_else(|| None) {
+        if let Some(entry) = entries
+            .into_iter()
+            .find(|e| e.scope == "user")
+            .or_else(|| None)
+        {
             let version = entry.version.unwrap_or_else(|| "0.0.0".to_string());
             results.push((cli_id, entry.install_path, version));
         }
@@ -890,7 +892,9 @@ impl PluginManager {
                     // Skip if already discovered via manual install
                     if seen_plugin_names.contains(plugin_name) {
                         // But update the existing plugin's cli_id if it doesn't have one
-                        if let Some(existing) = all_plugins.iter_mut().find(|p| p.name == plugin_name) {
+                        if let Some(existing) =
+                            all_plugins.iter_mut().find(|p| p.name == plugin_name)
+                        {
                             if existing.cli_id.is_none() {
                                 existing.cli_id = Some(cli_id.clone());
                             }
@@ -1050,12 +1054,14 @@ mod tests {
     fn test_parse_empty_project() {
         let manager = PluginManager::new();
         let plugins = manager.get_project_plugins("/nonexistent/path");
-        assert!(plugins.skills.iter().all(|skill| {
-            !matches!(skill.source, SkillSource::Project | SkillSource::Legacy)
-        }));
-        assert!(plugins.plugins.iter().all(|plugin| {
-            !matches!(plugin.plugin_source, PluginSource::Project)
-        }));
+        assert!(plugins
+            .skills
+            .iter()
+            .all(|skill| { !matches!(skill.source, SkillSource::Project | SkillSource::Legacy) }));
+        assert!(plugins
+            .plugins
+            .iter()
+            .all(|plugin| { !matches!(plugin.plugin_source, PluginSource::Project) }));
     }
 
     #[test]

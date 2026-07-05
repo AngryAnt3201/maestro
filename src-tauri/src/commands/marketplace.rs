@@ -12,7 +12,10 @@ use crate::core::marketplace_models::*;
 const MARKETPLACE_STORE: &str = "marketplace.json";
 
 /// Saves marketplace data to the Tauri store.
-async fn save_marketplace_data(app: &AppHandle, manager: &MarketplaceManager) -> Result<(), String> {
+async fn save_marketplace_data(
+    app: &AppHandle,
+    manager: &MarketplaceManager,
+) -> Result<(), String> {
     let store = app.store(MARKETPLACE_STORE).map_err(|e| e.to_string())?;
 
     let sources = manager.get_sources();
@@ -112,7 +115,10 @@ pub async fn refresh_marketplace(
     state: State<'_, MarketplaceManager>,
     source_id: String,
 ) -> Result<Vec<MarketplacePlugin>, String> {
-    let plugins = state.fetch_marketplace(&source_id).await.map_err(|e| e.to_string())?;
+    let plugins = state
+        .fetch_marketplace(&source_id)
+        .await
+        .map_err(|e| e.to_string())?;
     save_marketplace_data(&app, &state).await?;
 
     // Emit event

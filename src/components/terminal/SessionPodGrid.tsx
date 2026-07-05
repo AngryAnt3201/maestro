@@ -1,4 +1,4 @@
-import { BrainCircuit } from "lucide-react";
+import BrainCircuit from "lucide-react/dist/esm/icons/brain-circuit";
 
 interface SessionPodGridProps {
   sessionCount?: number;

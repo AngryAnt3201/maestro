@@ -1,7 +1,10 @@
-import { AlertTriangle, RotateCcw, Terminal, X } from "lucide-react";
+import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
+import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
+import Terminal from "lucide-react/dist/esm/icons/terminal";
+import X from "lucide-react/dist/esm/icons/x";
 import { useEffect, useRef, useState } from "react";
-import { useCliSettingsStore } from "@/stores/useCliSettingsStore";
 import { AI_CLI_CONFIG, buildCliCommand, type CliAiMode } from "@/lib/terminal";
+import { useCliSettingsStore } from "@/stores/useCliSettingsStore";
 
 interface CliSettingsModalProps {
   onClose: () => void;
@@ -146,8 +149,11 @@ export function CliSettingsModal({ onClose }: CliSettingsModalProps) {
                     )}
                   </div>
                   <p className="mt-0.5 text-xs text-maestro-muted">
-                    Adds <code className="rounded bg-maestro-border/40 px-1">{MODE_CONFIG[activeMode].skipFlagName}</code> flag.
-                    The CLI will not ask for confirmation before running commands.
+                    Adds{" "}
+                    <code className="rounded bg-maestro-border/40 px-1">
+                      {MODE_CONFIG[activeMode].skipFlagName}
+                    </code>{" "}
+                    flag. The CLI will not ask for confirmation before running commands.
                   </p>
                 </div>
               </label>
@@ -168,7 +174,8 @@ export function CliSettingsModal({ onClose }: CliSettingsModalProps) {
                 className="w-full rounded border border-maestro-border bg-maestro-bg px-3 py-2 text-sm text-maestro-text placeholder:text-maestro-muted/50 focus:border-maestro-accent focus:outline-none"
               />
               <p className="mt-2 text-xs text-maestro-muted">
-                Additional flags to pass to the {activeMode} CLI. Separate multiple flags with spaces.
+                Additional flags to pass to the {activeMode} CLI. Separate multiple flags with
+                spaces.
               </p>
             </div>
           </section>

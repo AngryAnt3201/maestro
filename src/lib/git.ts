@@ -39,7 +39,7 @@ export async function getBranches(repoPath: string): Promise<BranchInfo[]> {
  * @returns List of branches with worktree status
  */
 export async function getBranchesWithWorktreeStatus(
-  repoPath: string
+  repoPath: string,
 ): Promise<BranchWithWorktreeStatus[]> {
   const [branches, worktrees] = await Promise.all([
     getBranches(repoPath),
@@ -47,7 +47,7 @@ export async function getBranchesWithWorktreeStatus(
   ]);
 
   const worktreeBranches = new Set(
-    worktrees.map((wt) => wt.branch).filter((b): b is string => b !== null)
+    worktrees.map((wt) => wt.branch).filter((b): b is string => b !== null),
   );
 
   return branches.map((branch) => ({

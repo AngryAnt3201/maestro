@@ -69,6 +69,7 @@ impl EventBus {
     }
 
     /// Clear the dedup cache entirely.  Useful for testing and cleanup.
+    #[cfg(test)]
     pub fn clear_dedup_cache(&self) {
         let mut cache = self.dedup_cache.lock().expect("dedup cache lock poisoned");
         cache.clear();
@@ -113,7 +114,11 @@ mod tests {
         bus.emit(user_msg("uuid-dup"));
         bus.emit(user_msg("uuid-dup"));
         bus.emit(user_msg("uuid-dup"));
-        assert_eq!(counter.load(Ordering::SeqCst), 1, "identical events should be deduped");
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            1,
+            "identical events should be deduped"
+        );
     }
 
     #[test]
@@ -122,7 +127,11 @@ mod tests {
         bus.emit(user_msg("uuid-a"));
         bus.emit(user_msg("uuid-b"));
         bus.emit(user_msg("uuid-c"));
-        assert_eq!(counter.load(Ordering::SeqCst), 3, "distinct events should all pass through");
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            3,
+            "distinct events should all pass through"
+        );
     }
 
     #[test]

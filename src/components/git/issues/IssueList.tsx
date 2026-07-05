@@ -1,4 +1,4 @@
-import { CircleDot } from "lucide-react";
+import CircleDot from "lucide-react/dist/esm/icons/circle-dot";
 import { useGitHubStore } from "../../../stores/useGitHubStore";
 import { IssueFilters } from "./IssueFilters";
 import { IssueRow } from "./IssueRow";
@@ -9,11 +9,7 @@ interface IssueListProps {
   selectedIssueNumber: number | null;
 }
 
-export function IssueList({
-  repoPath,
-  onSelectIssue,
-  selectedIssueNumber,
-}: IssueListProps) {
+export function IssueList({ repoPath, onSelectIssue, selectedIssueNumber }: IssueListProps) {
   const { issues, isIssuesLoading, issuesError } = useGitHubStore();
 
   if (issuesError) {
@@ -42,14 +38,8 @@ export function IssueList({
       {issues.length === 0 ? (
         <div className="flex flex-1 items-center justify-center px-4 text-center">
           <div className="flex flex-col items-center gap-3">
-            <CircleDot
-              size={32}
-              className="text-maestro-muted/30"
-              strokeWidth={1}
-            />
-            <p className="text-xs text-maestro-muted/60">
-              No issues found
-            </p>
+            <CircleDot size={32} className="text-maestro-muted/30" strokeWidth={1} />
+            <p className="text-xs text-maestro-muted/60">No issues found</p>
           </div>
         </div>
       ) : (

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // We need to test pathRequiresFDA as a pure function and ensurePathAccess/checkFullDiskAccess with mocks.
 // The module-level state (initialized, initPromise, macPermissions) makes testing tricky,
@@ -39,16 +39,12 @@ describe("pathRequiresFDA", () => {
 
   it("returns true for iCloud Drive path (~/Library/Mobile Documents)", () => {
     expect(
-      pathRequiresFDA(
-        "/Users/john/Library/Mobile Documents/com~apple~CloudDocs/project"
-      )
+      pathRequiresFDA("/Users/john/Library/Mobile Documents/com~apple~CloudDocs/project"),
     ).toBe(true);
   });
 
   it("returns true for ~/Library/Mobile Documents root", () => {
-    expect(
-      pathRequiresFDA("/Users/john/Library/Mobile Documents")
-    ).toBe(true);
+    expect(pathRequiresFDA("/Users/john/Library/Mobile Documents")).toBe(true);
   });
 
   it("returns false for /Volumes/ (external drive)", () => {
@@ -121,7 +117,7 @@ describe("ensurePathAccess", () => {
     // Override the mock to throw
     const macPerms = await import("tauri-plugin-macos-permissions-api");
     vi.mocked(macPerms.checkFullDiskAccessPermission).mockRejectedValueOnce(
-      new Error("plugin error")
+      new Error("plugin error"),
     );
 
     const { ensurePathAccess } = await import("../permissions");
@@ -152,9 +148,7 @@ describe("checkFullDiskAccess", () => {
 
   it("returns true when plugin throws (fail-open)", async () => {
     const macPerms = await import("tauri-plugin-macos-permissions-api");
-    vi.mocked(macPerms.checkFullDiskAccessPermission).mockRejectedValueOnce(
-      new Error("crash")
-    );
+    vi.mocked(macPerms.checkFullDiskAccessPermission).mockRejectedValueOnce(new Error("crash"));
 
     const { checkFullDiskAccess } = await import("../permissions");
     const result = await checkFullDiskAccess();

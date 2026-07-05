@@ -17,6 +17,8 @@ use std::path::Path;
 
 use serde_json::{json, Value};
 
+use super::path_security::canonical_existing_dir;
+
 /// Merges `enabledPlugins` into an existing settings.local.json file.
 ///
 /// Preserves user-defined settings while replacing the `enabledPlugins` object.
@@ -67,6 +69,8 @@ pub async fn write_session_plugin_config(
     working_dir: &Path,
     enabled_plugins: &HashMap<String, bool>,
 ) -> Result<(), String> {
+    let working_dir = canonical_existing_dir(working_dir, "working directory")?;
+
     // Create .claude directory if needed
     let claude_dir = working_dir.join(".claude");
     if !claude_dir.exists() {
@@ -108,6 +112,7 @@ pub async fn write_session_plugin_config(
 ///
 /// * `working_dir` - Directory containing the `.claude/settings.local.json` file
 pub async fn remove_session_plugin_config(working_dir: &Path) -> Result<(), String> {
+    let working_dir = canonical_existing_dir(working_dir, "working directory")?;
     let settings_path = working_dir.join(".claude/settings.local.json");
     if !settings_path.exists() {
         return Ok(());

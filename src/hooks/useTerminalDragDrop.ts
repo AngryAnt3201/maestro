@@ -1,8 +1,7 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useMemo, useState } from "react";
 
-import { getCurrentWindow } from "@tauri-apps/api/window";
-
-import type { SessionSlot } from "@/components/terminal/PreLaunchCard";
+import type { SessionSlot } from "@/components/terminal/PreLaunchCard/PreLaunchCard.types";
 
 interface UseTerminalDragDropOptions {
   slots: SessionSlot[];
@@ -55,12 +54,7 @@ export function useTerminalDragDrop({
       const slotElements = document.querySelectorAll<HTMLElement>("[data-slot-id]");
       for (const el of slotElements) {
         const rect = el.getBoundingClientRect();
-        if (
-          cssX >= rect.left &&
-          cssX <= rect.right &&
-          cssY >= rect.top &&
-          cssY <= rect.bottom
-        ) {
+        if (cssX >= rect.left && cssX <= rect.right && cssY >= rect.top && cssY <= rect.bottom) {
           return el.dataset.slotId ?? null;
         }
       }

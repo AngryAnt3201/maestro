@@ -113,13 +113,11 @@ export function pathRequiresFDA(path: string): boolean {
     `${homeDir}Desktop`,
     `${homeDir}Documents`,
     `${homeDir}Downloads`,
-    `${homeDir}Library/Mobile Documents`,  // iCloud Drive
+    `${homeDir}Library/Mobile Documents`, // iCloud Drive
   ];
 
   // Check if path is in or under any protected directory
-  return tccProtectedDirs.some(
-    (dir) => path === dir || path.startsWith(`${dir}/`)
-  );
+  return tccProtectedDirs.some((dir) => path === dir || path.startsWith(`${dir}/`));
 }
 
 /**

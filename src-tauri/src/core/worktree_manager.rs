@@ -37,7 +37,6 @@ fn project_name(repo_path: &Path) -> String {
         .to_lowercase()
 }
 
-
 /// Replaces filesystem-unsafe characters in branch names with hyphens.
 /// Covers `/`, `\`, `:`, `*`, `?`, `"`, `<`, `>`, and `|`.
 /// Also handles `.` and `..` as special cases returning `unnamed-branch`.
@@ -87,6 +86,7 @@ impl WorktreeManager {
     }
 
     /// Compute the worktree path for a given repo + branch.
+    #[allow(dead_code)]
     pub(crate) async fn worktree_path(&self, repo_path: &Path, branch: &str) -> PathBuf {
         self.worktree_path_with_base(repo_path, branch, None).await
     }
@@ -105,7 +105,9 @@ impl WorktreeManager {
         let hash = &repo_hash(repo_path).await[..8];
         let repo_dir = format!("{}-{}", name, hash);
         let sanitized = sanitize_branch(branch);
-        effective_base_dir(base_override).join(repo_dir).join(sanitized)
+        effective_base_dir(base_override)
+            .join(repo_dir)
+            .join(sanitized)
     }
 
     /// Compute a unique worktree path for force_new mode using a UUID suffix.
@@ -123,7 +125,9 @@ impl WorktreeManager {
         let sanitized = sanitize_branch(branch);
         let uuid_short = &uuid::Uuid::new_v4().to_string()[..8];
         let worktree_name = format!("{}-{}", sanitized, uuid_short);
-        effective_base_dir(base_override).join(repo_dir).join(worktree_name)
+        effective_base_dir(base_override)
+            .join(repo_dir)
+            .join(worktree_name)
     }
 
     /// Creates a worktree for the given branch, returning its path on disk.
@@ -132,11 +136,8 @@ impl WorktreeManager {
     /// before creating (returns `BranchAlreadyCheckedOut` if so). Parent
     /// directories are created automatically. The worktree checks out the
     /// existing branch -- no new branch is created.
-    pub async fn create(
-        &self,
-        branch: &str,
-        repo_path: &Path,
-    ) -> Result<PathBuf, GitError> {
+    #[allow(dead_code)]
+    pub async fn create(&self, branch: &str, repo_path: &Path) -> Result<PathBuf, GitError> {
         self.create_with_base(branch, repo_path, None, false).await
     }
 
@@ -153,7 +154,8 @@ impl WorktreeManager {
         base_override: Option<&Path>,
         force: bool,
     ) -> Result<PathBuf, GitError> {
-        self.create_with_base_inner(branch, repo_path, base_override, force, false).await
+        self.create_with_base_inner(branch, repo_path, base_override, force, false)
+            .await
     }
 
     pub async fn create_with_base_new(
@@ -162,7 +164,8 @@ impl WorktreeManager {
         repo_path: &Path,
         base_override: Option<&Path>,
     ) -> Result<PathBuf, GitError> {
-        self.create_with_base_inner(branch, repo_path, base_override, true, true).await
+        self.create_with_base_inner(branch, repo_path, base_override, true, true)
+            .await
     }
 
     async fn create_with_base_inner(
@@ -178,9 +181,11 @@ impl WorktreeManager {
         // force_new: use a UUID-based unique path so each session gets its own directory.
         // Normal mode: use the deterministic branch-based path.
         let wt_path = if force_new {
-            self.worktree_path_new(repo_path, branch, base_override).await
+            self.worktree_path_new(repo_path, branch, base_override)
+                .await
         } else {
-            self.worktree_path_with_base(repo_path, branch, base_override).await
+            self.worktree_path_with_base(repo_path, branch, base_override)
+                .await
         };
 
         // Guard against duplicate branch in non-main worktrees unless force_new.
@@ -203,10 +208,12 @@ impl WorktreeManager {
 
         // Create parent directories
         if let Some(parent) = wt_path.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(|e| GitError::SpawnError {
-                source: e,
-                command: format!("create_dir_all {:?}", parent),
-            })?;
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| GitError::SpawnError {
+                    source: e,
+                    command: format!("create_dir_all {:?}", parent),
+                })?;
         }
 
         if force || force_new {
@@ -262,6 +269,7 @@ impl WorktreeManager {
     /// subdirectories that are no longer in git's worktree list. Orphaned
     /// directories are deleted with `remove_dir_all`. No-ops gracefully if
     /// the managed directory does not exist yet.
+    #[allow(dead_code)]
     pub async fn prune(&self, repo_path: &Path) -> Result<(), GitError> {
         let git = Git::new(repo_path);
         git.worktree_prune().await?;
@@ -273,12 +281,13 @@ impl WorktreeManager {
         let repo_dir = format!("{}-{}", name, hash);
         let managed_dir = worktree_base_dir().join(&repo_dir);
 
-        let base_exists = tokio::fs::try_exists(&managed_dir)
-            .await
-            .map_err(|e| GitError::SpawnError {
-                source: e,
-                command: format!("try_exists {:?}", managed_dir),
-            })?;
+        let base_exists =
+            tokio::fs::try_exists(&managed_dir)
+                .await
+                .map_err(|e| GitError::SpawnError {
+                    source: e,
+                    command: format!("try_exists {:?}", managed_dir),
+                })?;
         if !base_exists {
             return Ok(());
         }
@@ -294,7 +303,9 @@ impl WorktreeManager {
         let mut active: HashSet<String> = HashSet::with_capacity(active_raw.len());
         for raw in &active_raw {
             let p = Path::new(raw);
-            let canonical = tokio::fs::canonicalize(p).await.unwrap_or_else(|_| p.to_path_buf());
+            let canonical = tokio::fs::canonicalize(p)
+                .await
+                .unwrap_or_else(|_| p.to_path_buf());
             active.insert(canonical.to_string_lossy().to_string());
         }
 

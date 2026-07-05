@@ -1,6 +1,9 @@
+import Check from "lucide-react/dist/esm/icons/check";
+import Download from "lucide-react/dist/esm/icons/download";
+import ExternalLink from "lucide-react/dist/esm/icons/external-link";
+import Package from "lucide-react/dist/esm/icons/package";
 import { useMarketplaceStore } from "@/stores/useMarketplaceStore";
 import type { MarketplacePlugin } from "@/types/marketplace";
-import { Check, Download, ExternalLink, Package } from "lucide-react";
 
 interface MarketplacePluginCardProps {
   plugin: MarketplacePlugin;
@@ -9,7 +12,8 @@ interface MarketplacePluginCardProps {
 
 export function MarketplacePluginCard({ plugin, onInstall }: MarketplacePluginCardProps) {
   // Subscribe to installedPlugins to ensure re-render when installation status changes
-  const { isInstalled, getInstalledVersion, installingPluginId, installedPlugins } = useMarketplaceStore();
+  const { isInstalled, getInstalledVersion, installingPluginId, installedPlugins } =
+    useMarketplaceStore();
   void installedPlugins; // Ensure subscription triggers re-render
 
   const installed = isInstalled(plugin.id);
@@ -29,11 +33,7 @@ export function MarketplacePluginCard({ plugin, onInstall }: MarketplacePluginCa
         {/* Icon */}
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-maestro-accent/10">
           {plugin.icon_url ? (
-            <img
-              src={plugin.icon_url}
-              alt={plugin.name}
-              className="h-6 w-6 rounded"
-            />
+            <img src={plugin.icon_url} alt={plugin.name} className="h-6 w-6 rounded" />
           ) : (
             <Package size={20} className="text-maestro-accent" />
           )}
@@ -41,12 +41,8 @@ export function MarketplacePluginCard({ plugin, onInstall }: MarketplacePluginCa
 
         {/* Title and author */}
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-medium text-maestro-text">
-            {plugin.name}
-          </h3>
-          <p className="truncate text-xs text-maestro-muted">
-            by {plugin.author}
-          </p>
+          <h3 className="truncate text-sm font-medium text-maestro-text">{plugin.name}</h3>
+          <p className="truncate text-xs text-maestro-muted">by {plugin.author}</p>
         </div>
 
         {/* Version badge */}
@@ -84,9 +80,7 @@ export function MarketplacePluginCard({ plugin, onInstall }: MarketplacePluginCa
         <span className="rounded bg-maestro-accent/10 px-1.5 py-0.5 text-maestro-accent">
           {categoryLabel}
         </span>
-        {typesLabel && (
-          <span className="text-maestro-border">|</span>
-        )}
+        {typesLabel && <span className="text-maestro-border">|</span>}
         <span>{typesLabel}</span>
       </div>
 
@@ -104,9 +98,7 @@ export function MarketplacePluginCard({ plugin, onInstall }: MarketplacePluginCa
             {plugin.stars.toLocaleString()}
           </span>
         )}
-        {plugin.license && (
-          <span>{plugin.license}</span>
-        )}
+        {plugin.license && <span>{plugin.license}</span>}
       </div>
 
       {/* Actions */}
@@ -116,9 +108,7 @@ export function MarketplacePluginCard({ plugin, onInstall }: MarketplacePluginCa
             <Check size={14} />
             <span>Installed</span>
             {installedVersion && installedVersion !== plugin.version && (
-              <span className="ml-1 text-[10px] text-yellow-400">
-                (v{installedVersion})
-              </span>
+              <span className="ml-1 text-[10px] text-yellow-400">(v{installedVersion})</span>
             )}
           </div>
         ) : (

@@ -168,10 +168,7 @@ export async function refreshProjectPlugins(projectPath: string): Promise<Projec
  * Gets the enabled skill IDs for a specific session.
  * If not explicitly set, returns all available skills.
  */
-export async function getSessionSkills(
-  projectPath: string,
-  sessionId: number
-): Promise<string[]> {
+export async function getSessionSkills(projectPath: string, sessionId: number): Promise<string[]> {
   return invoke<string[]>("get_session_skills", { projectPath, sessionId });
 }
 
@@ -181,7 +178,7 @@ export async function getSessionSkills(
 export async function setSessionSkills(
   projectPath: string,
   sessionId: number,
-  enabled: string[]
+  enabled: string[],
 ): Promise<void> {
   return invoke("set_session_skills", { projectPath, sessionId, enabled });
 }
@@ -190,10 +187,7 @@ export async function setSessionSkills(
  * Gets the enabled plugin IDs for a specific session.
  * If not explicitly set, returns plugins where enabled_by_default is true.
  */
-export async function getSessionPlugins(
-  projectPath: string,
-  sessionId: number
-): Promise<string[]> {
+export async function getSessionPlugins(projectPath: string, sessionId: number): Promise<string[]> {
   return invoke<string[]>("get_session_plugins", { projectPath, sessionId });
 }
 
@@ -203,7 +197,7 @@ export async function getSessionPlugins(
 export async function setSessionPlugins(
   projectPath: string,
   sessionId: number,
-  enabled: string[]
+  enabled: string[],
 ): Promise<void> {
   return invoke("set_session_plugins", { projectPath, sessionId, enabled });
 }
@@ -213,7 +207,7 @@ export async function setSessionPlugins(
  */
 export async function getSessionSkillsCount(
   projectPath: string,
-  sessionId: number
+  sessionId: number,
 ): Promise<number> {
   return invoke<number>("get_session_skills_count", { projectPath, sessionId });
 }
@@ -223,7 +217,7 @@ export async function getSessionSkillsCount(
  */
 export async function getSessionPluginsCount(
   projectPath: string,
-  sessionId: number
+  sessionId: number,
 ): Promise<number> {
   return invoke<number>("get_session_plugins_count", { projectPath, sessionId });
 }
@@ -234,7 +228,7 @@ export async function getSessionPluginsCount(
  */
 export async function saveProjectSkillDefaults(
   projectPath: string,
-  enabledSkills: string[]
+  enabledSkills: string[],
 ): Promise<void> {
   return invoke("save_project_skill_defaults", { projectPath, enabledSkills });
 }
@@ -243,9 +237,7 @@ export async function saveProjectSkillDefaults(
  * Loads the default enabled skills for a project.
  * Returns null if no defaults have been saved.
  */
-export async function loadProjectSkillDefaults(
-  projectPath: string
-): Promise<string[] | null> {
+export async function loadProjectSkillDefaults(projectPath: string): Promise<string[] | null> {
   return invoke<string[] | null>("load_project_skill_defaults", { projectPath });
 }
 
@@ -255,7 +247,7 @@ export async function loadProjectSkillDefaults(
  */
 export async function saveProjectPluginDefaults(
   projectPath: string,
-  enabledPlugins: string[]
+  enabledPlugins: string[],
 ): Promise<void> {
   return invoke("save_project_plugin_defaults", { projectPath, enabledPlugins });
 }
@@ -264,9 +256,7 @@ export async function saveProjectPluginDefaults(
  * Loads the default enabled plugins for a project.
  * Returns null if no defaults have been saved.
  */
-export async function loadProjectPluginDefaults(
-  projectPath: string
-): Promise<string[] | null> {
+export async function loadProjectPluginDefaults(projectPath: string): Promise<string[] | null> {
   return invoke<string[] | null>("load_project_plugin_defaults", { projectPath });
 }
 
@@ -279,7 +269,7 @@ export async function loadProjectPluginDefaults(
 export async function writeSessionPluginConfig(
   workingDir: string,
   projectPath: string,
-  enabledPluginIds: string[]
+  enabledPluginIds: string[],
 ): Promise<void> {
   return invoke("write_session_plugin_config", { workingDir, projectPath, enabledPluginIds });
 }
@@ -331,7 +321,7 @@ export interface BranchConfig {
 export async function saveBranchConfig(
   projectPath: string,
   branch: string,
-  config: BranchConfig
+  config: BranchConfig,
 ): Promise<void> {
   return invoke("save_branch_config", {
     projectPath,
@@ -349,7 +339,7 @@ export async function saveBranchConfig(
  */
 export async function loadBranchConfig(
   projectPath: string,
-  branch: string
+  branch: string,
 ): Promise<BranchConfig | null> {
   return invoke<BranchConfig | null>("load_branch_config", { projectPath, branch });
 }

@@ -1,15 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
-import {
-  ArrowDownCircle,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Loader2,
-  RefreshCw,
-  Terminal,
-  X,
-} from "lucide-react";
+import ArrowDownCircle from "lucide-react/dist/esm/icons/arrow-down-circle";
+import Check from "lucide-react/dist/esm/icons/check";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import Terminal from "lucide-react/dist/esm/icons/terminal";
+import X from "lucide-react/dist/esm/icons/x";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toInvokeErrorMessage } from "@/lib/invokeError";
 import { useUpdateStore } from "@/stores/useUpdateStore";
 
 interface MaestroSettingsModalProps {
@@ -61,7 +60,9 @@ export function MaestroSettingsModal({ onClose }: MaestroSettingsModalProps) {
   const setCustomEndpoint = useUpdateStore((s) => s.setCustomEndpoint);
 
   useEffect(() => {
-    invoke<boolean>("is_cli_installed").then(setCliInstalled).catch(() => setCliInstalled(false));
+    invoke<boolean>("is_cli_installed")
+      .then(setCliInstalled)
+      .catch(() => setCliInstalled(false));
   }, []);
 
   useEffect(() => {
@@ -134,9 +135,7 @@ export function MaestroSettingsModal({ onClose }: MaestroSettingsModalProps) {
             </div>
             <div className="flex items-center gap-2 px-1 text-xs">
               <Check size={12} className="shrink-0 text-maestro-green" />
-              <span className="text-maestro-text font-medium">
-                v{appVersion ?? "..."}
-              </span>
+              <span className="text-maestro-text font-medium">v{appVersion ?? "..."}</span>
             </div>
           </div>
 
@@ -217,10 +216,16 @@ export function MaestroSettingsModal({ onClose }: MaestroSettingsModalProps) {
             </div>
             <div className="space-y-1.5 px-1">
               <p className="text-[11px] text-maestro-muted">
-                Install the <code className="rounded bg-maestro-border/40 px-1 py-0.5 text-maestro-text">maestro</code> command to open projects from your terminal.
+                Install the{" "}
+                <code className="rounded bg-maestro-border/40 px-1 py-0.5 text-maestro-text">
+                  maestro
+                </code>{" "}
+                command to open projects from your terminal.
               </p>
               {cliStatus && (
-                <div className={`text-[11px] ${cliStatus.kind === "error" ? "text-maestro-red" : "text-maestro-green"}`}>
+                <div
+                  className={`text-[11px] ${cliStatus.kind === "error" ? "text-maestro-red" : "text-maestro-green"}`}
+                >
                   {cliStatus.message}
                 </div>
               )}
@@ -241,7 +246,7 @@ export function MaestroSettingsModal({ onClose }: MaestroSettingsModalProps) {
                             setCliStatus({ kind: "ok", message: "CLI command removed" });
                           })
                           .catch((err) => {
-                            const msg = String(err);
+                            const msg = toInvokeErrorMessage(err);
                             if (msg === CLI_CANCEL_SENTINEL) {
                               setCliStatus(null);
                               return;
@@ -265,7 +270,7 @@ export function MaestroSettingsModal({ onClose }: MaestroSettingsModalProps) {
                           setCliStatus({ kind: "ok", message: `Installed to ${path}` });
                         })
                         .catch((err) => {
-                          const msg = String(err);
+                          const msg = toInvokeErrorMessage(err);
                           if (msg === CLI_CANCEL_SENTINEL) {
                             setCliStatus(null);
                             return;
@@ -295,10 +300,14 @@ export function MaestroSettingsModal({ onClose }: MaestroSettingsModalProps) {
 
             {advancedOpen && (
               <div className="px-2 py-1.5 space-y-1.5">
-                <label className="block text-[10px] text-maestro-muted uppercase tracking-wide">
+                <label
+                  htmlFor="maestro-custom-endpoint"
+                  className="block text-[10px] text-maestro-muted uppercase tracking-wide"
+                >
                   Custom endpoint
                 </label>
                 <input
+                  id="maestro-custom-endpoint"
                   type="text"
                   value={endpointInput}
                   onChange={(e) => setEndpointInput(e.target.value)}

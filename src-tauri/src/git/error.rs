@@ -22,6 +22,7 @@ pub enum GitError {
 
     /// A git command was terminated by a signal before completing.
     #[error("git command was killed by signal")]
+    #[allow(dead_code)]
     Killed { command: String },
 
     /// The git process could not be spawned (e.g., permission denied).
@@ -37,6 +38,7 @@ pub enum GitError {
 
     /// Structured output from git could not be parsed as expected.
     #[error("failed to parse git output: {message}")]
+    #[allow(dead_code)]
     ParseError { message: String },
 
     /// The specified path is not a git repository.
@@ -49,6 +51,7 @@ pub enum GitError {
 
     /// The specified worktree path does not exist in git's worktree list.
     #[error("worktree not found: {0}")]
+    #[allow(dead_code)]
     WorktreeNotFound(String),
 }
 

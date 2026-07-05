@@ -1,4 +1,4 @@
-import { MessageSquare } from "lucide-react";
+import MessageSquare from "lucide-react/dist/esm/icons/message-square";
 import type { Comment } from "../../../stores/useGitHubStore";
 import { CommentItem } from "./CommentItem";
 

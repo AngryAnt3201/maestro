@@ -36,7 +36,11 @@ const DECAY_THRESHOLD = 4;
  * This adapts naturally to swipe strength: a gentle flick unlocks quickly,
  * while a hard swipe waits longer — but always as short as possible.
  */
-export function useSwipeNavigation({ onSwipeLeft, onSwipeRight, enabled = true }: UseSwipeNavigationOptions): void {
+export function useSwipeNavigation({
+  onSwipeLeft,
+  onSwipeRight,
+  enabled = true,
+}: UseSwipeNavigationOptions): void {
   const state = useRef<"ready" | "cooldown" | "wait_decay">("ready");
   const cooldownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -54,8 +58,14 @@ export function useSwipeNavigation({ onSwipeLeft, onSwipeRight, enabled = true }
 
     function unlock() {
       state.current = "ready";
-      if (cooldownTimer.current) { clearTimeout(cooldownTimer.current); cooldownTimer.current = null; }
-      if (idleTimer.current) { clearTimeout(idleTimer.current); idleTimer.current = null; }
+      if (cooldownTimer.current) {
+        clearTimeout(cooldownTimer.current);
+        cooldownTimer.current = null;
+      }
+      if (idleTimer.current) {
+        clearTimeout(idleTimer.current);
+        idleTimer.current = null;
+      }
     }
 
     function handleWheel(event: WheelEvent) {

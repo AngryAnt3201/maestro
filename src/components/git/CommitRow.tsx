@@ -1,4 +1,6 @@
-import { GitBranch, GitMerge, Tag } from "lucide-react";
+import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import GitMerge from "lucide-react/dist/esm/icons/git-merge";
+import Tag from "lucide-react/dist/esm/icons/tag";
 import { useMemo } from "react";
 import type { GraphNode } from "../../lib/graphLayout";
 import { ROW_HEIGHT } from "./CommitGraph";
@@ -17,7 +19,14 @@ const RAIL_WIDTH = 16;
 const DOT_RADIUS = 5;
 const GRAPH_PADDING = 12;
 
-export function CommitRow({ node, isSelected, isHead, refs, onClick, graphAreaWidth }: CommitRowProps) {
+export function CommitRow({
+  node,
+  isSelected,
+  isHead,
+  refs,
+  onClick,
+  graphAreaWidth,
+}: CommitRowProps) {
   const { commit, column, railColor } = node;
   const isMerge = commit.parent_hashes.length > 1;
 
@@ -71,9 +80,7 @@ export function CommitRow({ node, isSelected, isHead, refs, onClick, graphAreaWi
       type="button"
       onClick={onClick}
       className={`flex w-full items-center gap-2 border-b border-maestro-border/30 pr-2 text-left transition-colors h-7 ${
-        isSelected
-          ? "bg-maestro-accent/20 hover:bg-maestro-accent/25"
-          : "hover:bg-maestro-card/50"
+        isSelected ? "bg-maestro-accent/20 hover:bg-maestro-accent/25" : "hover:bg-maestro-card/50"
       }`}
     >
       {/* Graph dot area */}
@@ -85,6 +92,7 @@ export function CommitRow({ node, isSelected, isHead, refs, onClick, graphAreaWi
           width={graphWidth}
           height={ROW_HEIGHT}
           className="absolute left-0 top-0"
+          aria-hidden="true"
         >
           {/* Commit dot */}
           <circle
@@ -128,9 +136,7 @@ export function CommitRow({ node, isSelected, isHead, refs, onClick, graphAreaWi
           </span>
         ))}
         {remoteBranches.length > 1 && (
-          <span className="text-[10px] text-maestro-muted">
-            +{remoteBranches.length - 1}
-          </span>
+          <span className="text-[10px] text-maestro-muted">+{remoteBranches.length - 1}</span>
         )}
         {tags.map((tag) => (
           <span
@@ -145,18 +151,12 @@ export function CommitRow({ node, isSelected, isHead, refs, onClick, graphAreaWi
 
       {/* Commit message */}
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        {isMerge && (
-          <GitMerge size={12} className="shrink-0 text-maestro-muted" />
-        )}
-        <span className="truncate text-xs text-maestro-text">
-          {commit.summary}
-        </span>
+        {isMerge && <GitMerge size={12} className="shrink-0 text-maestro-muted" />}
+        <span className="truncate text-xs text-maestro-text">{commit.summary}</span>
       </div>
 
       {/* Short hash */}
-      <span className="shrink-0 font-mono text-[10px] text-maestro-muted">
-        {commit.short_hash}
-      </span>
+      <span className="shrink-0 font-mono text-[10px] text-maestro-muted">{commit.short_hash}</span>
 
       {/* Relative time */}
       <span className="w-8 shrink-0 text-right text-[10px] text-maestro-muted/60">

@@ -28,7 +28,9 @@ pub async fn check_for_updates(
     let current_version = app.package_info().version.to_string();
 
     let update = if let Some(endpoint) = custom_endpoint {
-        let url: Url = endpoint.parse().map_err(|e| format!("Invalid endpoint URL: {e}"))?;
+        let url: Url = endpoint
+            .parse()
+            .map_err(|e| format!("Invalid endpoint URL: {e}"))?;
         app.updater_builder()
             .endpoints(vec![url])
             .map_err(|e| format!("Failed to configure updater: {e}"))?
@@ -70,7 +72,9 @@ pub async fn download_and_install_update(
     custom_endpoint: Option<String>,
 ) -> Result<(), String> {
     let update = if let Some(endpoint) = custom_endpoint {
-        let url: Url = endpoint.parse().map_err(|e| format!("Invalid endpoint URL: {e}"))?;
+        let url: Url = endpoint
+            .parse()
+            .map_err(|e| format!("Invalid endpoint URL: {e}"))?;
         app.updater_builder()
             .endpoints(vec![url])
             .map_err(|e| format!("Failed to configure updater: {e}"))?

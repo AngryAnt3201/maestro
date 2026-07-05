@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FDADialog } from "../FDADialog";
 
 // Mock the permissions module
@@ -32,9 +32,7 @@ describe("FDADialog", () => {
 
   it("shows the full path in mono display", () => {
     render(<FDADialog {...defaultProps} />);
-    expect(
-      screen.getByText("/Users/john/Desktop/my-project")
-    ).toBeInTheDocument();
+    expect(screen.getByText("/Users/john/Desktop/my-project")).toBeInTheDocument();
   });
 
   it("shows fallback folder name when path is null", () => {

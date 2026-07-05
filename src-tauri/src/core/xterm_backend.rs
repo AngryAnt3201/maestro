@@ -4,6 +4,8 @@
 //! It wraps the existing ProcessManager PTY logic and implements the
 //! TerminalBackend trait for cross-platform compatibility.
 
+#![allow(dead_code)]
+
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -324,7 +326,9 @@ impl TerminalBackend for XtermPassthroughBackend {
         }
 
         let session_guard = self.session.lock().unwrap();
-        let session = session_guard.as_ref().ok_or(TerminalError::NotInitialized)?;
+        let session = session_guard
+            .as_ref()
+            .ok_or(TerminalError::NotInitialized)?;
 
         session
             .master
@@ -407,8 +411,8 @@ impl TerminalBackend for XtermPassthroughBackend {
 
         #[cfg(windows)]
         {
-            use std::process::Command;
             use super::windows_process::StdCommandExt;
+            use std::process::Command;
             let result = Command::new("taskkill")
                 .args(["/PID", &pid.to_string(), "/T", "/F"])
                 .hide_console_window()

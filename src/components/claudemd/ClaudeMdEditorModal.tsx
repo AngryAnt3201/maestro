@@ -1,6 +1,8 @@
-import { Loader2, X } from "lucide-react";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import X from "lucide-react/dist/esm/icons/x";
 import { useEffect, useRef, useState } from "react";
 import { writeClaudeMd } from "@/lib/claudemd";
+import { toInvokeErrorMessage } from "@/lib/invokeError";
 
 interface ClaudeMdEditorModalProps {
   /** Current project path */
@@ -43,7 +45,7 @@ export function ClaudeMdEditorModal({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [content, setContent] = useState(
-    exists && initialContent ? initialContent : DEFAULT_TEMPLATE
+    exists && initialContent ? initialContent : DEFAULT_TEMPLATE,
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +86,7 @@ export function ClaudeMdEditorModal({
       onSaved?.();
       onClose();
     } catch (err) {
-      setError(String(err));
+      setError(toInvokeErrorMessage(err));
     } finally {
       setSaving(false);
     }

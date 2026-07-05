@@ -73,7 +73,7 @@ export function RepoRail({ repositories, selectedRepoPath, onSelectRepo }: RepoR
           >
             {tooltip.name}
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );

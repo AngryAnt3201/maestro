@@ -498,7 +498,9 @@ impl TerminalBackend for VteBackend {
 
         // Resize PTY
         let session_guard = self.session.lock().unwrap();
-        let session = session_guard.as_ref().ok_or(TerminalError::NotInitialized)?;
+        let session = session_guard
+            .as_ref()
+            .ok_or(TerminalError::NotInitialized)?;
 
         session
             .master
@@ -518,11 +520,7 @@ impl TerminalBackend for VteBackend {
             return None;
         }
 
-        self.handler
-            .read()
-            .unwrap()
-            .as_ref()
-            .map(|h| h.get_state())
+        self.handler.read().unwrap().as_ref().map(|h| h.get_state())
     }
 
     fn subscribe_output(&self, _callback: Box<dyn Fn(&[u8]) + Send + Sync>) -> SubscriptionHandle {
@@ -577,8 +575,8 @@ impl TerminalBackend for VteBackend {
 
         #[cfg(windows)]
         {
-            use std::process::Command;
             use super::windows_process::StdCommandExt;
+            use std::process::Command;
             let _ = Command::new("taskkill")
                 .args(["/PID", &pid.to_string(), "/T", "/F"])
                 .hide_console_window()
@@ -625,10 +623,18 @@ struct DummyPerform;
 impl Perform for DummyPerform {
     fn print(&mut self, _c: char) {}
     fn execute(&mut self, _byte: u8) {}
-    fn hook(&mut self, _params: &vte::Params, _intermediates: &[u8], _ignore: bool, _action: char) {}
+    fn hook(&mut self, _params: &vte::Params, _intermediates: &[u8], _ignore: bool, _action: char) {
+    }
     fn put(&mut self, _byte: u8) {}
     fn unhook(&mut self) {}
     fn osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) {}
-    fn csi_dispatch(&mut self, _params: &vte::Params, _intermediates: &[u8], _ignore: bool, _action: char) {}
+    fn csi_dispatch(
+        &mut self,
+        _params: &vte::Params,
+        _intermediates: &[u8],
+        _ignore: bool,
+        _action: char,
+    ) {
+    }
     fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {}
 }

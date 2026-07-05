@@ -9,11 +9,16 @@
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-start-dragging",
-    "store:default",
-    "dialog:default",
-    "opener:default",
-    "updater:default",
-    "cli:default",
-    "core:window:allow-set-focus"
+    "core:window:allow-set-focus",
+    "store:allow-load",
+    "store:allow-get-store",
+    "store:allow-set",
+    "store:allow-get",
+    "store:allow-delete",
+    "store:allow-save",
+    "dialog:allow-open",
+    "dialog:allow-message",
+    "opener:allow-open-url",
+    "opener:allow-default-urls"
   ]
 }

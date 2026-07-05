@@ -160,11 +160,10 @@ impl ProcessManager {
         // Windows spawn debounce: prevent rapid consecutive spawns (Bug #76)
         #[cfg(windows)]
         {
-            let mut last = self
-                .inner
-                .last_spawn_time
-                .lock()
-                .map_err(|e| PtyError::spawn_failed(format!("Spawn time lock poisoned: {e}")))?;
+            let mut last =
+                self.inner.last_spawn_time.lock().map_err(|e| {
+                    PtyError::spawn_failed(format!("Spawn time lock poisoned: {e}"))
+                })?;
             let elapsed = last.elapsed();
             if elapsed < std::time::Duration::from_millis(500) {
                 log::warn!(
@@ -602,8 +601,8 @@ impl ProcessManager {
 
         #[cfg(windows)]
         {
-            use std::process::Command;
             use super::windows_process::StdCommandExt;
+            use std::process::Command;
             // Use taskkill to terminate process tree
             let result = Command::new("taskkill")
                 .args(["/PID", &pid.to_string(), "/T", "/F"])

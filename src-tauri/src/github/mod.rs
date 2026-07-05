@@ -4,8 +4,7 @@ pub mod runner;
 
 pub use error::GitHubError;
 pub use ops::{
-    AuthStatus, Comment, CommentReactions, CreatePullRequestOptions, DiscussionCategory,
-    DiscussionDetail, DiscussionInfo, IssueDetail, IssueFilter, IssueInfo, MergeMethod, PrAuthor,
-    PrLabel, PullRequestDetail, PullRequestFilter, PullRequestInfo,
+    AuthStatus, CreatePullRequestOptions, DiscussionDetail, DiscussionInfo, IssueDetail,
+    IssueFilter, IssueInfo, MergeMethod, PullRequestDetail, PullRequestFilter, PullRequestInfo,
 };
 pub use runner::GitHub;

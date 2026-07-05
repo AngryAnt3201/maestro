@@ -1,7 +1,6 @@
 //! IPC commands for CLAUDE.md file detection and editing.
 
 use serde::Serialize;
-use std::path::PathBuf;
 
 /// Status of CLAUDE.md file at project root.
 #[derive(Debug, Clone, Serialize)]
@@ -23,9 +22,7 @@ pub async fn check_claude_md(project_path: String) -> Result<ClaudeMdStatus, Str
 
     if claude_md_path.exists() {
         // Read content if file exists
-        let content = tokio::fs::read_to_string(&claude_md_path)
-            .await
-            .ok();
+        let content = tokio::fs::read_to_string(&claude_md_path).await.ok();
 
         Ok(ClaudeMdStatus {
             exists: true,

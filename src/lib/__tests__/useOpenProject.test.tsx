@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock modules before imports
 const mockOpenProject = vi.fn();
@@ -18,10 +18,10 @@ vi.mock("@/lib/permissions", () => ({
   ensurePathAccess: vi.fn(),
 }));
 
-import { useOpenProject } from "../useOpenProject";
-import { useFDAStore } from "@/stores/useFDAStore";
 import { pickProjectFolder } from "@/lib/dialog";
-import { pathRequiresFDA, checkFullDiskAccess } from "@/lib/permissions";
+import { checkFullDiskAccess, pathRequiresFDA } from "@/lib/permissions";
+import { useFDAStore } from "@/stores/useFDAStore";
+import { useOpenProject } from "../useOpenProject";
 
 const mockPickProjectFolder = vi.mocked(pickProjectFolder);
 const mockPathRequiresFDA = vi.mocked(pathRequiresFDA);

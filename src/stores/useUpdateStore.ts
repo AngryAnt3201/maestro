@@ -3,10 +3,17 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
+import { toInvokeErrorMessage } from "@/lib/invokeError";
 
 // --- Types ---
 
-export type UpdateStatus = "idle" | "checking" | "available" | "downloading" | "installing" | "error";
+export type UpdateStatus =
+  | "idle"
+  | "checking"
+  | "available"
+  | "downloading"
+  | "installing"
+  | "error";
 
 export interface UpdateInfo {
   available: boolean;
@@ -118,7 +125,7 @@ export const useUpdateStore = create<UpdateState & UpdateActions>()(
         } catch (err) {
           set({
             status: "error",
-            error: err instanceof Error ? err.message : String(err),
+            error: toInvokeErrorMessage(err),
             lastCheckedAt: Date.now(),
           });
         }
@@ -137,7 +144,7 @@ export const useUpdateStore = create<UpdateState & UpdateActions>()(
         } catch (err) {
           set({
             status: "error",
-            error: err instanceof Error ? err.message : String(err),
+            error: toInvokeErrorMessage(err),
             downloadProgress: null,
           });
         }
@@ -163,7 +170,9 @@ export const useUpdateStore = create<UpdateState & UpdateActions>()(
           (event) => {
             bytesReceived += event.payload.chunk_length;
             const total = event.payload.content_length;
-            const progress = total ? Math.min(100, Math.round((bytesReceived / total) * 100)) : null;
+            const progress = total
+              ? Math.min(100, Math.round((bytesReceived / total) * 100))
+              : null;
             set({ downloadProgress: progress });
           },
         );

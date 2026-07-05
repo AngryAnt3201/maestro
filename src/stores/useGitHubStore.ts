@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import { toInvokeErrorMessage } from "@/lib/invokeError";
 
 /** GitHub authentication status. */
 export interface AuthStatus {
@@ -175,20 +176,16 @@ interface GitHubState {
     body: string,
     base: string,
     head: string,
-    draft: boolean
+    draft: boolean,
   ) => Promise<PullRequestInfo>;
   mergePullRequest: (
     repoPath: string,
     number: number,
     method: MergeMethod,
-    deleteBranch: boolean
+    deleteBranch: boolean,
   ) => Promise<void>;
   closePullRequest: (repoPath: string, number: number) => Promise<void>;
-  commentPullRequest: (
-    repoPath: string,
-    number: number,
-    body: string
-  ) => Promise<void>;
+  commentPullRequest: (repoPath: string, number: number, body: string) => Promise<void>;
   fetchIssues: (repoPath: string, state?: IssueFilterState) => Promise<void>;
   fetchDiscussions: (repoPath: string) => Promise<void>;
   fetchIssueDetail: (repoPath: string, number: number) => Promise<void>;
@@ -241,7 +238,7 @@ export const useGitHubStore = create<GitHubState>()((set, get) => ({
       set({
         authStatus: { logged_in: false, username: null, scopes: [] },
         isCheckingAuth: false,
-        authError: String(err),
+        authError: toInvokeErrorMessage(err),
       });
     }
   },
@@ -258,7 +255,7 @@ export const useGitHubStore = create<GitHubState>()((set, get) => ({
       set({ pullRequests, isPRsLoading: false });
     } catch (err) {
       console.error("Failed to fetch PRs:", err);
-      set({ prsError: String(err), isPRsLoading: false, pullRequests: [] });
+      set({ prsError: toInvokeErrorMessage(err), isPRsLoading: false, pullRequests: [] });
     }
   },
 
@@ -282,7 +279,7 @@ export const useGitHubStore = create<GitHubState>()((set, get) => ({
     body: string,
     base: string,
     head: string,
-    draft: boolean
+    draft: boolean,
   ) => {
     const pr = await invoke<PullRequestInfo>("github_create_pr", {
       repoPath,
@@ -301,7 +298,7 @@ export const useGitHubStore = create<GitHubState>()((set, get) => ({
     repoPath: string,
     number: number,
     method: MergeMethod,
-    deleteBranch: boolean
+    deleteBranch: boolean,
   ) => {
     await invoke("github_merge_pr", {
       repoPath,
@@ -321,11 +318,7 @@ export const useGitHubStore = create<GitHubState>()((set, get) => ({
     set({ selectedPR: null });
   },
 
-  commentPullRequest: async (
-    repoPath: string,
-    number: number,
-    body: string
-  ) => {
+  commentPullRequest: async (repoPath: string, number: number, body: string) => {
     await invoke("github_comment_pr", { repoPath, number, body });
     // Refresh PR detail to show the new comment
     await get().fetchPullRequestDetail(repoPath, number);
@@ -343,20 +336,20 @@ export const useGitHubStore = create<GitHubState>()((set, get) => ({
       set({ issues, isIssuesLoading: false });
     } catch (err) {
       console.error("Failed to fetch issues:", err);
-      set({ issuesError: String(err), isIssuesLoading: false, issues: [] });
+      set({ issuesError: toInvokeErrorMessage(err), isIssuesLoading: false, issues: [] });
     }
   },
 
   fetchDiscussions: async (repoPath: string) => {
     set({ isDiscussionsLoading: true, discussionsError: null });
     try {
-      const discussions = await invoke<DiscussionInfo[]>(
-        "github_list_discussions",
-        { repoPath, limit: 25 }
-      );
+      const discussions = await invoke<DiscussionInfo[]>("github_list_discussions", {
+        repoPath,
+        limit: 25,
+      });
       set({ discussions, isDiscussionsLoading: false, discussionsEnabled: true });
     } catch (err) {
-      const errorStr = String(err);
+      const errorStr = toInvokeErrorMessage(err);
       console.error("Failed to fetch discussions:", err);
       if (errorStr.includes("not enabled")) {
         set({
@@ -415,10 +408,10 @@ export const useGitHubStore = create<GitHubState>()((set, get) => ({
   fetchDiscussionDetail: async (repoPath: string, number: number) => {
     set({ isLoadingDiscussionDetail: true });
     try {
-      const selectedDiscussion = await invoke<DiscussionDetail>(
-        "github_get_discussion",
-        { repoPath, number }
-      );
+      const selectedDiscussion = await invoke<DiscussionDetail>("github_get_discussion", {
+        repoPath,
+        number,
+      });
       set({ selectedDiscussion, isLoadingDiscussionDetail: false });
     } catch (err) {
       console.error("Failed to fetch discussion detail:", err);

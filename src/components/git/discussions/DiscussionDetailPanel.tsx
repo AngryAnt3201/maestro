@@ -1,30 +1,21 @@
-import {
-  X,
-  CheckCircle,
-  ExternalLink,
-  MessageSquare,
-  Loader2,
-} from "lucide-react";
+import CheckCircle from "lucide-react/dist/esm/icons/check-circle";
+import ExternalLink from "lucide-react/dist/esm/icons/external-link";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import MessageSquare from "lucide-react/dist/esm/icons/message-square";
+import X from "lucide-react/dist/esm/icons/x";
 import { useState } from "react";
 import { useGitHubStore } from "../../../stores/useGitHubStore";
-import { MarkdownBody } from "../shared/MarkdownBody";
 import { CommentList } from "../shared/CommentList";
 import { parseEmoji } from "../shared/emojiUtils";
+import { MarkdownBody } from "../shared/MarkdownBody";
 
 interface DiscussionDetailPanelProps {
   repoPath: string;
   onClose: () => void;
 }
 
-export function DiscussionDetailPanel({
-  repoPath,
-  onClose,
-}: DiscussionDetailPanelProps) {
-  const {
-    selectedDiscussion,
-    isLoadingDiscussionDetail,
-    commentDiscussion,
-  } = useGitHubStore();
+export function DiscussionDetailPanel({ repoPath, onClose }: DiscussionDetailPanelProps) {
+  const { selectedDiscussion, isLoadingDiscussionDetail, commentDiscussion } = useGitHubStore();
 
   const [commentText, setCommentText] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
@@ -81,9 +72,7 @@ export function DiscussionDetailPanel({
       <div className="flex-1 overflow-auto p-3" style={{ scrollbarWidth: "thin" }}>
         {/* Title */}
         <h3 className="mb-2 text-sm font-medium text-maestro-text">
-          {isAnswered && (
-            <CheckCircle size={14} className="mr-1 inline text-green-400" />
-          )}
+          {isAnswered && <CheckCircle size={14} className="mr-1 inline text-green-400" />}
           {selectedDiscussion.title}
         </h3>
 

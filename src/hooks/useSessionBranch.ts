@@ -1,5 +1,5 @@
-import { getDeduplicatedCurrentBranch } from "@/lib/git";
 import { useEffect, useRef, useState } from "react";
+import { getDeduplicatedCurrentBranch } from "@/lib/git";
 
 const POLL_INTERVAL_MS = 15_000;
 
@@ -18,9 +18,7 @@ export function useSessionBranch(
   initialBranch: string | null,
   isActive: boolean = true,
 ): string | null {
-  const [branch, setBranch] = useState<string | null>(
-    isWorktree ? initialBranch : null,
-  );
+  const [branch, setBranch] = useState<string | null>(isWorktree ? initialBranch : null);
   const mountedRef = useRef(true);
 
   // Keep in sync if the store pushes a new initialBranch while mounted
@@ -35,11 +33,6 @@ export function useSessionBranch(
     mountedRef.current = true;
 
     if (isWorktree || !projectPath) return;
-
-    // Only reset if we don't have a value yet (initial mount)
-    if (branch === null) {
-      setBranch(null);
-    }
 
     const fetchBranch = (force = false) => {
       // Skip if window is blurred or tab is inactive to avoid annoying

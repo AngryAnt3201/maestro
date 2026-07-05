@@ -38,7 +38,6 @@ function isMac(): boolean {
  */
 export function useTerminalKeyboard({
   terminalCount,
-  focusedIndex,
   onFocusTerminal,
   onCycleNext,
   onCyclePrevious,
@@ -117,5 +116,14 @@ export function useTerminalKeyboard({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [enabled, terminalCount, focusedIndex, onFocusTerminal, onCycleNext, onCyclePrevious, onSplitVertical, onSplitHorizontal, onClosePane]);
+  }, [
+    enabled,
+    terminalCount,
+    onFocusTerminal,
+    onCycleNext,
+    onCyclePrevious,
+    onSplitVertical,
+    onSplitHorizontal,
+    onClosePane,
+  ]);
 }

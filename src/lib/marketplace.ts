@@ -6,8 +6,8 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  InstallScope,
   InstalledPlugin,
+  InstallScope,
   MarketplacePlugin,
   MarketplaceSource,
   SessionMarketplaceConfig,
@@ -37,7 +37,7 @@ export async function getMarketplaceSources(): Promise<MarketplaceSource[]> {
 export async function addMarketplaceSource(
   name: string,
   repositoryUrl: string,
-  isOfficial: boolean
+  isOfficial: boolean,
 ): Promise<MarketplaceSource> {
   return invoke<MarketplaceSource>("add_marketplace_source", {
     name,
@@ -100,7 +100,7 @@ export async function getInstalledPlugins(): Promise<InstalledPlugin[]> {
 export async function installMarketplacePlugin(
   marketplacePluginId: string,
   scope: InstallScope,
-  projectPath?: string
+  projectPath?: string,
 ): Promise<InstalledPlugin> {
   return invoke<InstalledPlugin>("install_marketplace_plugin", {
     marketplacePluginId,
@@ -119,9 +119,7 @@ export async function uninstallPlugin(installedPluginId: string): Promise<void> 
 /**
  * Checks if a marketplace plugin is installed.
  */
-export async function isMarketplacePluginInstalled(
-  marketplacePluginId: string
-): Promise<boolean> {
+export async function isMarketplacePluginInstalled(marketplacePluginId: string): Promise<boolean> {
   return invoke<boolean>("is_marketplace_plugin_installed", { marketplacePluginId });
 }
 
@@ -132,7 +130,7 @@ export async function isMarketplacePluginInstalled(
  */
 export async function getSessionMarketplaceConfig(
   projectPath: string,
-  sessionId: number
+  sessionId: number,
 ): Promise<SessionMarketplaceConfig> {
   return invoke<SessionMarketplaceConfig>("get_session_marketplace_config", {
     projectPath,
@@ -147,7 +145,7 @@ export async function setMarketplacePluginEnabled(
   projectPath: string,
   sessionId: number,
   installedPluginId: string,
-  enabled: boolean
+  enabled: boolean,
 ): Promise<void> {
   return invoke("set_marketplace_plugin_enabled", {
     projectPath,
@@ -162,7 +160,7 @@ export async function setMarketplacePluginEnabled(
  */
 export async function clearSessionMarketplaceConfig(
   projectPath: string,
-  sessionId: number
+  sessionId: number,
 ): Promise<void> {
   return invoke("clear_session_marketplace_config", { projectPath, sessionId });
 }

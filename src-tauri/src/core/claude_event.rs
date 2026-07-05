@@ -133,6 +133,7 @@ pub enum ClaudeEvent {
 
 impl ClaudeEvent {
     /// Returns the `session_id` carried by every event variant.
+    #[allow(dead_code)]
     pub fn session_id(&self) -> u32 {
         match self {
             ClaudeEvent::SessionStarted { session_id, .. }
@@ -156,7 +157,11 @@ impl ClaudeEvent {
     /// occurrence and one may safely be dropped.
     pub fn dedup_key(&self) -> String {
         match self {
-            ClaudeEvent::SessionStarted { session_id, claude_session_uuid, .. } => {
+            ClaudeEvent::SessionStarted {
+                session_id,
+                claude_session_uuid,
+                ..
+            } => {
                 format!("SessionStarted:{session_id}:{claude_session_uuid}")
             }
             ClaudeEvent::SessionEnded { session_id, .. } => {
@@ -174,10 +179,19 @@ impl ClaudeEvent {
             ClaudeEvent::ToolUseCompleted { tool_use_id, .. } => {
                 format!("ToolUseCompleted:{tool_use_id}")
             }
-            ClaudeEvent::FileEdited { session_id, file_path, timestamp, .. } => {
+            ClaudeEvent::FileEdited {
+                session_id,
+                file_path,
+                timestamp,
+                ..
+            } => {
                 format!("FileEdited:{session_id}:{file_path}:{timestamp}")
             }
-            ClaudeEvent::FileCreated { session_id, file_path, timestamp } => {
+            ClaudeEvent::FileCreated {
+                session_id,
+                file_path,
+                timestamp,
+            } => {
                 format!("FileCreated:{session_id}:{file_path}:{timestamp}")
             }
             ClaudeEvent::SubagentSpawned { agent_id, .. } => {
@@ -186,10 +200,20 @@ impl ClaudeEvent {
             ClaudeEvent::SubagentCompleted { agent_id, .. } => {
                 format!("SubagentCompleted:{agent_id}")
             }
-            ClaudeEvent::StatusUpdate { session_id, state, message, .. } => {
+            ClaudeEvent::StatusUpdate {
+                session_id,
+                state,
+                message,
+                ..
+            } => {
                 format!("StatusUpdate:{session_id}:{state}:{message}")
             }
-            ClaudeEvent::TokenUsageUpdate { session_id, input_tokens, output_tokens, .. } => {
+            ClaudeEvent::TokenUsageUpdate {
+                session_id,
+                input_tokens,
+                output_tokens,
+                ..
+            } => {
                 format!("TokenUsageUpdate:{session_id}:{input_tokens}:{output_tokens}")
             }
         }
@@ -239,18 +263,83 @@ mod tests {
     #[test]
     fn test_session_id_extraction() {
         let events: Vec<ClaudeEvent> = vec![
-            ClaudeEvent::SessionStarted { session_id: 1, claude_session_uuid: "u".into(), transcript_path: "p".into(), timestamp: "t".into() },
-            ClaudeEvent::SessionEnded { session_id: 2, reason: "done".into(), timestamp: "t".into() },
-            ClaudeEvent::UserMessage { session_id: 3, uuid: "u".into(), text: "hi".into(), timestamp: "t".into() },
-            ClaudeEvent::AssistantMessage { session_id: 4, uuid: "u".into(), text: "hello".into(), model: "opus".into(), token_usage: None, timestamp: "t".into() },
-            ClaudeEvent::ToolUseStarted { session_id: 5, tool_name: "Read".into(), tool_use_id: "x".into(), input_summary: "s".into(), timestamp: "t".into() },
-            ClaudeEvent::ToolUseCompleted { session_id: 6, tool_name: "Read".into(), tool_use_id: "x".into(), success: true, timestamp: "t".into() },
-            ClaudeEvent::FileEdited { session_id: 7, file_path: "/a".into(), tool: "Edit".into(), timestamp: "t".into() },
-            ClaudeEvent::FileCreated { session_id: 8, file_path: "/b".into(), timestamp: "t".into() },
-            ClaudeEvent::SubagentSpawned { session_id: 9, agent_type: "Explore".into(), agent_id: "s".into(), description: "d".into(), timestamp: "t".into() },
-            ClaudeEvent::SubagentCompleted { session_id: 10, agent_id: "s".into(), timestamp: "t".into() },
-            ClaudeEvent::StatusUpdate { session_id: 11, state: "working".into(), message: "m".into(), needs_input_prompt: None, timestamp: "t".into() },
-            ClaudeEvent::TokenUsageUpdate { session_id: 12, input_tokens: 100, output_tokens: 50, cache_read_tokens: 10, cache_creation_tokens: 5, timestamp: "t".into() },
+            ClaudeEvent::SessionStarted {
+                session_id: 1,
+                claude_session_uuid: "u".into(),
+                transcript_path: "p".into(),
+                timestamp: "t".into(),
+            },
+            ClaudeEvent::SessionEnded {
+                session_id: 2,
+                reason: "done".into(),
+                timestamp: "t".into(),
+            },
+            ClaudeEvent::UserMessage {
+                session_id: 3,
+                uuid: "u".into(),
+                text: "hi".into(),
+                timestamp: "t".into(),
+            },
+            ClaudeEvent::AssistantMessage {
+                session_id: 4,
+                uuid: "u".into(),
+                text: "hello".into(),
+                model: "opus".into(),
+                token_usage: None,
+                timestamp: "t".into(),
+            },
+            ClaudeEvent::ToolUseStarted {
+                session_id: 5,
+                tool_name: "Read".into(),
+                tool_use_id: "x".into(),
+                input_summary: "s".into(),
+                timestamp: "t".into(),
+            },
+            ClaudeEvent::ToolUseCompleted {
+                session_id: 6,
+                tool_name: "Read".into(),
+                tool_use_id: "x".into(),
+                success: true,
+                timestamp: "t".into(),
+            },
+            ClaudeEvent::FileEdited {
+                session_id: 7,
+                file_path: "/a".into(),
+                tool: "Edit".into(),
+                timestamp: "t".into(),
+            },
+            ClaudeEvent::FileCreated {
+                session_id: 8,
+                file_path: "/b".into(),
+                timestamp: "t".into(),
+            },
+            ClaudeEvent::SubagentSpawned {
+                session_id: 9,
+                agent_type: "Explore".into(),
+                agent_id: "s".into(),
+                description: "d".into(),
+                timestamp: "t".into(),
+            },
+            ClaudeEvent::SubagentCompleted {
+                session_id: 10,
+                agent_id: "s".into(),
+                timestamp: "t".into(),
+            },
+            ClaudeEvent::StatusUpdate {
+                session_id: 11,
+                state: "working".into(),
+                message: "m".into(),
+                needs_input_prompt: None,
+                timestamp: "t".into(),
+            },
+            ClaudeEvent::TokenUsageUpdate {
+                session_id: 12,
+                input_tokens: 100,
+                output_tokens: 50,
+                cache_read_tokens: 10,
+                cache_creation_tokens: 5,
+                timestamp: "t".into(),
+            },
         ];
         for (i, event) in events.iter().enumerate() {
             assert_eq!(event.session_id(), (i as u32) + 1);
@@ -276,7 +365,13 @@ mod tests {
         let recovered: ClaudeEvent = serde_json::from_str(&json).expect("deserialize");
 
         assert_eq!(recovered.session_id(), 42);
-        if let ClaudeEvent::AssistantMessage { text, model, token_usage, .. } = &recovered {
+        if let ClaudeEvent::AssistantMessage {
+            text,
+            model,
+            token_usage,
+            ..
+        } = &recovered
+        {
             assert_eq!(text, "Hello, world!");
             assert_eq!(model, "claude-opus-4-6");
             assert!(token_usage.is_some());

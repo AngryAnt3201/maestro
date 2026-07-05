@@ -14,6 +14,7 @@
 pub const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// Extension trait for `std::process::Command` to hide console windows on Windows.
+#[allow(dead_code)]
 pub trait StdCommandExt {
     /// Configures the command to not create a visible console window on Windows.
     /// On non-Windows platforms, this is a no-op.

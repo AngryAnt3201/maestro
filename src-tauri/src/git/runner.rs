@@ -115,6 +115,7 @@ fn resolve_ssh_auth_sock() -> Option<&'static str> {
 #[derive(Debug)]
 pub struct GitOutput {
     pub stdout: String,
+    #[allow(dead_code)]
     pub stderr: String,
 }
 

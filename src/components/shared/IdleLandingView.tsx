@@ -1,4 +1,5 @@
-import { BrainCircuit, Plus } from "lucide-react";
+import BrainCircuit from "lucide-react/dist/esm/icons/brain-circuit";
+import Plus from "lucide-react/dist/esm/icons/plus";
 
 interface IdleLandingViewProps {
   onAdd: () => void;

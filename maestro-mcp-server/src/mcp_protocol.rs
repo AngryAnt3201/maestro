@@ -144,10 +144,16 @@ impl McpServer {
             "notifications/initialized" => {
                 // Auto-report "idle" status when Claude connects
                 eprintln!("[maestro-mcp-server] Initialized - reporting idle status");
-                let _ = self.status_reporter.report_status("idle", "Ready", None).await;
+                let _ = self
+                    .status_reporter
+                    .report_status("idle", "Ready", None)
+                    .await;
             }
             _ => {
-                eprintln!("[maestro-mcp-server] Unknown notification: {}", request.method);
+                eprintln!(
+                    "[maestro-mcp-server] Unknown notification: {}",
+                    request.method
+                );
             }
         }
     }
@@ -199,10 +205,7 @@ impl McpServer {
 
     /// Handle the tools/call request.
     async fn handle_tools_call(&self, params: &Value) -> Result<Value, McpError> {
-        let name = params
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
 
         match name {
             "maestro_status" => {
@@ -272,7 +275,10 @@ mod tests {
             "method": "notifications/initialized"
         }));
         let response = server.handle_request(&request).await;
-        assert!(response.is_none(), "notifications should not produce a response");
+        assert!(
+            response.is_none(),
+            "notifications should not produce a response"
+        );
     }
 
     #[tokio::test]
@@ -284,7 +290,10 @@ mod tests {
             "method": "initialize",
             "params": {}
         }));
-        let response = server.handle_request(&request).await.expect("should return response");
+        let response = server
+            .handle_request(&request)
+            .await
+            .expect("should return response");
         let result = response.result.expect("should have result");
         assert_eq!(result["protocolVersion"], "2024-11-05");
         assert!(result["capabilities"]["tools"].is_object());
@@ -299,7 +308,10 @@ mod tests {
             "id": 2,
             "method": "tools/list"
         }));
-        let response = server.handle_request(&request).await.expect("should return response");
+        let response = server
+            .handle_request(&request)
+            .await
+            .expect("should return response");
         let result = response.result.expect("should have result");
         let tools = result["tools"].as_array().expect("tools should be array");
         assert_eq!(tools.len(), 1);
@@ -314,7 +326,10 @@ mod tests {
             "id": 3,
             "method": "nonexistent/method"
         }));
-        let response = server.handle_request(&request).await.expect("should return response");
+        let response = server
+            .handle_request(&request)
+            .await
+            .expect("should return response");
         assert!(response.result.is_none());
         let error = response.error.expect("should have error");
         assert_eq!(error.code, -32601);
@@ -329,7 +344,10 @@ mod tests {
             "id": 4,
             "method": "ping"
         }));
-        let response = server.handle_request(&request).await.expect("should return response");
+        let response = server
+            .handle_request(&request)
+            .await
+            .expect("should return response");
         let result = response.result.expect("should have result");
         assert_eq!(result, json!({}));
     }

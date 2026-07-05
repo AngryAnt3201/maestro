@@ -1,16 +1,15 @@
+import Grid from "lucide-react/dist/esm/icons/grid-3x3";
+import Layers from "lucide-react/dist/esm/icons/layers";
+import List from "lucide-react/dist/esm/icons/list";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import Search from "lucide-react/dist/esm/icons/search";
+import Settings from "lucide-react/dist/esm/icons/settings";
+import X from "lucide-react/dist/esm/icons/x";
+import { useEffect, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useMarketplaceStore } from "@/stores/useMarketplaceStore";
 import type { MarketplacePlugin } from "@/types/marketplace";
-import {
-  Grid,
-  Layers,
-  List,
-  Loader2,
-  RefreshCw,
-  Search,
-  Settings,
-  X,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
 import { MarketplaceFilters } from "./MarketplaceFilters";
 import { MarketplacePluginCard } from "./MarketplacePluginCard";
 import { MarketplacePluginRow } from "./MarketplacePluginRow";
@@ -26,24 +25,20 @@ export function MarketplaceBrowser({ onClose, currentProjectPath }: MarketplaceB
   const modalRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const {
-    isLoading,
-    isRefreshing,
-    error,
-    searchText,
-    setSearchText,
-    viewMode,
-    setViewMode,
-    showSourcesSidebar,
-    toggleSourcesSidebar,
-    refreshMarketplaces,
-    getFilteredPlugins,
-    selectPlugin,
-  } = useMarketplaceStore();
+  const isLoading = useMarketplaceStore((state) => state.isLoading);
+  const isRefreshing = useMarketplaceStore((state) => state.isRefreshing);
+  const error = useMarketplaceStore((state) => state.error);
+  const searchText = useMarketplaceStore((state) => state.searchText);
+  const setSearchText = useMarketplaceStore((state) => state.setSearchText);
+  const viewMode = useMarketplaceStore((state) => state.viewMode);
+  const setViewMode = useMarketplaceStore((state) => state.setViewMode);
+  const showSourcesSidebar = useMarketplaceStore((state) => state.showSourcesSidebar);
+  const toggleSourcesSidebar = useMarketplaceStore((state) => state.toggleSourcesSidebar);
+  const refreshMarketplaces = useMarketplaceStore((state) => state.refreshMarketplaces);
+  const selectPlugin = useMarketplaceStore((state) => state.selectPlugin);
+  const filteredPlugins = useMarketplaceStore(useShallow((state) => state.getFilteredPlugins()));
 
   const [installPlugin, setInstallPlugin] = useState<MarketplacePlugin | null>(null);
-
-  const filteredPlugins = getFilteredPlugins();
 
   // Close on outside click
   useEffect(() => {
@@ -155,10 +150,7 @@ export function MarketplaceBrowser({ onClose, currentProjectPath }: MarketplaceB
                 className="rounded p-1.5 text-maestro-muted hover:bg-maestro-surface hover:text-maestro-text disabled:opacity-50"
                 title="Refresh marketplaces"
               >
-                <RefreshCw
-                  size={14}
-                  className={isRefreshing ? "animate-spin" : ""}
-                />
+                <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
               </button>
 
               {/* Sources toggle */}

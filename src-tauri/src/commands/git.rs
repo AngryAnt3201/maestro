@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use crate::git::{BranchInfo, CommitInfo, FileChange, Git, GitError, GitUserConfig, RemoteInfo, WorktreeInfo};
+use crate::git::{
+    BranchInfo, CommitInfo, FileChange, Git, GitError, GitUserConfig, RemoteInfo, WorktreeInfo,
+};
 
 /// Information about a detected repository or directory within a workspace.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -78,12 +80,8 @@ pub async fn git_worktree_add(
     validate_repo_path(&repo_path)?;
     let git = Git::new(&repo_path);
     let wt_path = PathBuf::from(&path);
-    git.worktree_add(
-        &wt_path,
-        new_branch.as_deref(),
-        checkout_ref.as_deref(),
-    )
-    .await
+    git.worktree_add(&wt_path, new_branch.as_deref(), checkout_ref.as_deref())
+        .await
 }
 
 /// Exposes `Git::worktree_remove` to the frontend.
@@ -131,7 +129,8 @@ pub async fn git_create_branch(
 ) -> Result<(), GitError> {
     validate_repo_path(&repo_path)?;
     let git = Git::new(&repo_path);
-    git.create_branch(&branch_name, start_point.as_deref()).await
+    git.create_branch(&branch_name, start_point.as_deref())
+        .await
 }
 
 /// Returns the list of files changed in a specific commit.
@@ -177,11 +176,7 @@ pub async fn git_list_remotes(repo_path: String) -> Result<Vec<RemoteInfo>, GitE
 
 /// Adds a new remote with the given name and URL.
 #[tauri::command]
-pub async fn git_add_remote(
-    repo_path: String,
-    name: String,
-    url: String,
-) -> Result<(), GitError> {
+pub async fn git_add_remote(repo_path: String, name: String, url: String) -> Result<(), GitError> {
     validate_repo_path(&repo_path)?;
     let git = Git::new(&repo_path);
     git.add_remote(&name, &url).await
@@ -335,13 +330,11 @@ fn detect_repos_recursive<'a>(
 
             // Get primary remote URL (prefer "origin", fall back to first remote)
             let remote_url = match git.list_remotes().await {
-                Ok(remotes) => {
-                    remotes
-                        .iter()
-                        .find(|r| r.name == "origin")
-                        .or_else(|| remotes.first())
-                        .map(|r| r.url.clone())
-                }
+                Ok(remotes) => remotes
+                    .iter()
+                    .find(|r| r.name == "origin")
+                    .or_else(|| remotes.first())
+                    .map(|r| r.url.clone()),
                 Err(_) => None,
             };
 

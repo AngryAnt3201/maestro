@@ -86,9 +86,7 @@ pub async fn rename_session(
     session_id: u32,
     name: Option<String>,
 ) -> Result<SessionConfig, String> {
-    let normalized = name
-        .map(|n| n.trim().to_string())
-        .filter(|n| !n.is_empty());
+    let normalized = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
     state
         .rename_session(session_id, normalized)
         .ok_or_else(|| format!("Session {} not found", session_id))

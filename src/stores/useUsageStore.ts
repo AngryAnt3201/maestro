@@ -1,10 +1,6 @@
 import { create } from "zustand";
-import {
-  getClaudeUsage,
-  getMood,
-  type UsageData,
-  type TamagotchiMood,
-} from "@/lib/usageParser";
+import { toInvokeErrorMessage } from "@/lib/invokeError";
+import { getClaudeUsage, getMood, type TamagotchiMood, type UsageData } from "@/lib/usageParser";
 
 /** Default polling interval for usage updates (60 seconds). */
 const POLL_INTERVAL_MS = 60_000;
@@ -91,7 +87,7 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
       console.error("Failed to fetch Claude usage:", err);
       consecutiveErrors++;
       set({
-        error: String(err),
+        error: toInvokeErrorMessage(err),
         isLoading: false,
       });
     }
@@ -107,9 +103,10 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
 
       const scheduleNext = () => {
         // Exponential backoff: double the interval for each consecutive error, up to max
-        const backoffMs = consecutiveErrors > 0
-          ? Math.min(POLL_INTERVAL_MS * Math.pow(2, consecutiveErrors), MAX_POLL_INTERVAL_MS)
-          : POLL_INTERVAL_MS;
+        const backoffMs =
+          consecutiveErrors > 0
+            ? Math.min(POLL_INTERVAL_MS * 2 ** consecutiveErrors, MAX_POLL_INTERVAL_MS)
+            : POLL_INTERVAL_MS;
 
         globalTimeoutId = setTimeout(() => {
           get().fetchUsage();

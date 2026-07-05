@@ -66,6 +66,7 @@ fn cli_install_path() -> Option<PathBuf> {
 /// must defend against both the AppleScript string (double quotes, backslashes)
 /// *and* the shell (single quotes). We only use single quotes in the shell, so
 /// the shell-level escape is the classic `'\''` trick.
+#[cfg(target_os = "macos")]
 fn escape_for_applescript_single_quoted_shell(input: &str) -> String {
     // 1. Escape AppleScript string: `\` -> `\\`, `"` -> `\"`.
     let applescript_escaped = input.replace('\\', "\\\\").replace('"', "\\\"");
@@ -112,8 +113,7 @@ const CANCEL_SENTINEL: &str = "CANCELLED_BY_USER";
 fn install_cli_elevated(dest: &Path) -> Result<(), String> {
     // Write script to a temp file first, then move with elevated privileges
     let tmp = std::env::temp_dir().join("maestro-cli-install.sh");
-    std::fs::write(&tmp, CLI_SCRIPT)
-        .map_err(|e| format!("Failed to write temp file: {e}"))?;
+    std::fs::write(&tmp, CLI_SCRIPT).map_err(|e| format!("Failed to write temp file: {e}"))?;
 
     #[cfg(target_os = "macos")]
     {
@@ -194,9 +194,8 @@ pub fn uninstall_cli() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let dest_escaped = escape_for_applescript_single_quoted_shell(&dest.to_string_lossy());
-        let script = format!(
-            "do shell script \"rm -f '{dest_escaped}'\" with administrator privileges"
-        );
+        let script =
+            format!("do shell script \"rm -f '{dest_escaped}'\" with administrator privileges");
         let output = std::process::Command::new("osascript")
             .arg("-e")
             .arg(&script)

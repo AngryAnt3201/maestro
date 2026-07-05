@@ -1,9 +1,9 @@
 import type { GraphNode } from "../../lib/graphLayout";
 import { CommitGraph } from "./CommitGraph";
-import type { GitPanelTab } from "./GitPanelTabs";
-import { PullRequestList } from "./pulls/PullRequestList";
-import { IssueList } from "./issues/IssueList";
 import { DiscussionList } from "./discussions/DiscussionList";
+import type { GitPanelTab } from "./GitPanelTabs";
+import { IssueList } from "./issues/IssueList";
+import { PullRequestList } from "./pulls/PullRequestList";
 
 interface GitPanelContentProps {
   activeTab: GitPanelTab;

@@ -276,10 +276,7 @@ fn parse_session_file(path: &Path) -> Option<ClaudeSessionInfo> {
 
 /// Deletes a Claude Code session's JSONL transcript and optional snapshot directory.
 #[tauri::command]
-pub async fn delete_claude_session(
-    project_path: String,
-    session_id: String,
-) -> Result<(), String> {
+pub async fn delete_claude_session(project_path: String, session_id: String) -> Result<(), String> {
     if !is_safe_session_id(&session_id) {
         return Err(format!("Invalid session id: {session_id}"));
     }
@@ -295,8 +292,7 @@ pub async fn delete_claude_session(
     // Delete the JSONL transcript
     let jsonl_path = claude_dir.join(format!("{session_id}.jsonl"));
     if jsonl_path.exists() {
-        fs::remove_file(&jsonl_path)
-            .map_err(|e| format!("Failed to delete session file: {e}"))?;
+        fs::remove_file(&jsonl_path).map_err(|e| format!("Failed to delete session file: {e}"))?;
     }
 
     // Delete the optional snapshot directory (same name without extension)
@@ -390,10 +386,7 @@ mod tests {
 
     #[test]
     fn encode_preserves_existing_dashes_and_underscores() {
-        assert_eq!(
-            encode_project_path("/a-b_c/d_e-f"),
-            "-a-b_c-d_e-f"
-        );
+        assert_eq!(encode_project_path("/a-b_c/d_e-f"), "-a-b_c-d_e-f");
     }
 
     // ---- extract_prompt_text ---------------------------------------------
@@ -521,9 +514,8 @@ mod tests {
         let path = tmp.path().join("abc.jsonl");
         // 300 crab emojis => far beyond 200 chars and deliberately multibyte.
         let long = "🦀".repeat(300);
-        let jsonl = format!(
-            r#"{{"sessionId":"abc","type":"user","message":{{"content":"{long}"}}}}"#
-        );
+        let jsonl =
+            format!(r#"{{"sessionId":"abc","type":"user","message":{{"content":"{long}"}}}}"#);
         fs::write(&path, &jsonl).unwrap();
         let info = parse_session_file(&path).expect("parsed");
         let prompt = info.first_prompt.expect("prompt captured");
